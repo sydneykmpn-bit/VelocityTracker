@@ -71,22 +71,21 @@ export default function LeaderboardPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  const loadPublicRecords = async () => {
-    const { data } = await supabase
-      .from('personal_records')
-      .select('*, profiles(name)')
-      .eq('is_public', true)
-      .order('value', { ascending: false })
-    setPublicRecords(data ?? [])
-  }
-
-  const loadMyRecords = async (uid: string) => {
-    const { data } = await supabase
-      .from('personal_records')
-      .select('*')
-      .eq('user_id', uid)
-      .order('created_at', { ascending: false })
-    setMyRecords(data ?? [])
+  const loadData = async (uid: string) => {
+    const [{ data: publicPRs }, { data: myPRs }] = await Promise.all([
+      supabase
+        .from('personal_records')
+        .select('*, profiles(name)')
+        .eq('is_public', true)
+        .order('value', { ascending: false }),
+      supabase
+        .from('personal_records')
+        .select('*')
+        .eq('user_id', uid)
+        .order('recorded_at', { ascending: false }),
+    ])
+    setPublicRecords(publicPRs ?? [])
+    setMyRecords(myPRs ?? [])
   }
 
   useEffect(() => {
@@ -94,7 +93,7 @@ export default function LeaderboardPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
       setUserId(user.id)
-      await Promise.all([loadPublicRecords(), loadMyRecords(user.id)])
+      await loadData(user.id)
       setLoading(false)
     }
     init()
@@ -108,7 +107,7 @@ export default function LeaderboardPage() {
     const { error: err } = await supabase.from('personal_records').insert({
       user_id: userId,
       exercise_name: exercise.trim(),
-      value: parseFloat(value),
+      value: Number(value),
       unit,
       date,
       recorded_at: new Date(date).toISOString(),
@@ -121,22 +120,24 @@ export default function LeaderboardPage() {
       setExercise(''); setValue(''); setUnit('kg')
       setDate(new Date().toISOString().split('T')[0]); setIsPublic(true)
       setShowForm(false)
-      await Promise.all([loadPublicRecords(), loadMyRecords(userId)])
+      await loadData(userId)
     }
     setSubmitting(false)
   }
 
   const handleTogglePublic = async (record: any) => {
+    if (!userId) return
     setUpdating(record.id)
     await supabase.from('personal_records').update({ is_public: !record.is_public }).eq('id', record.id)
-    if (userId) await Promise.all([loadPublicRecords(), loadMyRecords(userId)])
+    await loadData(userId)
     setUpdating(null)
   }
 
   const handleDelete = async (id: string) => {
+    if (!userId) return
     setDeleting(id)
     await supabase.from('personal_records').delete().eq('id', id)
-    if (userId) await Promise.all([loadPublicRecords(), loadMyRecords(userId)])
+    await loadData(userId)
     setDeleting(null)
   }
 
