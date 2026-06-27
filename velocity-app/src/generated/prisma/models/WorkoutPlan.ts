@@ -506,6 +506,7 @@ export type WorkoutPlanCreateOrConnectWithoutCoachInput = {
 
 export type WorkoutPlanCreateManyCoachInputEnvelope = {
   data: Prisma.WorkoutPlanCreateManyCoachInput | Prisma.WorkoutPlanCreateManyCoachInput[]
+  skipDuplicates?: boolean
 }
 
 export type WorkoutPlanCreateWithoutMemberInput = {
@@ -535,6 +536,7 @@ export type WorkoutPlanCreateOrConnectWithoutMemberInput = {
 
 export type WorkoutPlanCreateManyMemberInputEnvelope = {
   data: Prisma.WorkoutPlanCreateManyMemberInput | Prisma.WorkoutPlanCreateManyMemberInput[]
+  skipDuplicates?: boolean
 }
 
 export type WorkoutPlanUpsertWithWhereUniqueWithoutCoachInput = {
@@ -1491,6 +1493,7 @@ export type WorkoutPlanCreateManyArgs<ExtArgs extends runtime.Types.Extensions.I
    * The data used to create many WorkoutPlans.
    */
   data: Prisma.WorkoutPlanCreateManyInput | Prisma.WorkoutPlanCreateManyInput[]
+  skipDuplicates?: boolean
 }
 
 /**
@@ -1509,6 +1512,7 @@ export type WorkoutPlanCreateManyAndReturnArgs<ExtArgs extends runtime.Types.Ext
    * The data used to create many WorkoutPlans.
    */
   data: Prisma.WorkoutPlanCreateManyInput | Prisma.WorkoutPlanCreateManyInput[]
+  skipDuplicates?: boolean
   /**
    * Choose, which related nodes to fetch as well
    */

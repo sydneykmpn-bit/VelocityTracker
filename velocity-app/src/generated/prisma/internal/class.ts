@@ -19,8 +19,8 @@ const config: runtime.GetPrismaClientConfig = {
   "previewFeatures": [],
   "clientVersion": "7.8.0",
   "engineVersion": "3c6e192761c0362d496ed980de936e2f3cebcd3a",
-  "activeProvider": "sqlite",
-  "inlineSchema": "generator client {\n  provider = \"prisma-client\"\n  output   = \"../src/generated/prisma\"\n}\n\ndatasource db {\n  provider = \"sqlite\"\n}\n\nmodel User {\n  id        String   @id @default(cuid())\n  name      String\n  email     String   @unique\n  password  String\n  role      String   @default(\"member\")\n  createdAt DateTime @default(now())\n\n  workouts Workout[]\n  plans    WorkoutPlan[] @relation(\"CoachPlans\")\n  assigned WorkoutPlan[] @relation(\"MemberPlans\")\n}\n\nmodel WorkoutPlan {\n  id          String   @id @default(cuid())\n  title       String\n  description String?\n  type        String\n  coachId     String\n  memberId    String?\n  createdAt   DateTime @default(now())\n\n  coach    User      @relation(\"CoachPlans\", fields: [coachId], references: [id])\n  member   User?     @relation(\"MemberPlans\", fields: [memberId], references: [id])\n  workouts Workout[]\n}\n\nmodel Workout {\n  id       String   @id @default(cuid())\n  title    String\n  type     String\n  notes    String?\n  date     DateTime @default(now())\n  duration Int?\n  userId   String\n  planId   String?\n\n  user      User         @relation(fields: [userId], references: [id])\n  plan      WorkoutPlan? @relation(fields: [planId], references: [id])\n  exercises Exercise[]\n}\n\nmodel Exercise {\n  id        String  @id @default(cuid())\n  name      String\n  sets      Int?\n  reps      Int?\n  weight    Float?\n  duration  Int?\n  distance  Float?\n  notes     String?\n  workoutId String\n\n  workout Workout @relation(fields: [workoutId], references: [id], onDelete: Cascade)\n}\n",
+  "activeProvider": "postgresql",
+  "inlineSchema": "generator client {\n  provider = \"prisma-client\"\n  output   = \"../src/generated/prisma\"\n}\n\ndatasource db {\n  provider = \"postgresql\"\n}\n\nmodel User {\n  id        String   @id @default(cuid())\n  name      String\n  email     String   @unique\n  password  String\n  role      String   @default(\"member\")\n  createdAt DateTime @default(now())\n\n  workouts Workout[]\n  plans    WorkoutPlan[] @relation(\"CoachPlans\")\n  assigned WorkoutPlan[] @relation(\"MemberPlans\")\n}\n\nmodel WorkoutPlan {\n  id          String   @id @default(cuid())\n  title       String\n  description String?\n  type        String\n  coachId     String\n  memberId    String?\n  createdAt   DateTime @default(now())\n\n  coach    User      @relation(\"CoachPlans\", fields: [coachId], references: [id])\n  member   User?     @relation(\"MemberPlans\", fields: [memberId], references: [id])\n  workouts Workout[]\n}\n\nmodel Workout {\n  id       String   @id @default(cuid())\n  title    String\n  type     String\n  notes    String?\n  date     DateTime @default(now())\n  duration Int?\n  userId   String\n  planId   String?\n\n  user      User         @relation(fields: [userId], references: [id])\n  plan      WorkoutPlan? @relation(fields: [planId], references: [id])\n  exercises Exercise[]\n}\n\nmodel Exercise {\n  id        String  @id @default(cuid())\n  name      String\n  sets      Int?\n  reps      Int?\n  weight    Float?\n  duration  Int?\n  distance  Float?\n  notes     String?\n  workoutId String\n\n  workout Workout @relation(fields: [workoutId], references: [id], onDelete: Cascade)\n}\n",
   "runtimeDataModel": {
     "models": {},
     "enums": {},
@@ -45,10 +45,10 @@ async function decodeBase64AsWasm(wasmBase64: string): Promise<WebAssembly.Modul
 }
 
 config.compilerWasm = {
-  getRuntime: async () => await import("@prisma/client/runtime/query_compiler_fast_bg.sqlite.mjs"),
+  getRuntime: async () => await import("@prisma/client/runtime/query_compiler_fast_bg.postgresql.mjs"),
 
   getQueryCompilerWasmModule: async () => {
-    const { wasm } = await import("@prisma/client/runtime/query_compiler_fast_bg.sqlite.wasm-base64.mjs")
+    const { wasm } = await import("@prisma/client/runtime/query_compiler_fast_bg.postgresql.wasm-base64.mjs")
     return await decodeBase64AsWasm(wasm)
   },
 
