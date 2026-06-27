@@ -1,0 +1,5 @@
+# App build output
+velocity-app/.next/
+velocity-app/node_modules/
+velocity-app/prisma/dev.db
+velocity-app/prisma/dev.db-journal
