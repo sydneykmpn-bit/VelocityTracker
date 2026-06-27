@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --vel-black: #090909;
-  --vel-surface: #111111;
+  --vel-black: #000000;
+  --vel-surface: #0a0a0a;
   --vel-surface-2: #1C1C1C;
   --vel-border: #272727;
-  --vel-teal: #0ABFBC;
-  --vel-teal-hover: #0DD6D3;
-  --vel-teal-dim: rgba(10, 191, 188, 0.10);
-  --vel-teal-glow: rgba(10, 191, 188, 0.30);
+  --vel-teal: #0877a0;
+  --vel-teal-hover: #34bac2;
+  --vel-teal-dim: rgba(8, 119, 160, 0.10);
+  --vel-teal-glow: rgba(8, 119, 160, 0.30);
   --vel-text-primary: #F2F2F2;
   --vel-text-secondary: #8A8A8A;
   --vel-text-dim: #4A4A4A;

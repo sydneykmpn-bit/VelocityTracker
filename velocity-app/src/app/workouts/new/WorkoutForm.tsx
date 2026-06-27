@@ -228,7 +228,7 @@ export default function WorkoutForm() {
               style={{
                 background: "var(--vel-teal-dim)",
                 color: "var(--vel-teal)",
-                border: "1px solid rgba(10,191,188,0.25)",
+                border: "1px solid rgba(8,119,160,0.25)",
               }}
             >
               + Add Exercise

@@ -64,7 +64,7 @@ export default async function LandingPage() {
           className="pointer-events-none absolute inset-0"
           style={{
             background:
-              "radial-gradient(ellipse 70% 50% at 50% 60%, rgba(10,191,188,0.06) 0%, transparent 70%)",
+              "radial-gradient(ellipse 70% 50% at 50% 60%, rgba(8,119,160,0.06) 0%, transparent 70%)",
             zIndex: 0,
           }}
           aria-hidden
@@ -76,7 +76,7 @@ export default async function LandingPage() {
             style={{
               background: "var(--vel-teal-dim)",
               color: "var(--vel-teal)",
-              border: "1px solid rgba(10,191,188,0.25)",
+              border: "1px solid rgba(8,119,160,0.25)",
             }}
           >
             🏀 Sports · Conditioning · Basketball Training
@@ -191,7 +191,7 @@ export default async function LandingPage() {
         className="px-6 py-16 text-center"
         style={{
           background:
-            "linear-gradient(135deg, rgba(10,191,188,0.07) 0%, var(--vel-black) 60%)",
+            "linear-gradient(135deg, rgba(8,119,160,0.07) 0%, var(--vel-black) 60%)",
           borderTop: "1px solid var(--vel-border)",
         }}
       >
