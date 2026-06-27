@@ -17,12 +17,12 @@ export default async function LandingPage() {
         }}
       >
         <div className="flex items-center gap-2">
-          <span style={{ color: "var(--vel-orange)", fontSize: "1.4rem" }}>⚡</span>
+          <span style={{ color: "var(--vel-teal)", fontSize: "1.4rem" }}>⚡</span>
           <span
             className="font-display text-2xl"
             style={{ color: "var(--vel-text-primary)", letterSpacing: "0.06em" }}
           >
-            VELOCITY <span style={{ color: "var(--vel-orange)" }}>PH</span>
+            VELOCITY <span style={{ color: "var(--vel-teal)" }}>PH</span>
           </span>
         </div>
 
@@ -65,12 +65,12 @@ export default async function LandingPage() {
           VELOCITY
         </span>
 
-        {/* Radial orange glow */}
+        {/* Radial teal glow */}
         <div
           className="pointer-events-none absolute inset-0"
           style={{
             background:
-              "radial-gradient(ellipse 70% 50% at 50% 60%, rgba(255,85,0,0.07) 0%, transparent 70%)",
+              "radial-gradient(ellipse 70% 50% at 50% 60%, rgba(10,191,188,0.06) 0%, transparent 70%)",
             zIndex: 0,
           }}
           aria-hidden
@@ -80,9 +80,9 @@ export default async function LandingPage() {
           <div
             className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium mb-6 animate-fadeInUp stagger-1"
             style={{
-              background: "var(--vel-orange-dim)",
-              color: "var(--vel-orange)",
-              border: "1px solid rgba(255,85,0,0.25)",
+              background: "var(--vel-teal-dim)",
+              color: "var(--vel-teal)",
+              border: "1px solid rgba(10,191,188,0.25)",
             }}
           >
             🏀 Sports · Conditioning · Basketball Training
@@ -97,7 +97,7 @@ export default async function LandingPage() {
           >
             Train Smarter.
             <br />
-            <span style={{ color: "var(--vel-orange)" }}>Track Everything.</span>
+            <span style={{ color: "var(--vel-teal)" }}>Track Everything.</span>
           </h1>
 
           <p
@@ -124,7 +124,7 @@ export default async function LandingPage() {
         </div>
       </section>
 
-      <hr className="divider-orange" />
+      <hr className="divider-teal" />
 
       {/* Features */}
       <section className="px-6 py-24" style={{ background: "var(--vel-surface)" }}>
@@ -197,7 +197,7 @@ export default async function LandingPage() {
         className="px-6 py-16 text-center"
         style={{
           background:
-            "linear-gradient(135deg, rgba(255,85,0,0.08) 0%, var(--vel-black) 60%)",
+            "linear-gradient(135deg, rgba(10,191,188,0.07) 0%, var(--vel-black) 60%)",
           borderTop: "1px solid var(--vel-border)",
         }}
       >

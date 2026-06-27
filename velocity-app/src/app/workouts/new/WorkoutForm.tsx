@@ -129,8 +129,8 @@ export default function WorkoutForm() {
                 onClick={() => setType(t.value)}
                 className="flex flex-col items-center p-4 rounded-xl text-center"
                 style={{
-                  border: `2px solid ${type === t.value ? "var(--vel-orange)" : "var(--vel-border)"}`,
-                  background: type === t.value ? "var(--vel-orange-dim)" : "transparent",
+                  border: `2px solid ${type === t.value ? "var(--vel-teal)" : "var(--vel-border)"}`,
+                  background: type === t.value ? "var(--vel-teal-dim)" : "transparent",
                   transition: "border-color 0.18s, background 0.18s",
                 }}
               >
@@ -226,9 +226,9 @@ export default function WorkoutForm() {
               onClick={addExercise}
               className="text-sm px-3 py-1.5 rounded-lg font-semibold"
               style={{
-                background: "var(--vel-orange-dim)",
-                color: "var(--vel-orange)",
-                border: "1px solid rgba(255,85,0,0.25)",
+                background: "var(--vel-teal-dim)",
+                color: "var(--vel-teal)",
+                border: "1px solid rgba(10,191,188,0.25)",
               }}
             >
               + Add Exercise

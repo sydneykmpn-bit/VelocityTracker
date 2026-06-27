@@ -74,7 +74,7 @@ export default async function CoachPage() {
           ].map((s) => (
             <div key={s.label} className="card-vel p-5">
               <div className="text-2xl mb-2">{s.icon}</div>
-              <div className="text-3xl font-black mb-1" style={{ color: "var(--vel-orange)" }}>
+              <div className="text-3xl font-black mb-1" style={{ color: "var(--vel-teal)" }}>
                 {s.value}
               </div>
               <div className="text-xs" style={{ color: "var(--vel-text-secondary)" }}>
@@ -117,7 +117,7 @@ export default async function CoachPage() {
                             className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0"
                             style={{
                               background: "var(--vel-surface-2)",
-                              color: "var(--vel-orange)",
+                              color: "var(--vel-teal)",
                             }}
                           >
                             {member.name.charAt(0).toUpperCase()}

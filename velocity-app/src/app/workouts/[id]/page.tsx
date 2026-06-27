@@ -93,7 +93,7 @@ export default async function WorkoutDetailPage({
             style={{ borderTop: "1px solid var(--vel-border)" }}
           >
             <div>
-              <p className="text-2xl font-black" style={{ color: "var(--vel-orange)" }}>
+              <p className="text-2xl font-black" style={{ color: "var(--vel-teal)" }}>
                 {workout.exercises.length}
               </p>
               <p className="text-xs" style={{ color: "var(--vel-text-secondary)" }}>
@@ -102,7 +102,7 @@ export default async function WorkoutDetailPage({
             </div>
             {workout.duration && (
               <div>
-                <p className="text-2xl font-black" style={{ color: "var(--vel-orange)" }}>
+                <p className="text-2xl font-black" style={{ color: "var(--vel-teal)" }}>
                   {workout.duration}
                 </p>
                 <p className="text-xs" style={{ color: "var(--vel-text-secondary)" }}>
@@ -112,7 +112,7 @@ export default async function WorkoutDetailPage({
             )}
             {!isBasketball && (
               <div>
-                <p className="text-2xl font-black" style={{ color: "var(--vel-orange)" }}>
+                <p className="text-2xl font-black" style={{ color: "var(--vel-teal)" }}>
                   {workout.exercises.reduce((acc, e) => acc + (e.sets ?? 0), 0)}
                 </p>
                 <p className="text-xs" style={{ color: "var(--vel-text-secondary)" }}>
@@ -166,7 +166,7 @@ export default async function WorkoutDetailPage({
                   <div className="flex items-center gap-3">
                     <span
                       className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                      style={{ background: "var(--vel-orange)", color: "#fff" }}
+                      style={{ background: "var(--vel-teal)", color: "#fff" }}
                     >
                       {index + 1}
                     </span>
@@ -180,22 +180,22 @@ export default async function WorkoutDetailPage({
                   >
                     {ex.sets && (
                       <span>
-                        <span style={{ color: "var(--vel-orange)", fontWeight: 700 }}>{ex.sets}</span> sets
+                        <span style={{ color: "var(--vel-teal)", fontWeight: 700 }}>{ex.sets}</span> sets
                       </span>
                     )}
                     {ex.reps && (
                       <span>
-                        × <span style={{ color: "var(--vel-orange)", fontWeight: 700 }}>{ex.reps}</span> reps
+                        × <span style={{ color: "var(--vel-teal)", fontWeight: 700 }}>{ex.reps}</span> reps
                       </span>
                     )}
                     {ex.weight && (
                       <span>
-                        @ <span style={{ color: "var(--vel-orange)", fontWeight: 700 }}>{ex.weight}</span> kg
+                        @ <span style={{ color: "var(--vel-teal)", fontWeight: 700 }}>{ex.weight}</span> kg
                       </span>
                     )}
                     {ex.duration && (
                       <span>
-                        <span style={{ color: "var(--vel-orange)", fontWeight: 700 }}>{ex.duration}</span> min
+                        <span style={{ color: "var(--vel-teal)", fontWeight: 700 }}>{ex.duration}</span> min
                       </span>
                     )}
                   </div>

@@ -65,7 +65,7 @@ export default async function DashboardPage() {
           ].map((s) => (
             <div key={s.label} className="card-vel p-5">
               <div className="text-2xl mb-2">{s.icon}</div>
-              <div className="text-3xl font-black mb-1" style={{ color: "var(--vel-orange)" }}>
+              <div className="text-3xl font-black mb-1" style={{ color: "var(--vel-teal)" }}>
                 {s.value}
               </div>
               <div className="text-xs" style={{ color: "var(--vel-text-secondary)" }}>
@@ -82,7 +82,7 @@ export default async function DashboardPage() {
               <h2 className="text-lg font-bold" style={{ color: "var(--vel-text-primary)" }}>
                 Recent Workouts
               </h2>
-              <Link href="/workouts" className="text-sm" style={{ color: "var(--vel-orange)" }}>
+              <Link href="/workouts" className="text-sm" style={{ color: "var(--vel-teal)" }}>
                 View all →
               </Link>
             </div>

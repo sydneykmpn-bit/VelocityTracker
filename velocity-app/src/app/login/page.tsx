@@ -26,12 +26,12 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2 mb-6">
-            <span style={{ color: "var(--vel-orange)", fontSize: "1.5rem" }}>⚡</span>
+            <span style={{ color: "var(--vel-teal)", fontSize: "1.5rem" }}>⚡</span>
             <span
               className="font-display text-3xl"
               style={{ color: "var(--vel-text-primary)", letterSpacing: "0.06em" }}
             >
-              VELOCITY <span style={{ color: "var(--vel-orange)" }}>PH</span>
+              VELOCITY <span style={{ color: "var(--vel-teal)" }}>PH</span>
             </span>
           </Link>
           <h1 className="text-3xl font-black" style={{ color: "var(--vel-text-primary)" }}>
@@ -95,7 +95,7 @@ export default function LoginPage() {
 
           <p className="text-center text-sm mt-6" style={{ color: "var(--vel-text-secondary)" }}>
             Don&apos;t have an account?{" "}
-            <Link href="/register" style={{ color: "var(--vel-orange)", fontWeight: 600 }}>
+            <Link href="/register" style={{ color: "var(--vel-teal)", fontWeight: 600 }}>
               Sign up
             </Link>
           </p>

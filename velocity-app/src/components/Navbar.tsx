@@ -16,12 +16,12 @@ export default async function Navbar() {
       }}
     >
       <Link href="/dashboard" className="flex items-center gap-2">
-        <span style={{ color: "var(--vel-orange)", fontSize: "1.3rem" }}>⚡</span>
+        <span style={{ color: "var(--vel-teal)", fontSize: "1.3rem" }}>⚡</span>
         <span
           className="font-display text-2xl"
           style={{ color: "var(--vel-text-primary)", letterSpacing: "0.06em" }}
         >
-          VELOCITY <span style={{ color: "var(--vel-orange)" }}>PH</span>
+          VELOCITY <span style={{ color: "var(--vel-teal)" }}>PH</span>
         </span>
       </Link>
 
@@ -44,7 +44,7 @@ export default async function Navbar() {
           <p className="text-sm font-medium" style={{ color: "var(--vel-text-primary)" }}>
             {session?.name}
           </p>
-          <p className="text-xs capitalize" style={{ color: "var(--vel-orange)" }}>
+          <p className="text-xs capitalize" style={{ color: "var(--vel-teal)" }}>
             {session?.role}
           </p>
         </div>

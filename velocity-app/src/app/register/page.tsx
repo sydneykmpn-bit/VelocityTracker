@@ -26,12 +26,12 @@ export default function RegisterPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2 mb-6">
-            <span style={{ color: "var(--vel-orange)", fontSize: "1.5rem" }}>⚡</span>
+            <span style={{ color: "var(--vel-teal)", fontSize: "1.5rem" }}>⚡</span>
             <span
               className="font-display text-3xl"
               style={{ color: "var(--vel-text-primary)", letterSpacing: "0.06em" }}
             >
-              VELOCITY <span style={{ color: "var(--vel-orange)" }}>PH</span>
+              VELOCITY <span style={{ color: "var(--vel-teal)" }}>PH</span>
             </span>
           </Link>
           <h1 className="text-3xl font-black" style={{ color: "var(--vel-text-primary)" }}>
@@ -107,7 +107,7 @@ export default function RegisterPage() {
                 ].map((r) => (
                   <label
                     key={r.value}
-                    className="flex flex-col items-center justify-center p-4 rounded-xl cursor-pointer text-center has-[:checked]:border-orange-500"
+                    className="flex flex-col items-center justify-center p-4 rounded-xl cursor-pointer text-center has-[:checked]:border-teal-400"
                     style={{
                       border: "2px solid var(--vel-border)",
                       borderRadius: "12px",
@@ -148,7 +148,7 @@ export default function RegisterPage() {
 
           <p className="text-center text-sm mt-6" style={{ color: "var(--vel-text-secondary)" }}>
             Already have an account?{" "}
-            <Link href="/login" style={{ color: "var(--vel-orange)", fontWeight: 600 }}>
+            <Link href="/login" style={{ color: "var(--vel-teal)", fontWeight: 600 }}>
               Log in
             </Link>
           </p>
