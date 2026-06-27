@@ -1,9 +1,14 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
 import WorkoutFormWrapper from './WorkoutFormWrapper'
 
-export default function NewWorkoutPage() {
+export default async function NewWorkoutPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)', padding: '2rem 1.5rem' }}>
       <div style={{ maxWidth: '700px', margin: '0 auto' }}>
