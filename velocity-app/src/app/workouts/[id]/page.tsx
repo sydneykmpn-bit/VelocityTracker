@@ -29,44 +29,39 @@ export default async function WorkoutDetailPage({
   }
 
   return (
-    <div style={{ background: "var(--background)", minHeight: "100vh" }}>
+    <div style={{ background: "var(--vel-black)", minHeight: "100vh" }}>
       <Navbar />
 
       <div className="max-w-3xl mx-auto px-6 py-8">
         <div className="flex items-center gap-3 mb-6">
-          <Link href="/workouts" className="text-sm" style={{ color: "#64748b" }}>
+          <Link href="/workouts" className="text-sm" style={{ color: "var(--vel-text-secondary)" }}>
             ← Workouts
           </Link>
         </div>
 
         {/* Header Card */}
-        <div
-          className="p-6 rounded-2xl mb-6"
-          style={{ background: "#111827", border: "1px solid #1e293b" }}
-        >
+        <div className="card-vel p-6 mb-6">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-4">
               <div
                 className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl flex-shrink-0"
-                style={{ background: isBasketball ? "#1e3a5f" : "#1a2e1a" }}
+                style={{
+                  background: isBasketball
+                    ? "rgba(30,58,95,0.5)"
+                    : "rgba(26,46,26,0.5)",
+                }}
               >
                 {isBasketball ? "🏀" : "🏋️"}
               </div>
               <div>
-                <h1 className="text-2xl font-black" style={{ color: "#f0f4ff" }}>
+                <h1 className="text-2xl font-black" style={{ color: "var(--vel-text-primary)" }}>
                   {workout.title}
                 </h1>
                 <div className="flex items-center gap-3 mt-1">
-                  <span
-                    className="text-xs px-2 py-0.5 rounded-full"
-                    style={{
-                      background: isBasketball ? "#1e3a5f" : "#1a2e1a",
-                      color: isBasketball ? "#60a5fa" : "#4ade80",
-                    }}
-                  >
+                  <span className={isBasketball ? "tag-basketball" : "tag-conditioning"}>
                     {isBasketball ? "Basketball" : "Conditioning"}
                   </span>
-                  <span className="text-sm" style={{ color: "#64748b" }}>
+                  <span className="text-sm" style={{ color: "var(--vel-text-secondary)" }}>
                     {new Date(workout.date).toLocaleDateString("en-PH", {
                       weekday: "long",
                       year: "numeric",
@@ -81,7 +76,11 @@ export default async function WorkoutDetailPage({
               <button
                 type="submit"
                 className="text-xs px-3 py-1.5 rounded-lg font-medium"
-                style={{ background: "#7f1d1d30", color: "#ef4444", border: "1px solid #7f1d1d" }}
+                style={{
+                  background: "var(--vel-error-bg)",
+                  color: "var(--vel-error-text)",
+                  border: "1px solid var(--vel-error-border)",
+                }}
               >
                 Delete
               </button>
@@ -89,31 +88,34 @@ export default async function WorkoutDetailPage({
           </div>
 
           {/* Stats */}
-          <div className="flex gap-6 mt-5 pt-5" style={{ borderTop: "1px solid #1e293b" }}>
+          <div
+            className="flex gap-6 mt-5 pt-5"
+            style={{ borderTop: "1px solid var(--vel-border)" }}
+          >
             <div>
-              <p className="text-2xl font-black" style={{ color: "#f97316" }}>
+              <p className="text-2xl font-black" style={{ color: "var(--vel-orange)" }}>
                 {workout.exercises.length}
               </p>
-              <p className="text-xs" style={{ color: "#64748b" }}>
+              <p className="text-xs" style={{ color: "var(--vel-text-secondary)" }}>
                 Exercises
               </p>
             </div>
             {workout.duration && (
               <div>
-                <p className="text-2xl font-black" style={{ color: "#f97316" }}>
+                <p className="text-2xl font-black" style={{ color: "var(--vel-orange)" }}>
                   {workout.duration}
                 </p>
-                <p className="text-xs" style={{ color: "#64748b" }}>
+                <p className="text-xs" style={{ color: "var(--vel-text-secondary)" }}>
                   Minutes
                 </p>
               </div>
             )}
             {!isBasketball && (
               <div>
-                <p className="text-2xl font-black" style={{ color: "#f97316" }}>
+                <p className="text-2xl font-black" style={{ color: "var(--vel-orange)" }}>
                   {workout.exercises.reduce((acc, e) => acc + (e.sets ?? 0), 0)}
                 </p>
-                <p className="text-xs" style={{ color: "#64748b" }}>
+                <p className="text-xs" style={{ color: "var(--vel-text-secondary)" }}>
                   Total Sets
                 </p>
               </div>
@@ -121,80 +123,85 @@ export default async function WorkoutDetailPage({
           </div>
 
           {workout.notes && (
-            <div className="mt-4 p-4 rounded-xl" style={{ background: "#0d1424" }}>
-              <p className="text-sm font-medium mb-1" style={{ color: "#94a3b8" }}>
+            <div
+              className="mt-4 p-4 rounded-xl"
+              style={{ background: "var(--vel-surface-2)" }}
+            >
+              <p
+                className="text-sm font-medium mb-1"
+                style={{ color: "var(--vel-text-secondary)" }}
+              >
                 Notes
               </p>
-              <p className="text-sm" style={{ color: "#f0f4ff" }}>
+              <p className="text-sm" style={{ color: "var(--vel-text-primary)" }}>
                 {workout.notes}
               </p>
             </div>
           )}
 
           {workout.plan && (
-            <p className="text-xs mt-3" style={{ color: "#64748b" }}>
-              From plan: <span style={{ color: "#94a3b8" }}>{workout.plan.title}</span>
+            <p className="text-xs mt-3" style={{ color: "var(--vel-text-secondary)" }}>
+              From plan:{" "}
+              <span style={{ color: "var(--vel-text-secondary)" }}>{workout.plan.title}</span>
             </p>
           )}
         </div>
 
         {/* Exercises */}
-        <h2 className="text-lg font-bold mb-4" style={{ color: "#f0f4ff" }}>
+        <h2 className="text-lg font-bold mb-4" style={{ color: "var(--vel-text-primary)" }}>
           Exercises
         </h2>
 
         {workout.exercises.length === 0 ? (
-          <div
-            className="p-6 rounded-2xl text-center"
-            style={{ background: "#111827", border: "1px solid #1e293b" }}
-          >
-            <p style={{ color: "#64748b" }}>No exercises logged for this workout.</p>
+          <div className="card-vel p-6 text-center">
+            <p style={{ color: "var(--vel-text-secondary)" }}>
+              No exercises logged for this workout.
+            </p>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
             {workout.exercises.map((ex, index) => (
-              <div
-                key={ex.id}
-                className="p-4 rounded-xl"
-                style={{ background: "#111827", border: "1px solid #1e293b" }}
-              >
+              <div key={ex.id} className="card-vel p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <span
                       className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                      style={{ background: "#f97316", color: "#fff" }}
+                      style={{ background: "var(--vel-orange)", color: "#fff" }}
                     >
                       {index + 1}
                     </span>
-                    <span className="font-semibold" style={{ color: "#f0f4ff" }}>
+                    <span className="font-semibold" style={{ color: "var(--vel-text-primary)" }}>
                       {ex.name}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 text-sm" style={{ color: "#94a3b8" }}>
+                  <div
+                    className="flex items-center gap-3 text-sm"
+                    style={{ color: "var(--vel-text-secondary)" }}
+                  >
                     {ex.sets && (
                       <span>
-                        <span style={{ color: "#f97316", fontWeight: 700 }}>{ex.sets}</span> sets
+                        <span style={{ color: "var(--vel-orange)", fontWeight: 700 }}>{ex.sets}</span> sets
                       </span>
                     )}
                     {ex.reps && (
                       <span>
-                        × <span style={{ color: "#f97316", fontWeight: 700 }}>{ex.reps}</span> reps
+                        × <span style={{ color: "var(--vel-orange)", fontWeight: 700 }}>{ex.reps}</span> reps
                       </span>
                     )}
                     {ex.weight && (
                       <span>
-                        @ <span style={{ color: "#f97316", fontWeight: 700 }}>{ex.weight}</span> kg
+                        @ <span style={{ color: "var(--vel-orange)", fontWeight: 700 }}>{ex.weight}</span> kg
                       </span>
                     )}
                     {ex.duration && (
                       <span>
-                        <span style={{ color: "#f97316", fontWeight: 700 }}>{ex.duration}</span> min
+                        <span style={{ color: "var(--vel-orange)", fontWeight: 700 }}>{ex.duration}</span> min
                       </span>
                     )}
                   </div>
                 </div>
                 {ex.notes && (
-                  <p className="text-xs mt-2 ml-10" style={{ color: "#64748b" }}>
+                  <p className="text-xs mt-2 ml-10" style={{ color: "var(--vel-text-secondary)" }}>
                     {ex.notes}
                   </p>
                 )}

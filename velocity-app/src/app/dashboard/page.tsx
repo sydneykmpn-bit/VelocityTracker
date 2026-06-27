@@ -32,17 +32,17 @@ export default async function DashboardPage() {
   });
 
   return (
-    <div style={{ background: "var(--background)", minHeight: "100vh" }}>
+    <div style={{ background: "var(--vel-black)", minHeight: "100vh" }}>
       <Navbar />
 
       <div className="max-w-6xl mx-auto px-6 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-black" style={{ color: "#f0f4ff" }}>
+            <h1 className="text-3xl font-black" style={{ color: "var(--vel-text-primary)" }}>
               Hey, {session.name.split(" ")[0]} 👋
             </h1>
-            <p className="text-sm mt-1" style={{ color: "#64748b" }}>
+            <p className="text-sm mt-1" style={{ color: "var(--vel-text-secondary)" }}>
               {new Date().toLocaleDateString("en-PH", {
                 weekday: "long",
                 year: "numeric",
@@ -51,11 +51,7 @@ export default async function DashboardPage() {
               })}
             </p>
           </div>
-          <Link
-            href="/workouts/new"
-            className="px-5 py-2.5 rounded-xl font-bold text-sm"
-            style={{ background: "#f97316", color: "#fff" }}
-          >
+          <Link href="/workouts/new" className="btn-primary px-5 py-2.5 rounded-xl text-sm">
             + Log Workout
           </Link>
         </div>
@@ -67,16 +63,12 @@ export default async function DashboardPage() {
             { label: "This Month", value: thisMonth, icon: "📅" },
             { label: "Total Exercises", value: totalExercises, icon: "💪" },
           ].map((s) => (
-            <div
-              key={s.label}
-              className="p-5 rounded-2xl"
-              style={{ background: "#111827", border: "1px solid #1e293b" }}
-            >
+            <div key={s.label} className="card-vel p-5">
               <div className="text-2xl mb-2">{s.icon}</div>
-              <div className="text-3xl font-black mb-1" style={{ color: "#f97316" }}>
+              <div className="text-3xl font-black mb-1" style={{ color: "var(--vel-orange)" }}>
                 {s.value}
               </div>
-              <div className="text-xs" style={{ color: "#64748b" }}>
+              <div className="text-xs" style={{ color: "var(--vel-text-secondary)" }}>
                 {s.label}
               </div>
             </div>
@@ -87,30 +79,26 @@ export default async function DashboardPage() {
           {/* Recent Workouts */}
           <div className="lg:col-span-2">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold" style={{ color: "#f0f4ff" }}>
+              <h2 className="text-lg font-bold" style={{ color: "var(--vel-text-primary)" }}>
                 Recent Workouts
               </h2>
-              <Link href="/workouts" className="text-sm" style={{ color: "#f97316" }}>
+              <Link href="/workouts" className="text-sm" style={{ color: "var(--vel-orange)" }}>
                 View all →
               </Link>
             </div>
 
             {recentWorkouts.length === 0 ? (
-              <div
-                className="p-8 rounded-2xl text-center"
-                style={{ background: "#111827", border: "1px solid #1e293b" }}
-              >
+              <div className="card-vel p-8 text-center">
                 <p className="text-4xl mb-3">🏃</p>
-                <p className="font-semibold" style={{ color: "#f0f4ff" }}>
+                <p className="font-semibold" style={{ color: "var(--vel-text-primary)" }}>
                   No workouts yet
                 </p>
-                <p className="text-sm mt-1 mb-4" style={{ color: "#64748b" }}>
+                <p className="text-sm mt-1 mb-4" style={{ color: "var(--vel-text-secondary)" }}>
                   Log your first session to get started
                 </p>
                 <Link
                   href="/workouts/new"
-                  className="inline-block px-5 py-2 rounded-xl font-bold text-sm"
-                  style={{ background: "#f97316", color: "#fff" }}
+                  className="btn-primary inline-flex px-5 py-2 rounded-xl text-sm"
                 >
                   Log First Workout
                 </Link>
@@ -121,8 +109,7 @@ export default async function DashboardPage() {
                   <Link
                     key={w.id}
                     href={`/workouts/${w.id}`}
-                    className="block p-4 rounded-xl"
-                    style={{ background: "#111827", border: "1px solid #1e293b" }}
+                    className="card-interactive block p-4"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -130,10 +117,10 @@ export default async function DashboardPage() {
                           {w.type === "basketball" ? "🏀" : "🏋️"}
                         </span>
                         <div>
-                          <p className="font-semibold text-sm" style={{ color: "#f0f4ff" }}>
+                          <p className="font-semibold text-sm" style={{ color: "var(--vel-text-primary)" }}>
                             {w.title}
                           </p>
-                          <p className="text-xs mt-0.5" style={{ color: "#64748b" }}>
+                          <p className="text-xs mt-0.5" style={{ color: "var(--vel-text-secondary)" }}>
                             {new Date(w.date).toLocaleDateString("en-PH", {
                               month: "short",
                               day: "numeric",
@@ -144,13 +131,7 @@ export default async function DashboardPage() {
                           </p>
                         </div>
                       </div>
-                      <span
-                        className="text-xs px-2 py-1 rounded-full capitalize"
-                        style={{
-                          background: w.type === "basketball" ? "#1e3a5f" : "#1a2e1a",
-                          color: w.type === "basketball" ? "#60a5fa" : "#4ade80",
-                        }}
-                      >
+                      <span className={w.type === "basketball" ? "tag-basketball" : "tag-conditioning"}>
                         {w.type === "basketball" ? "Basketball" : "Conditioning"}
                       </span>
                     </div>
@@ -164,36 +145,34 @@ export default async function DashboardPage() {
           <div className="flex flex-col gap-6">
             {/* Quick Actions */}
             <div>
-              <h2 className="text-lg font-bold mb-4" style={{ color: "#f0f4ff" }}>
+              <h2 className="text-lg font-bold mb-4" style={{ color: "var(--vel-text-primary)" }}>
                 Quick Log
               </h2>
               <div className="flex flex-col gap-3">
                 <Link
                   href="/workouts/new?type=conditioning"
-                  className="flex items-center gap-3 p-4 rounded-xl"
-                  style={{ background: "#111827", border: "1px solid #1e293b" }}
+                  className="card-interactive flex items-center gap-3 p-4"
                 >
                   <span className="text-2xl">🏋️</span>
                   <div>
-                    <p className="font-semibold text-sm" style={{ color: "#f0f4ff" }}>
+                    <p className="font-semibold text-sm" style={{ color: "var(--vel-text-primary)" }}>
                       Conditioning
                     </p>
-                    <p className="text-xs" style={{ color: "#64748b" }}>
+                    <p className="text-xs" style={{ color: "var(--vel-text-secondary)" }}>
                       Strength & cardio
                     </p>
                   </div>
                 </Link>
                 <Link
                   href="/workouts/new?type=basketball"
-                  className="flex items-center gap-3 p-4 rounded-xl"
-                  style={{ background: "#111827", border: "1px solid #1e293b" }}
+                  className="card-interactive flex items-center gap-3 p-4"
                 >
                   <span className="text-2xl">🏀</span>
                   <div>
-                    <p className="font-semibold text-sm" style={{ color: "#f0f4ff" }}>
+                    <p className="font-semibold text-sm" style={{ color: "var(--vel-text-primary)" }}>
                       Basketball Training
                     </p>
-                    <p className="text-xs" style={{ color: "#64748b" }}>
+                    <p className="text-xs" style={{ color: "var(--vel-text-secondary)" }}>
                       Drills & skills
                     </p>
                   </div>
@@ -204,24 +183,20 @@ export default async function DashboardPage() {
             {/* Assigned Plans */}
             {assignedPlans.length > 0 && (
               <div>
-                <h2 className="text-lg font-bold mb-4" style={{ color: "#f0f4ff" }}>
+                <h2 className="text-lg font-bold mb-4" style={{ color: "var(--vel-text-primary)" }}>
                   Your Training Plans
                 </h2>
                 <div className="flex flex-col gap-3">
                   {assignedPlans.map((plan) => (
-                    <div
-                      key={plan.id}
-                      className="p-4 rounded-xl"
-                      style={{ background: "#111827", border: "1px solid #1e293b" }}
-                    >
-                      <p className="font-semibold text-sm" style={{ color: "#f0f4ff" }}>
+                    <div key={plan.id} className="card-vel p-4">
+                      <p className="font-semibold text-sm" style={{ color: "var(--vel-text-primary)" }}>
                         {plan.title}
                       </p>
-                      <p className="text-xs mt-1" style={{ color: "#64748b" }}>
+                      <p className="text-xs mt-1" style={{ color: "var(--vel-text-secondary)" }}>
                         by Coach {plan.coach.name}
                       </p>
                       {plan.description && (
-                        <p className="text-xs mt-2" style={{ color: "#94a3b8" }}>
+                        <p className="text-xs mt-2" style={{ color: "var(--vel-text-secondary)" }}>
                           {plan.description}
                         </p>
                       )}

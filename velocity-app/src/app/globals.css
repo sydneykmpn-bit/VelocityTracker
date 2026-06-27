@@ -1,35 +1,47 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0e1a;
-  --foreground: #f0f4ff;
-  --card: #111827;
-  --card-border: #1e293b;
-  --accent: #f97316;
-  --accent-dark: #ea580c;
-  --muted: #6b7280;
-  --success: #22c55e;
-  --info: #3b82f6;
+  --vel-black: #090909;
+  --vel-surface: #111111;
+  --vel-surface-2: #1C1C1C;
+  --vel-border: #272727;
+  --vel-orange: #FF5500;
+  --vel-orange-hover: #FF7733;
+  --vel-orange-dim: rgba(255, 85, 0, 0.10);
+  --vel-orange-glow: rgba(255, 85, 0, 0.38);
+  --vel-text-primary: #F2F2F2;
+  --vel-text-secondary: #8A8A8A;
+  --vel-text-dim: #4A4A4A;
+  --vel-error-bg: rgba(127, 29, 29, 0.25);
+  --vel-error-text: #fca5a5;
+  --vel-error-border: #7f1d1d;
+
+  /* Legacy compatibility */
+  --background: var(--vel-black);
+  --foreground: var(--vel-text-primary);
+  --accent: var(--vel-orange);
+  --card: var(--vel-surface);
+  --card-border: var(--vel-border);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --color-background: var(--vel-black);
+  --color-foreground: var(--vel-text-primary);
+  --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--vel-black);
+  color: var(--vel-text-primary);
+  font-family: var(--font-inter), Arial, Helvetica, sans-serif;
   min-height: 100vh;
 }
 
 input, textarea, select {
-  background: #1e293b;
-  color: #f0f4ff;
-  border: 1px solid #334155;
+  background: var(--vel-surface-2);
+  color: var(--vel-text-primary);
+  border: 1px solid var(--vel-border);
   border-radius: 8px;
   padding: 10px 14px;
   width: 100%;
@@ -38,9 +50,235 @@ input, textarea, select {
 }
 
 input:focus, textarea:focus, select:focus {
-  border-color: #f97316;
+  border-color: var(--vel-orange);
 }
 
 input::placeholder, textarea::placeholder {
-  color: #6b7280;
+  color: var(--vel-text-dim);
+}
+
+/* ── Typography ── */
+.font-display {
+  font-family: var(--font-bebas), sans-serif;
+  letter-spacing: 0.04em;
+}
+
+/* ── Buttons ── */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.625rem 1.5rem;
+  background: var(--vel-orange);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.875rem;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.18s, transform 0.12s;
+}
+
+.btn-primary:hover {
+  background: var(--vel-orange-hover);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  background: transparent;
+  color: var(--vel-text-secondary);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  border-radius: 8px;
+  border: 1px solid var(--vel-border);
+  cursor: pointer;
+  transition: border-color 0.18s, color 0.18s;
+}
+
+.btn-ghost:hover {
+  border-color: var(--vel-orange);
+  color: var(--vel-text-primary);
+}
+
+.btn-glow {
+  animation: orangePulse 2.8s ease-in-out infinite;
+}
+
+/* ── Cards ── */
+.card-vel {
+  background: var(--vel-surface);
+  border: 1px solid var(--vel-border);
+  border-radius: 16px;
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.card-vel:hover {
+  transform: translateY(-3px);
+  border-color: #3a3a3a;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.card-interactive {
+  background: var(--vel-surface);
+  border: 1px solid var(--vel-border);
+  border-radius: 16px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.card-interactive:hover {
+  border-color: var(--vel-orange);
+  box-shadow: 0 0 0 1px var(--vel-orange-dim);
+}
+
+/* ── Nav links ── */
+.nav-link {
+  position: relative;
+  color: var(--vel-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 0.18s;
+}
+
+.nav-link::after {
+  content: "";
+  position: absolute;
+  bottom: -3px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: var(--vel-orange);
+  transition: width 0.22s ease;
+}
+
+.nav-link:hover {
+  color: var(--vel-text-primary);
+}
+
+.nav-link:hover::after {
+  width: 100%;
+}
+
+/* ── Section labels ── */
+.section-label {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--vel-orange);
+  margin-bottom: 0.5rem;
+}
+
+/* ── Dividers ── */
+.divider-orange {
+  border: none;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--vel-orange), transparent);
+  opacity: 0.4;
+  margin: 0;
+}
+
+/* ── Workout type tags ── */
+.tag-basketball {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(30, 58, 95, 0.6);
+  color: #60a5fa;
+  border: 1px solid rgba(96, 165, 250, 0.2);
+}
+
+.tag-conditioning {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(26, 46, 26, 0.6);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.2);
+}
+
+/* ── Animations ── */
+.animate-fadeInUp {
+  animation: fadeInUp 0.6s ease both;
+}
+
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.12s; }
+.stagger-3 { animation-delay: 0.20s; }
+.stagger-4 { animation-delay: 0.28s; }
+.stagger-5 { animation-delay: 0.36s; }
+.stagger-6 { animation-delay: 0.44s; }
+
+.stagger-1,
+.stagger-2,
+.stagger-3,
+.stagger-4,
+.stagger-5,
+.stagger-6 {
+  opacity: 0;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes orangePulse {
+  0%, 100% {
+    box-shadow: 0 4px 24px var(--vel-orange-dim);
+  }
+  50% {
+    box-shadow: 0 4px 40px var(--vel-orange-glow);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fadeInUp,
+  .btn-glow,
+  .stagger-1,
+  .stagger-2,
+  .stagger-3,
+  .stagger-4,
+  .stagger-5,
+  .stagger-6 {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .card-vel,
+  .card-interactive,
+  .btn-primary,
+  .btn-ghost,
+  .nav-link::after {
+    transition: none;
+  }
 }

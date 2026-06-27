@@ -24,19 +24,15 @@ export default async function WorkoutsPage({
   });
 
   return (
-    <div style={{ background: "var(--background)", minHeight: "100vh" }}>
+    <div style={{ background: "var(--vel-black)", minHeight: "100vh" }}>
       <Navbar />
 
       <div className="max-w-4xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-black" style={{ color: "#f0f4ff" }}>
+          <h1 className="text-3xl font-black" style={{ color: "var(--vel-text-primary)" }}>
             My Workouts
           </h1>
-          <Link
-            href="/workouts/new"
-            className="px-5 py-2.5 rounded-xl font-bold text-sm"
-            style={{ background: "#f97316", color: "#fff" }}
-          >
+          <Link href="/workouts/new" className="btn-primary px-5 py-2.5 rounded-xl text-sm">
             + Log Workout
           </Link>
         </div>
@@ -47,37 +43,32 @@ export default async function WorkoutsPage({
             { label: "All", value: undefined },
             { label: "🏋️ Conditioning", value: "conditioning" },
             { label: "🏀 Basketball", value: "basketball" },
-          ].map((tab) => (
-            <Link
-              key={tab.label}
-              href={tab.value ? `/workouts?type=${tab.value}` : "/workouts"}
-              className="px-4 py-2 rounded-lg text-sm font-medium"
-              style={{
-                background: type === tab.value || (!type && !tab.value) ? "#f97316" : "#1e293b",
-                color: type === tab.value || (!type && !tab.value) ? "#fff" : "#94a3b8",
-              }}
-            >
-              {tab.label}
-            </Link>
-          ))}
+          ].map((tab) => {
+            const isActive = type === tab.value || (!type && !tab.value);
+            return (
+              <Link
+                key={tab.label}
+                href={tab.value ? `/workouts?type=${tab.value}` : "/workouts"}
+                className={isActive ? "btn-primary px-4 py-2 rounded-lg text-sm" : "btn-ghost px-4 py-2 rounded-lg text-sm"}
+              >
+                {tab.label}
+              </Link>
+            );
+          })}
         </div>
 
         {workouts.length === 0 ? (
-          <div
-            className="p-12 rounded-2xl text-center"
-            style={{ background: "#111827", border: "1px solid #1e293b" }}
-          >
+          <div className="card-vel p-12 text-center">
             <p className="text-5xl mb-4">🏃</p>
-            <p className="text-xl font-bold mb-2" style={{ color: "#f0f4ff" }}>
+            <p className="text-xl font-bold mb-2" style={{ color: "var(--vel-text-primary)" }}>
               No workouts found
             </p>
-            <p className="text-sm mb-6" style={{ color: "#64748b" }}>
+            <p className="text-sm mb-6" style={{ color: "var(--vel-text-secondary)" }}>
               Start logging your training sessions
             </p>
             <Link
               href="/workouts/new"
-              className="inline-block px-6 py-3 rounded-xl font-bold text-sm"
-              style={{ background: "#f97316", color: "#fff" }}
+              className="btn-primary inline-flex px-6 py-3 rounded-xl text-sm"
             >
               Log Your First Workout
             </Link>
@@ -88,22 +79,26 @@ export default async function WorkoutsPage({
               <Link
                 key={w.id}
                 href={`/workouts/${w.id}`}
-                className="block p-5 rounded-2xl"
-                style={{ background: "#111827", border: "1px solid #1e293b" }}
+                className="card-interactive block p-5"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-4">
                     <div
                       className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
-                      style={{ background: w.type === "basketball" ? "#1e3a5f" : "#1a2e1a" }}
+                      style={{
+                        background:
+                          w.type === "basketball"
+                            ? "rgba(30,58,95,0.5)"
+                            : "rgba(26,46,26,0.5)",
+                      }}
                     >
                       {w.type === "basketball" ? "🏀" : "🏋️"}
                     </div>
                     <div>
-                      <p className="font-bold" style={{ color: "#f0f4ff" }}>
+                      <p className="font-bold" style={{ color: "var(--vel-text-primary)" }}>
                         {w.title}
                       </p>
-                      <p className="text-sm mt-0.5" style={{ color: "#64748b" }}>
+                      <p className="text-sm mt-0.5" style={{ color: "var(--vel-text-secondary)" }}>
                         {new Date(w.date).toLocaleDateString("en-PH", {
                           weekday: "short",
                           month: "short",
@@ -114,23 +109,17 @@ export default async function WorkoutsPage({
                     </div>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <span
-                      className="text-xs px-2 py-1 rounded-full capitalize"
-                      style={{
-                        background: w.type === "basketball" ? "#1e3a5f" : "#1a2e1a",
-                        color: w.type === "basketball" ? "#60a5fa" : "#4ade80",
-                      }}
-                    >
+                    <span className={w.type === "basketball" ? "tag-basketball" : "tag-conditioning"}>
                       {w.type === "basketball" ? "Basketball" : "Conditioning"}
                     </span>
-                    <div className="flex gap-3 mt-2 text-xs" style={{ color: "#64748b" }}>
+                    <div className="flex gap-3 mt-2 text-xs" style={{ color: "var(--vel-text-secondary)" }}>
                       <span>{w.exercises.length} exercises</span>
                       {w.duration && <span>{w.duration} min</span>}
                     </div>
                   </div>
                 </div>
                 {w.notes && (
-                  <p className="text-sm mt-3 line-clamp-2" style={{ color: "#94a3b8" }}>
+                  <p className="text-sm mt-3 line-clamp-2" style={{ color: "var(--vel-text-secondary)" }}>
                     {w.notes}
                   </p>
                 )}

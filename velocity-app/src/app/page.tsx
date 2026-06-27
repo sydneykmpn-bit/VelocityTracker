@@ -5,38 +5,38 @@ export default async function LandingPage() {
   const session = await getSession();
 
   return (
-    <main className="flex flex-col min-h-screen" style={{ background: "var(--background)" }}>
-      {/* Nav */}
-      <nav className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid #1e293b" }}>
+    <main className="flex flex-col min-h-screen" style={{ background: "var(--vel-black)" }}>
+      {/* Sticky frosted-glass navbar */}
+      <nav
+        className="sticky top-0 z-50 flex items-center justify-between px-6 py-4"
+        style={{
+          background: "rgba(9,9,9,0.92)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          borderBottom: "1px solid var(--vel-border)",
+        }}
+      >
         <div className="flex items-center gap-2">
-          <span style={{ color: "#f97316", fontSize: "1.5rem" }}>⚡</span>
-          <span className="font-bold text-xl tracking-tight" style={{ color: "#f0f4ff" }}>
-            Velocity Fitness <span style={{ color: "#f97316" }}>PH</span>
+          <span style={{ color: "var(--vel-orange)", fontSize: "1.4rem" }}>⚡</span>
+          <span
+            className="font-display text-2xl"
+            style={{ color: "var(--vel-text-primary)", letterSpacing: "0.06em" }}
+          >
+            VELOCITY <span style={{ color: "var(--vel-orange)" }}>PH</span>
           </span>
         </div>
+
         <div className="flex items-center gap-3">
           {session ? (
-            <Link
-              href="/dashboard"
-              className="px-4 py-2 rounded-lg font-semibold text-sm transition-all"
-              style={{ background: "#f97316", color: "#fff" }}
-            >
+            <Link href="/dashboard" className="btn-primary">
               Go to Dashboard
             </Link>
           ) : (
             <>
-              <Link
-                href="/login"
-                className="px-4 py-2 rounded-lg font-semibold text-sm"
-                style={{ color: "#f0f4ff", border: "1px solid #334155", borderRadius: "8px" }}
-              >
+              <Link href="/login" className="btn-ghost">
                 Log In
               </Link>
-              <Link
-                href="/register"
-                className="px-4 py-2 rounded-lg font-semibold text-sm"
-                style={{ background: "#f97316", color: "#fff", borderRadius: "8px" }}
-              >
+              <Link href="/register" className="btn-primary">
                 Sign Up
               </Link>
             </>
@@ -45,51 +45,100 @@ export default async function LandingPage() {
       </nav>
 
       {/* Hero */}
-      <section className="flex flex-col items-center justify-center flex-1 px-6 py-24 text-center">
-        <div
-          className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium mb-6"
-          style={{ background: "#1e293b", color: "#f97316", border: "1px solid #f9731640" }}
+      <section
+        className="relative flex flex-col items-center justify-center flex-1 px-6 py-28 text-center overflow-hidden"
+        style={{ minHeight: "90vh" }}
+      >
+        {/* Watermark */}
+        <span
+          className="font-display pointer-events-none select-none absolute inset-0 flex items-center justify-center"
+          style={{
+            fontSize: "clamp(100px, 28vw, 320px)",
+            color: "var(--vel-text-primary)",
+            opacity: 0.03,
+            lineHeight: 1,
+            letterSpacing: "0.02em",
+            zIndex: 0,
+          }}
+          aria-hidden
         >
-          🏀 Sports · Conditioning · Basketball Training
-        </div>
+          VELOCITY
+        </span>
 
-        <h1 className="text-5xl md:text-7xl font-black tracking-tight mb-6 leading-tight" style={{ color: "#f0f4ff" }}>
-          Train Smarter.
-          <br />
-          <span style={{ color: "#f97316" }}>Track Everything.</span>
-        </h1>
+        {/* Radial orange glow */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse 70% 50% at 50% 60%, rgba(255,85,0,0.07) 0%, transparent 70%)",
+            zIndex: 0,
+          }}
+          aria-hidden
+        />
 
-        <p className="text-lg md:text-xl max-w-2xl mb-10" style={{ color: "#94a3b8" }}>
-          Velocity Fitness PH&apos;s official workout tracker. Members log conditioning
-          sessions and basketball drills. Coaches monitor progress and assign training plans.
-        </p>
-
-        <div className="flex flex-col sm:flex-row gap-4">
-          <Link
-            href={session ? "/dashboard" : "/register"}
-            className="px-8 py-4 rounded-xl font-bold text-lg"
-            style={{ background: "#f97316", color: "#fff", boxShadow: "0 4px 24px #f9731640" }}
+        <div className="relative z-10 flex flex-col items-center">
+          <div
+            className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium mb-6 animate-fadeInUp stagger-1"
+            style={{
+              background: "var(--vel-orange-dim)",
+              color: "var(--vel-orange)",
+              border: "1px solid rgba(255,85,0,0.25)",
+            }}
           >
-            {session ? "Go to Dashboard" : "Start Tracking Free"}
-          </Link>
-          {!session && (
+            🏀 Sports · Conditioning · Basketball Training
+          </div>
+
+          <h1
+            className="font-display animate-fadeInUp stagger-2 leading-none mb-6"
+            style={{
+              fontSize: "clamp(54px, 11vw, 128px)",
+              color: "var(--vel-text-primary)",
+            }}
+          >
+            Train Smarter.
+            <br />
+            <span style={{ color: "var(--vel-orange)" }}>Track Everything.</span>
+          </h1>
+
+          <p
+            className="text-lg md:text-xl max-w-2xl mb-10 animate-fadeInUp stagger-3"
+            style={{ color: "var(--vel-text-secondary)" }}
+          >
+            Velocity Fitness PH&apos;s official workout tracker. Members log conditioning
+            sessions and basketball drills. Coaches monitor progress and assign training plans.
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-4 animate-fadeInUp stagger-3">
             <Link
-              href="/login"
-              className="px-8 py-4 rounded-xl font-bold text-lg"
-              style={{ background: "#1e293b", color: "#f0f4ff", border: "1px solid #334155" }}
+              href={session ? "/dashboard" : "/register"}
+              className="btn-primary btn-glow px-8 py-4 text-lg rounded-xl"
             >
-              Log In
+              {session ? "Go to Dashboard" : "Start Tracking Free"}
             </Link>
-          )}
+            {!session && (
+              <Link href="/login" className="btn-ghost px-8 py-4 text-lg rounded-xl">
+                Log In
+              </Link>
+            )}
+          </div>
         </div>
       </section>
 
+      <hr className="divider-orange" />
+
       {/* Features */}
-      <section className="px-6 py-20" style={{ background: "#0d1424" }}>
+      <section className="px-6 py-24" style={{ background: "var(--vel-surface)" }}>
         <div className="max-w-5xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-12" style={{ color: "#f0f4ff" }}>
-            Everything You Need
-          </h2>
+          <div className="text-center mb-14">
+            <span className="section-label">What We Offer</span>
+            <h2
+              className="font-display"
+              style={{ fontSize: "clamp(36px, 6vw, 64px)", color: "var(--vel-text-primary)" }}
+            >
+              Everything You Need
+            </h2>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               {
@@ -122,17 +171,19 @@ export default async function LandingPage() {
                 title: "Fast & Simple",
                 desc: "Log your session in seconds. No complexity, just results.",
               },
-            ].map((f) => (
+            ].map((f, i) => (
               <div
                 key={f.title}
-                className="p-6 rounded-2xl"
-                style={{ background: "#111827", border: "1px solid #1e293b" }}
+                className={`card-vel p-6 animate-fadeInUp stagger-${i + 1}`}
               >
                 <div className="text-3xl mb-3">{f.icon}</div>
-                <h3 className="font-bold text-lg mb-2" style={{ color: "#f0f4ff" }}>
+                <h3
+                  className="font-bold text-lg mb-2"
+                  style={{ color: "var(--vel-text-primary)" }}
+                >
                   {f.title}
                 </h3>
-                <p className="text-sm" style={{ color: "#64748b" }}>
+                <p className="text-sm" style={{ color: "var(--vel-text-secondary)" }}>
                   {f.desc}
                 </p>
               </div>
@@ -141,12 +192,42 @@ export default async function LandingPage() {
         </div>
       </section>
 
+      {/* Bottom CTA strip */}
+      <section
+        className="px-6 py-16 text-center"
+        style={{
+          background:
+            "linear-gradient(135deg, rgba(255,85,0,0.08) 0%, var(--vel-black) 60%)",
+          borderTop: "1px solid var(--vel-border)",
+        }}
+      >
+        <h2
+          className="font-display mb-4"
+          style={{ fontSize: "clamp(32px, 5vw, 56px)", color: "var(--vel-text-primary)" }}
+        >
+          Ready to Level Up?
+        </h2>
+        <p className="mb-8 text-lg" style={{ color: "var(--vel-text-secondary)" }}>
+          Join Velocity Fitness PH and start tracking your performance today.
+        </p>
+        <Link
+          href={session ? "/dashboard" : "/register"}
+          className="btn-primary btn-glow px-10 py-4 text-lg rounded-xl"
+        >
+          {session ? "Go to Dashboard" : "Get Started Free"}
+        </Link>
+      </section>
+
       {/* Footer */}
       <footer
         className="px-6 py-8 text-center text-sm"
-        style={{ color: "#475569", borderTop: "1px solid #1e293b" }}
+        style={{ color: "var(--vel-text-dim)", borderTop: "1px solid var(--vel-border)" }}
       >
-        © {new Date().getFullYear()} Velocity Fitness PH. Built for athletes.
+        <span className="font-display text-lg mr-2" style={{ color: "var(--vel-text-secondary)" }}>
+          VELOCITY PH
+        </span>
+        <br className="sm:hidden" />
+        <span>© {new Date().getFullYear()} Velocity Fitness PH. Built for athletes.</span>
       </footer>
     </main>
   );

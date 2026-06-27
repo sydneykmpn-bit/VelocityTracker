@@ -9,9 +9,9 @@ export default async function NewWorkoutPage() {
   if (!session) redirect("/login");
 
   return (
-    <div style={{ background: "var(--background)", minHeight: "100vh" }}>
+    <div style={{ background: "var(--vel-black)", minHeight: "100vh" }}>
       <Navbar />
-      <Suspense fallback={<div className="p-8 text-center" style={{ color: "#64748b" }}>Loading...</div>}>
+      <Suspense fallback={<div className="p-8 text-center" style={{ color: "var(--vel-text-secondary)" }}>Loading...</div>}>
         <WorkoutForm />
       </Suspense>
     </div>
