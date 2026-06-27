@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { login } from "@/app/actions/auth";
 
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function handleSubmit(formData: FormData) {
     setError(null);
@@ -26,13 +28,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2 mb-6">
-            <span style={{ color: "var(--vel-teal)", fontSize: "1.5rem" }}>⚡</span>
-            <span
-              className="font-display text-3xl"
-              style={{ color: "var(--vel-text-primary)", letterSpacing: "0.06em" }}
-            >
-              VELOCITY <span style={{ color: "var(--vel-teal)" }}>PH</span>
-            </span>
+            <img src="/logo.png" alt="Velocity Fitness PH" style={{ height: "48px" }} />
           </Link>
           <h1 className="text-3xl font-black" style={{ color: "var(--vel-text-primary)" }}>
             Welcome back
@@ -74,13 +70,55 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label
-                className="block text-sm font-medium mb-1"
-                style={{ color: "var(--vel-text-secondary)" }}
-              >
-                Password
-              </label>
-              <input name="password" type="password" placeholder="••••••••" required />
+              <div className="flex items-center justify-between mb-1">
+                <label
+                  className="block text-sm font-medium"
+                  style={{ color: "var(--vel-text-secondary)" }}
+                >
+                  Password
+                </label>
+                <Link
+                  href="/forgot-password"
+                  style={{ color: "var(--vel-teal)", fontSize: "0.75rem" }}
+                >
+                  Forgot password?
+                </Link>
+              </div>
+              <div style={{ position: "relative" }}>
+                <input
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  required
+                  style={{ paddingRight: "2.75rem" }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  style={{
+                    position: "absolute",
+                    right: "0.75rem",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "var(--vel-text-secondary)",
+                    display: "flex",
+                    alignItems: "center",
+                    padding: 0,
+                  }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.color = "var(--vel-text-primary)")
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.color = "var(--vel-text-secondary)")
+                  }
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             </div>
 
             <button

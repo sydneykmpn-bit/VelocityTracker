@@ -15,14 +15,8 @@ export default async function Navbar() {
         borderBottom: "1px solid var(--vel-border)",
       }}
     >
-      <Link href="/dashboard" className="flex items-center gap-2">
-        <span style={{ color: "var(--vel-teal)", fontSize: "1.3rem" }}>⚡</span>
-        <span
-          className="font-display text-2xl"
-          style={{ color: "var(--vel-text-primary)", letterSpacing: "0.06em" }}
-        >
-          VELOCITY <span style={{ color: "var(--vel-teal)" }}>PH</span>
-        </span>
+      <Link href="/dashboard" className="flex items-center">
+        <img src="/logo.png" alt="Velocity Fitness PH" style={{ height: "36px" }} />
       </Link>
 
       <div className="flex items-center gap-6">

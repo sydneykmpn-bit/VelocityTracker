@@ -16,14 +16,8 @@ export default async function LandingPage() {
           borderBottom: "1px solid var(--vel-border)",
         }}
       >
-        <div className="flex items-center gap-2">
-          <span style={{ color: "var(--vel-teal)", fontSize: "1.4rem" }}>⚡</span>
-          <span
-            className="font-display text-2xl"
-            style={{ color: "var(--vel-text-primary)", letterSpacing: "0.06em" }}
-          >
-            VELOCITY <span style={{ color: "var(--vel-teal)" }}>PH</span>
-          </span>
+        <div className="flex items-center">
+          <img src="/logo.png" alt="Velocity Fitness PH" style={{ height: "48px" }} />
         </div>
 
         <div className="flex items-center gap-3">
