@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Dumbbell } from 'lucide-react'
+import { Plus, Dumbbell, Trophy } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import Navbar from '@/components/Navbar'
 
@@ -22,9 +22,7 @@ export default function DashboardPage() {
   const [profile, setProfile] = useState<any>(null)
   const [recentWorkouts, setRecentWorkouts] = useState<any[]>([])
   const [totalWorkouts, setTotalWorkouts] = useState(0)
-  const [monthWorkouts, setMonthWorkouts] = useState(0)
-  const [totalExercises, setTotalExercises] = useState(0)
-  const [plans, setPlans] = useState<any[]>([])
+  const [prs, setPrs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -36,9 +34,7 @@ export default function DashboardPage() {
         { data: prof },
         { data: recent },
         { count: total },
-        { count: month },
-        { count: exercises },
-        { data: planData },
+        { data: prData },
       ] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
         supabase
@@ -52,26 +48,16 @@ export default function DashboardPage() {
           .select('*', { count: 'exact', head: true })
           .eq('user_id', user.id),
         supabase
-          .from('workouts')
-          .select('*', { count: 'exact', head: true })
+          .from('personal_records')
+          .select('*')
           .eq('user_id', user.id)
-          .gte('created_at', (() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d.toISOString() })()),
-        supabase
-          .from('exercises')
-          .select('*, workouts!inner(user_id)', { count: 'exact', head: true })
-          .eq('workouts.user_id', user.id),
-        supabase
-          .from('workout_plans')
-          .select('id, title, description, type')
-          .eq('member_id', user.id),
+          .order('created_at', { ascending: false }),
       ])
 
       setProfile(prof)
       setRecentWorkouts(recent ?? [])
       setTotalWorkouts(total ?? 0)
-      setMonthWorkouts(month ?? 0)
-      setTotalExercises(exercises ?? 0)
-      setPlans(planData ?? [])
+      setPrs(prData ?? [])
       setLoading(false)
     }
     loadData()
@@ -87,28 +73,21 @@ export default function DashboardPage() {
   }
 
   const firstName = profile?.name?.split(' ')[0] ?? 'Athlete'
-  const today = new Date().toLocaleDateString('en-US', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-  })
-
-  const stats = [
-    { label: 'Total Workouts', value: totalWorkouts, icon: '🏋️' },
-    { label: 'This Month', value: monthWorkouts, icon: '📅' },
-    { label: 'Total Exercises', value: totalExercises, icon: '💪' },
-  ]
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
-      <Navbar userName={profile?.name ?? 'User'} userRole={profile?.role ?? 'member'} />
+      <Navbar />
 
-      <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+      <main style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem 1.5rem' }}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '2rem' }}>
           <div>
             <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: 'clamp(2rem, 5vw, 3rem)', letterSpacing: '0.03em' }}>
               HEY, {firstName.toUpperCase()} 👋
             </h1>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '0.25rem' }}>{today}</p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '0.25rem' }}>
+              {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </p>
           </div>
           <Link href="/workouts/new" style={{
             display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
@@ -120,24 +99,25 @@ export default function DashboardPage() {
           </Link>
         </div>
 
-        {/* Stat Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-          {stats.map((s) => (
-            <div key={s.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.5rem' }}>
-              <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>{s.icon}</div>
-              <div style={{ fontFamily: 'var(--font-bebas)', fontSize: '3rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{s.value}</div>
-              <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{s.label}</div>
-            </div>
-          ))}
+        {/* Total workouts stat */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.5rem' }}>
+            <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>🏋️</div>
+            <div style={{ fontFamily: 'var(--font-bebas)', fontSize: '3rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{totalWorkouts}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginTop: '0.25rem' }}>Total Workouts</div>
+          </div>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.5rem' }}>
+            <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>🏆</div>
+            <div style={{ fontFamily: 'var(--font-bebas)', fontSize: '3rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{prs.length}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginTop: '0.25rem' }}>Personal Records</div>
+          </div>
         </div>
 
-        {/* Two-column layout */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: '1.5rem', alignItems: 'start' }}>
-
-          {/* Recent Workouts */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '2rem', alignItems: 'start' }}>
+          {/* MY WORKOUTS */}
           <div>
             <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>
-              RECENT WORKOUTS
+              MY WORKOUTS
             </h2>
             {recentWorkouts.length === 0 ? (
               <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '3rem', textAlign: 'center' }}>
@@ -155,8 +135,8 @@ export default function DashboardPage() {
                     <Link key={w.id} href={`/workouts/${w.id}`} style={{ textDecoration: 'none' }}>
                       <div style={{
                         background: 'var(--surface)', border: '1px solid var(--border)',
-                        borderRadius: '0.75rem', padding: '1.25rem',
-                        transition: 'border-color 0.2s, transform 0.2s', cursor: 'pointer',
+                        borderRadius: '0.75rem', padding: '1.25rem', cursor: 'pointer',
+                        transition: 'border-color 0.2s, transform 0.2s',
                       }}
                         onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--teal-primary)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-1px)' }}
                         onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)' }}
@@ -185,46 +165,69 @@ export default function DashboardPage() {
                     </Link>
                   )
                 })}
+                <Link href="/workouts" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontSize: '0.875rem', textAlign: 'center', padding: '0.5rem' }}>
+                  View all workouts →
+                </Link>
               </div>
             )}
           </div>
 
           {/* Sidebar */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', letterSpacing: '0.03em' }}>QUICK LOG</h2>
-            {[
-              { href: '/workouts/new?type=conditioning', icon: '🏋️', label: 'Conditioning', sub: 'Strength & cardio' },
-              { href: '/workouts/new?type=basketball', icon: '🏀', label: 'Basketball', sub: 'Ball training' },
-            ].map((item) => (
-              <Link key={item.href} href={item.href} style={{ textDecoration: 'none' }}>
-                <div style={{
-                  background: 'var(--surface)', border: '1px solid var(--border)',
-                  borderRadius: '0.75rem', padding: '1.25rem', cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--teal-primary)'; (e.currentTarget as HTMLDivElement).style.background = '#0d1f24' }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLDivElement).style.background = 'var(--surface)' }}
-                >
-                  <div style={{ fontSize: '1.5rem', marginBottom: '0.4rem' }}>{item.icon}</div>
-                  <h3 style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.2rem' }}>{item.label}</h3>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{item.sub}</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {/* My PRs */}
+            <div>
+              <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', letterSpacing: '0.03em', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Trophy size={18} style={{ color: 'var(--teal-secondary)' }} /> MY PRs
+              </h2>
+              {prs.length === 0 ? (
+                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.5rem', textAlign: 'center' }}>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>No PRs yet.</p>
+                  <Link href="/leaderboard" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontSize: '0.8rem' }}>Submit your first PR →</Link>
                 </div>
-              </Link>
-            ))}
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {prs.slice(0, 5).map((pr) => (
+                    <div key={pr.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{pr.exercise}</span>
+                        <span style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.1rem', color: 'var(--teal-secondary)' }}>
+                          {pr.value} <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{pr.unit}</span>
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                        {new Date(pr.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    </div>
+                  ))}
+                  <Link href="/leaderboard" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontSize: '0.8rem', textAlign: 'center', padding: '0.25rem' }}>
+                    View leaderboard →
+                  </Link>
+                </div>
+              )}
+            </div>
 
-            {plans.length > 0 && (
-              <>
-                <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', letterSpacing: '0.03em', marginTop: '0.5rem' }}>
-                  TRAINING PLANS
-                </h2>
-                {plans.map((plan) => (
-                  <div key={plan.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem' }}>
-                    <h4 style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.25rem' }}>{plan.title}</h4>
-                    {plan.description && <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{plan.description}</p>}
+            {/* Quick Log */}
+            <div>
+              <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', letterSpacing: '0.03em', marginBottom: '0.75rem' }}>QUICK LOG</h2>
+              {[
+                { href: '/workouts/new?type=conditioning', icon: '🏋️', label: 'Conditioning', sub: 'Strength & cardio' },
+                { href: '/workouts/new?type=basketball', icon: '🏀', label: 'Basketball', sub: 'Ball training' },
+              ].map((item) => (
+                <Link key={item.href} href={item.href} style={{ textDecoration: 'none', display: 'block', marginBottom: '0.5rem' }}>
+                  <div style={{
+                    background: 'var(--surface)', border: '1px solid var(--border)',
+                    borderRadius: '0.75rem', padding: '1rem', cursor: 'pointer', transition: 'all 0.2s',
+                  }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--teal-primary)'; (e.currentTarget as HTMLDivElement).style.background = '#0d1f24' }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLDivElement).style.background = 'var(--surface)' }}
+                  >
+                    <div style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>{item.icon}</div>
+                    <h3 style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.15rem' }}>{item.label}</h3>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{item.sub}</p>
                   </div>
-                ))}
-              </>
-            )}
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
       </main>

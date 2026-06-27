@@ -37,7 +37,7 @@ export default async function WorkoutDetailPage({
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
-      <Navbar userName={profile?.name ?? 'User'} userRole={profile?.role ?? 'member'} />
+      <Navbar />
       <main style={{ maxWidth: '700px', margin: '0 auto', padding: '2rem 1.5rem' }}>
 
         <Link href="/workouts" style={{

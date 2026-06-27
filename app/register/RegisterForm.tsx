@@ -38,14 +38,11 @@ const labelBase: React.CSSProperties = {
   marginBottom: '0.4rem',
 }
 
-type Role = 'member' | 'coach'
-
 export default function RegisterForm() {
   const router = useRouter()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [role, setRole] = useState<Role>('member')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -58,7 +55,7 @@ export default function RegisterForm() {
     const { error: authError } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { name, role } },
+      options: { data: { name, role: 'member' } },
     })
     if (authError) {
       setError(authError.message)
@@ -127,32 +124,6 @@ export default function RegisterForm() {
               </div>
             </div>
 
-            {/* Role selector */}
-            <div>
-              <label style={{ ...labelBase, marginBottom: '0.75rem' }}>I am a…</label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                {(['member', 'coach'] as Role[]).map((r) => (
-                  <button
-                    key={r} type="button" onClick={() => setRole(r)}
-                    style={{
-                      background: role === r ? 'rgba(8,119,160,0.15)' : '#0d1a1e',
-                      border: `1px solid ${role === r ? 'var(--teal-primary)' : '#1a2e34'}`,
-                      borderRadius: '0.5rem', padding: '1rem',
-                      color: '#F2F2F2', cursor: 'pointer', textAlign: 'center',
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                    <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>
-                      {r === 'member' ? '🏋️' : '👨‍💼'}
-                    </div>
-                    <div style={{ fontSize: '0.875rem', fontWeight: 600, textTransform: 'capitalize' }}>
-                      {r === 'member' ? 'Member' : 'Coach'}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <button
               type="submit" disabled={loading}
               style={{
@@ -170,6 +141,9 @@ export default function RegisterForm() {
           <p style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
             Already have an account?{' '}
             <Link href="/login" style={{ color: 'var(--teal-secondary)', textDecoration: 'none' }}>Sign in</Link>
+          </p>
+          <p style={{ textAlign: 'center', marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+            Contact your coach or admin to update your role.
           </p>
         </div>
       </div>
