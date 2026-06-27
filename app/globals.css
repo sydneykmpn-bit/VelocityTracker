@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+:root {
+  --background: #080e10;
+  --surface: #0d1a1e;
+  --surface-raised: #111f24;
+  --border: #1a2e34;
+  --border-hover: #0877a0;
+  --teal-primary: #0877a0;
+  --teal-secondary: #34bac2;
+  --teal-glow: rgba(8, 119, 160, 0.3);
+  --text-primary: #F2F2F2;
+  --text-secondary: #8A8A8A;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text-primary);
+}
+
+input, textarea, select {
+  color-scheme: dark;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(8, 119, 160, 0.4); }
+  50% { box-shadow: 0 0 40px rgba(8, 119, 160, 0.7), 0 0 60px rgba(8, 119, 160, 0.3); }
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.6s ease forwards;
+}
+
+.glow-pulse {
+  animation: glowPulse 2s ease-in-out infinite;
+}
