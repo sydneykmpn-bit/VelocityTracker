@@ -3,3 +3,7 @@ velocity-app/.next/
 velocity-app/node_modules/
 velocity-app/prisma/dev.db
 velocity-app/prisma/dev.db-journal
+
+# Environment secrets
+velocity-app/.env
+velocity-app/.env.local
