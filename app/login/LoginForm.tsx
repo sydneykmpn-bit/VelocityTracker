@@ -51,12 +51,19 @@ export default function LoginForm() {
     setLoading(true)
     setError('')
     const supabase = createClient()
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password })
     if (authError) {
       setError(authError.message)
       setLoading(false)
     } else {
-      router.push('/dashboard')
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', data.user.id)
+        .single()
+      if (profile?.role === 'admin') router.push('/admin')
+      else if (profile?.role === 'coach') router.push('/coach')
+      else router.push('/dashboard')
       router.refresh()
     }
   }
