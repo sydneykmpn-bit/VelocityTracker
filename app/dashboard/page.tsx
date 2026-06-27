@@ -1,8 +1,11 @@
-import { redirect } from 'next/navigation'
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
-import Navbar from '@/components/Navbar'
 import { Plus, Dumbbell } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import Navbar from '@/components/Navbar'
 
 function typeBadge(type: string) {
   const map: Record<string, { bg: string; color: string; border: string; icon: string }> = {
@@ -13,44 +16,75 @@ function typeBadge(type: string) {
   return map[type] ?? map.both
 }
 
-export default async function DashboardPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+export default function DashboardPage() {
+  const router = useRouter()
+  const supabase = createClient()
+  const [profile, setProfile] = useState<any>(null)
+  const [recentWorkouts, setRecentWorkouts] = useState<any[]>([])
+  const [totalWorkouts, setTotalWorkouts] = useState(0)
+  const [monthWorkouts, setMonthWorkouts] = useState(0)
+  const [totalExercises, setTotalExercises] = useState(0)
+  const [plans, setPlans] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const { data: profile } = await supabase
-    .from('profiles').select('*').eq('id', user.id).single()
+  useEffect(() => {
+    async function loadData() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.push('/login'); return }
 
-  const { data: recentWorkouts } = await supabase
-    .from('workouts')
-    .select('id, title, type, date, created_at, duration, exercises(count)')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(5)
+      const [
+        { data: prof },
+        { data: recent },
+        { count: total },
+        { count: month },
+        { count: exercises },
+        { data: planData },
+      ] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', user.id).single(),
+        supabase
+          .from('workouts')
+          .select('id, title, type, date, created_at, duration, exercises(count)')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(5),
+        supabase
+          .from('workouts')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id),
+        supabase
+          .from('workouts')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .gte('created_at', (() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d.toISOString() })()),
+        supabase
+          .from('exercises')
+          .select('*, workouts!inner(user_id)', { count: 'exact', head: true })
+          .eq('workouts.user_id', user.id),
+        supabase
+          .from('workout_plans')
+          .select('id, title, description, type')
+          .eq('member_id', user.id),
+      ])
 
-  const { count: totalWorkouts } = await supabase
-    .from('workouts')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', user.id)
+      setProfile(prof)
+      setRecentWorkouts(recent ?? [])
+      setTotalWorkouts(total ?? 0)
+      setMonthWorkouts(month ?? 0)
+      setTotalExercises(exercises ?? 0)
+      setPlans(planData ?? [])
+      setLoading(false)
+    }
+    loadData()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const startOfMonth = new Date()
-  startOfMonth.setDate(1)
-  startOfMonth.setHours(0, 0, 0, 0)
-  const { count: monthWorkouts } = await supabase
-    .from('workouts')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', user.id)
-    .gte('created_at', startOfMonth.toISOString())
-
-  const { count: totalExercises } = await supabase
-    .from('exercises')
-    .select('*, workouts!inner(user_id)', { count: 'exact', head: true })
-    .eq('workouts.user_id', user.id)
-
-  const { data: plans } = await supabase
-    .from('workout_plans')
-    .select('id, title, description, type')
-    .eq('member_id', user.id)
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--background)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p style={{ color: 'var(--text-secondary)' }}>Loading…</p>
+      </div>
+    )
+  }
 
   const firstName = profile?.name?.split(' ')[0] ?? 'Athlete'
   const today = new Date().toLocaleDateString('en-US', {
@@ -58,9 +92,9 @@ export default async function DashboardPage() {
   })
 
   const stats = [
-    { label: 'Total Workouts', value: totalWorkouts ?? 0, icon: '🏋️' },
-    { label: 'This Month', value: monthWorkouts ?? 0, icon: '📅' },
-    { label: 'Total Exercises', value: totalExercises ?? 0, icon: '💪' },
+    { label: 'Total Workouts', value: totalWorkouts, icon: '🏋️' },
+    { label: 'This Month', value: monthWorkouts, icon: '📅' },
+    { label: 'Total Exercises', value: totalExercises, icon: '💪' },
   ]
 
   return (
@@ -105,7 +139,7 @@ export default async function DashboardPage() {
             <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>
               RECENT WORKOUTS
             </h2>
-            {!recentWorkouts || recentWorkouts.length === 0 ? (
+            {recentWorkouts.length === 0 ? (
               <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '3rem', textAlign: 'center' }}>
                 <Dumbbell size={32} style={{ color: 'var(--text-secondary)', margin: '0 auto 1rem' }} />
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>No workouts yet. Let&apos;s get started!</p>
@@ -115,7 +149,7 @@ export default async function DashboardPage() {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {(recentWorkouts as any[]).map((w) => {
+                {recentWorkouts.map((w) => {
                   const badge = typeBadge(w.type)
                   return (
                     <Link key={w.id} href={`/workouts/${w.id}`} style={{ textDecoration: 'none' }}>
@@ -178,12 +212,12 @@ export default async function DashboardPage() {
               </Link>
             ))}
 
-            {plans && plans.length > 0 && (
+            {plans.length > 0 && (
               <>
                 <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', letterSpacing: '0.03em', marginTop: '0.5rem' }}>
                   TRAINING PLANS
                 </h2>
-                {(plans as any[]).map((plan) => (
+                {plans.map((plan) => (
                   <div key={plan.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem' }}>
                     <h4 style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.25rem' }}>{plan.title}</h4>
                     {plan.description && <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{plan.description}</p>}
