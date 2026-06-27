@@ -1,12 +1,27 @@
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
+import { createClient } from "@libsql/client";
+import { PrismaLibSQL } from "@prisma/adapter-libsql";
+
+const dbUrl = process.env["DATABASE_URL"] ?? "file:prisma/dev.db";
+const isLibSQL = dbUrl.startsWith("libsql://") || dbUrl.startsWith("libsql+");
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
   },
-  datasource: {
-    url: process.env["DATABASE_URL"] ?? "file:prisma/dev.db",
-  },
+  datasource: isLibSQL
+    ? {
+        adapter: () => {
+          const client = createClient({
+            url: dbUrl,
+            authToken: process.env["TURSO_AUTH_TOKEN"],
+          });
+          return new PrismaLibSQL(client);
+        },
+      }
+    : {
+        url: dbUrl,
+      },
 });
