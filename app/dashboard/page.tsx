@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Plus, Dumbbell, Trophy } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import Navbar from '@/components/Navbar'
+import { WorkoutCardSkeleton, StatCardSkeleton } from '@/components/Skeleton'
 
 function typeBadge(type: string) {
   const map: Record<string, { bg: string; color: string; border: string; icon: string }> = {
@@ -152,6 +153,78 @@ function TodayPlanCard({ plan, onUpdate }: { plan: any; onUpdate: () => void }) 
   )
 }
 
+function SkippedPlansSection({ plans, userId, supabase, onUpdate }: { plans: any[]; userId: string | null; supabase: any; onUpdate: () => void }) {
+  const [reschedulingId, setReschedulingId] = useState<string | null>(null)
+  const [rescheduleDate, setRescheduleDate] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const handleConfirm = async (planId: string) => {
+    if (!rescheduleDate || !userId) return
+    setSaving(true)
+    await supabase.from('workout_plans').update({
+      status: 'pending',
+      scheduled_date: rescheduleDate,
+      rescheduled_date: rescheduleDate,
+    }).eq('id', planId)
+    setReschedulingId(null)
+    setRescheduleDate('')
+    setSaving(false)
+    onUpdate()
+  }
+
+  return (
+    <div>
+      <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.1rem', letterSpacing: '0.03em', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>
+        ⏭️ SKIPPED / MISSED
+      </h2>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+        {plans.map(p => (
+          <div key={p.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.625rem 0.875rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+              <div>
+                <p style={{ fontSize: '0.8rem', fontWeight: 600 }}>{p.title}</p>
+                <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{p.scheduled_date}</p>
+              </div>
+              {reschedulingId !== p.id && (
+                <button
+                  onClick={() => { setReschedulingId(p.id); setRescheduleDate('') }}
+                  style={{ background: 'rgba(8,119,160,0.15)', border: '1px solid rgba(8,119,160,0.35)', borderRadius: '0.375rem', padding: '0.3rem 0.5rem', color: 'var(--teal-secondary)', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 0 }}
+                >
+                  📅 Reschedule
+                </button>
+              )}
+            </div>
+            {reschedulingId === p.id && (
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.625rem', flexWrap: 'wrap' }}>
+                <input
+                  type="date"
+                  value={rescheduleDate}
+                  onChange={e => setRescheduleDate(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                  style={{ flex: 1, minWidth: '130px', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.375rem', padding: '0.4rem 0.625rem', color: '#F2F2F2', fontSize: '0.875rem', outline: 'none' }}
+                />
+                <button
+                  onClick={() => handleConfirm(p.id)}
+                  disabled={!rescheduleDate || saving}
+                  style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', fontSize: '0.8rem', fontWeight: 700, cursor: rescheduleDate ? 'pointer' : 'not-allowed', minHeight: 0 }}
+                >
+                  Confirm
+                </button>
+                <button
+                  onClick={() => setReschedulingId(null)}
+                  style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.4rem 0.625rem', color: 'var(--text-secondary)', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0 }}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const supabase = createClient()
@@ -224,8 +297,16 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', background: 'var(--background)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>Loading…</p>
+      <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
+        <Navbar />
+        <div style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem 1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+            <StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <WorkoutCardSkeleton /><WorkoutCardSkeleton /><WorkoutCardSkeleton />
+          </div>
+        </div>
       </div>
     )
   }
@@ -447,32 +528,7 @@ export default function DashboardPage() {
 
             {/* Skipped / Missed */}
             {skippedPlans.length > 0 && (
-              <div>
-                <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.1rem', letterSpacing: '0.03em', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>
-                  ⏭️ SKIPPED / MISSED
-                </h2>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                  {skippedPlans.map(p => (
-                    <div key={p.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.625rem 0.875rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
-                      <div>
-                        <p style={{ fontSize: '0.8rem', fontWeight: 600 }}>{p.title}</p>
-                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{p.scheduled_date}</p>
-                      </div>
-                      <button
-                        onClick={async () => {
-                          const newD = prompt('Reschedule to (YYYY-MM-DD):')
-                          if (!newD || !userId) return
-                          await supabase.from('workout_plans').update({ status: 'pending', scheduled_date: newD, rescheduled_date: newD }).eq('id', p.id)
-                          await loadAll(userId)
-                        }}
-                        style={{ background: 'rgba(8,119,160,0.15)', border: '1px solid rgba(8,119,160,0.35)', borderRadius: '0.375rem', padding: '0.3rem 0.5rem', color: 'var(--teal-secondary)', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 0 }}
-                      >
-                        Reschedule
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <SkippedPlansSection plans={skippedPlans} userId={userId} supabase={supabase} onUpdate={handlePlanUpdate} />
             )}
 
             {/* Quick Log */}
@@ -503,7 +559,7 @@ export default function DashboardPage() {
 
       {/* Mobile FAB */}
       <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 50 }}>
-        <Link href="/workouts/new" style={{
+        <Link href="/workouts/new" aria-label="Log new workout" style={{
           background: 'var(--teal-primary)', color: 'white',
           width: '56px', height: '56px', borderRadius: '50%',
           display: 'none', alignItems: 'center', justifyContent: 'center',

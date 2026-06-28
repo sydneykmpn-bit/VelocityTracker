@@ -115,7 +115,8 @@ export default function Navbar() {
           </Link>
           <button
             onClick={handleLogout}
-            title="Logout"
+            aria-label="Sign out"
+            title="Sign out"
             style={{
               background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem',
               padding: '0.4rem', cursor: 'pointer', color: 'var(--text-secondary)',
@@ -127,6 +128,7 @@ export default function Navbar() {
           {/* Hamburger */}
           <button
             onClick={() => setMenuOpen(!menuOpen)}
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
             style={{
               background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem',
               padding: '0.4rem', cursor: 'pointer', color: 'var(--text-primary)',

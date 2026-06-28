@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Navbar from '@/components/Navbar'
 import { Trash2 } from 'lucide-react'
+import { debounce } from '@/lib/utils'
 
 type LeaderTab = 'public' | 'mine'
 const UNITS = ['kg', 'lbs', 'reps', 'seconds', 'minutes', 'km/h', 'mph'] as const
@@ -87,7 +88,10 @@ export default function LeaderboardPage() {
   // Filters
   const [featuredFilter, setFeaturedFilter] = useState('all')
   const [genderFilter, setGenderFilter] = useState('all')
+  const [searchInput, setSearchInput] = useState('')
   const [searchFilter, setSearchFilter] = useState('')
+
+  const debouncedSetSearch = useCallback(debounce((v: string) => setSearchFilter(v), 400), [])
 
   // Form
   const [showForm, setShowForm] = useState(false)
@@ -365,8 +369,8 @@ export default function LeaderboardPage() {
               ))}
               {/* Search filter (shown when All exercise is selected) */}
               {featuredFilter === 'all' && (
-                <input type="text" value={searchFilter}
-                  onChange={e => { setSearchFilter(e.target.value); setFeaturedFilter('all') }}
+                <input type="text" value={searchInput}
+                  onChange={e => { setSearchInput(e.target.value); debouncedSetSearch(e.target.value) }}
                   placeholder="Search exercise…"
                   style={{ ...inputBase, flex: '1', minWidth: '140px', padding: '0.4rem 0.875rem' }}
                 />

@@ -37,6 +37,18 @@ export default function TemplatesPage() {
   const [success, setSuccess] = useState('')
   const [error, setError] = useState('')
 
+  // Create template
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    title: '', description: '', type: 'conditioning' as 'conditioning' | 'basketball' | 'both',
+    is_shared: false, is_visible_to_members: false,
+  })
+  const [createExercises, setCreateExercises] = useState([
+    { name: '', sets: '', reps: '', weight: '', duration: '', notes: '' }
+  ])
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState('')
+
   async function loadTemplates(uid: string) {
     const { data: defaults } = await supabase
       .from('workout_templates')
@@ -75,6 +87,44 @@ export default function TemplatesPage() {
     init()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const handleCreateTemplate = async () => {
+    if (!createForm.title.trim()) { setCreateError('Template name is required.'); return }
+    if (!userId) return
+    setCreating(true); setCreateError('')
+    const { data: tmpl, error: err } = await supabase.from('workout_templates').insert({
+      created_by: userId,
+      title: createForm.title.trim(),
+      description: createForm.description || null,
+      type: createForm.type,
+      is_shared: createForm.is_shared && (userRole === 'coach' || userRole === 'admin'),
+      is_default: false,
+      is_visible_to_members: createForm.is_visible_to_members,
+      updated_at: new Date().toISOString(),
+    }).select().single()
+    if (err) { setCreateError(err.message); setCreating(false); return }
+    if (tmpl) {
+      const valid = createExercises.filter(e => e.name.trim())
+      if (valid.length > 0) {
+        await supabase.from('workout_template_exercises').insert(
+          valid.map((ex, i) => ({
+            template_id: tmpl.id, name: ex.name,
+            sets: ex.sets ? Number(ex.sets) : null, reps: ex.reps ? Number(ex.reps) : null,
+            weight: ex.weight ? Number(ex.weight) : null, duration: ex.duration ? Number(ex.duration) : null,
+            notes: ex.notes || null, order_index: i,
+          }))
+        )
+      }
+    }
+    setShowCreateForm(false)
+    setCreateForm({ title: '', description: '', type: 'conditioning', is_shared: false, is_visible_to_members: false })
+    setCreateExercises([{ name: '', sets: '', reps: '', weight: '', duration: '', notes: '' }])
+    setCreating(false)
+    setActiveTab('mine')
+    setSuccess('Template created!')
+    setTimeout(() => setSuccess(''), 2500)
+    await loadTemplates(userId)
+  }
 
   const handleCopyTemplate = async (template: any) => {
     if (!userId) return
@@ -192,13 +242,101 @@ export default function TemplatesPage() {
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
       <Navbar />
       <main style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem 1rem' }}>
-        <div style={{ marginBottom: '2rem' }}>
-          <p style={{ color: 'var(--teal-secondary)', fontSize: '0.7rem', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Library</p>
-          <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: 'clamp(2.25rem, 6vw, 3.5rem)', letterSpacing: '0.03em' }}>WORKOUT TEMPLATES</h1>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
+          <div>
+            <p style={{ color: 'var(--teal-secondary)', fontSize: '0.7rem', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Library</p>
+            <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: 'clamp(2.25rem, 6vw, 3.5rem)', letterSpacing: '0.03em' }}>WORKOUT TEMPLATES</h1>
+          </div>
+          <button
+            onClick={() => { setShowCreateForm(true); setActiveTab('mine'); setCreateError('') }}
+            style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+          >
+            + Create Template
+          </button>
         </div>
 
         {success && <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#4ade80', fontSize: '0.875rem' }}>{success}</div>}
         {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{error}</div>}
+
+        {/* Create Template form */}
+        {showCreateForm && (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--teal-primary)', borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', letterSpacing: '0.03em' }}>CREATE TEMPLATE</h3>
+              <button aria-label="Close" onClick={() => setShowCreateForm(false)} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', minHeight: 0 }}>✕</button>
+            </div>
+            {createError && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.625rem 0.875rem', marginBottom: '0.875rem', color: '#f87171', fontSize: '0.875rem' }}>{createError}</div>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+              <div>
+                <label style={labelBase}>Template Name *</label>
+                <input type="text" value={createForm.title} onChange={e => setCreateForm({ ...createForm, title: e.target.value })} placeholder="e.g. Monday Push Day" style={inputBase} />
+              </div>
+              <div>
+                <label style={labelBase}>Workout Type</label>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {(['conditioning', 'basketball', 'both'] as const).map(t => (
+                    <button key={t} type="button" onClick={() => setCreateForm({ ...createForm, type: t })} style={{
+                      padding: '0.4rem 0.875rem', borderRadius: '0.375rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize', minHeight: 0,
+                      background: createForm.type === t ? 'rgba(8,119,160,0.2)' : 'var(--surface-raised)',
+                      border: `1px solid ${createForm.type === t ? 'var(--teal-primary)' : 'var(--border)'}`,
+                      color: createForm.type === t ? 'var(--teal-secondary)' : 'var(--text-secondary)',
+                    }}>{t === 'conditioning' ? '🏋️ Conditioning' : t === 'basketball' ? '🏀 Basketball' : '💪 Both'}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label style={labelBase}>Description (optional)</label>
+                <textarea value={createForm.description} onChange={e => setCreateForm({ ...createForm, description: e.target.value })} placeholder="Brief description…" rows={2} style={{ ...inputBase, resize: 'vertical', minHeight: '60px' }} />
+              </div>
+              <div>
+                <label style={{ ...labelBase, marginBottom: '0.5rem' }}>Exercises</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {createExercises.map((ex, idx) => (
+                    <div key={idx} style={{ background: '#0a1518', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.75rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
+                        <span style={{ fontSize: '0.65rem', color: 'var(--teal-secondary)', fontWeight: 700 }}>EX {idx + 1}</span>
+                        {createExercises.length > 1 && (
+                          <button type="button" onClick={() => setCreateExercises(createExercises.filter((_, i) => i !== idx))} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0 }} aria-label="Remove exercise">
+                            <Plus size={12} style={{ transform: 'rotate(45deg)' }} />
+                          </button>
+                        )}
+                      </div>
+                      <input type="text" value={ex.name} onChange={e => { const n = [...createExercises]; n[idx] = { ...n[idx], name: e.target.value }; setCreateExercises(n) }} placeholder="Exercise name" style={{ ...inputBase, marginBottom: '0.375rem' }} />
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.375rem' }}>
+                        {(['sets', 'reps', 'weight'] as const).map(f => (
+                          <input key={f} type="number" value={(ex as any)[f] || ''} onChange={e => { const n = [...createExercises]; n[idx] = { ...n[idx], [f]: e.target.value }; setCreateExercises(n) }} placeholder={f === 'weight' ? 'kg' : f.charAt(0).toUpperCase() + f.slice(1)} style={inputBase} min="0" />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => setCreateExercises([...createExercises, { name: '', sets: '', reps: '', weight: '', duration: '', notes: '' }])} style={{ background: 'transparent', border: '1px dashed #1a2e34', borderRadius: '0.375rem', padding: '0.4rem', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', minHeight: 0 }}>
+                    <Plus size={12} /> Add Exercise
+                  </button>
+                </div>
+              </div>
+              {(userRole === 'coach' || userRole === 'admin') && (
+                <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={createForm.is_shared} onChange={e => setCreateForm({ ...createForm, is_shared: e.target.checked })} style={{ width: '14px', height: '14px' }} />
+                    Share with coaches
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={createForm.is_visible_to_members} onChange={e => setCreateForm({ ...createForm, is_visible_to_members: e.target.checked })} style={{ width: '14px', height: '14px' }} />
+                    Visible to members
+                  </label>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button type="button" onClick={handleCreateTemplate} disabled={creating || !createForm.title.trim()} style={{ flex: 1, background: createForm.title.trim() ? 'var(--teal-primary)' : '#0d1a1e', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.75rem', fontWeight: 700, fontSize: '0.875rem', cursor: createForm.title.trim() ? 'pointer' : 'not-allowed' }}>
+                  {creating ? 'Creating…' : 'Create Template'}
+                </button>
+                <button type="button" onClick={() => setShowCreateForm(false)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.75rem 1rem', color: 'var(--text-secondary)', fontSize: '0.875rem', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tab bar */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '1.5rem', overflowX: 'auto', scrollbarWidth: 'none' }}>

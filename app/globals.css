@@ -214,3 +214,34 @@ p a, span a, td a {
     z-index: 10;
   }
 }
+
+/* Focus visible styles for keyboard navigation */
+:focus-visible {
+  outline: 2px solid var(--teal-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Skeleton loading animation */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+.skeleton {
+  background: var(--surface-raised);
+  border-radius: 8px;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+/* Hover utilities */
+.hover-lift {
+  transition: transform 0.2s;
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+}

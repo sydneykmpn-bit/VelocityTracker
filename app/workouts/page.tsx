@@ -1,13 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, Dumbbell, Pencil } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import Navbar from '@/components/Navbar'
+import { WorkoutCardSkeleton } from '@/components/Skeleton'
 
 type Filter = 'all' | 'conditioning' | 'basketball' | 'both'
+
+const PAGE_SIZE = 20
 
 function typeBadge(type: string) {
   const map: Record<string, { bg: string; color: string; border: string; icon: string }> = {
@@ -27,36 +30,64 @@ const tabs: { label: string; value: Filter }[] = [
 
 export default function WorkoutsPage() {
   const router = useRouter()
+  const supabase = createClient()
+
+  const [user, setUser] = useState<any>(null)
+  const [profileLoaded, setProfileLoaded] = useState(false)
   const [filter, setFilter] = useState<Filter>('all')
   const [workouts, setWorkouts] = useState<any[]>([])
-  const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(0)
+  const [totalCount, setTotalCount] = useState(0)
+  const [dateRange, setDateRange] = useState({ from: '', to: '' })
+  const [showDateFilter, setShowDateFilter] = useState(false)
+
+  // Load user once on mount
+  useEffect(() => {
+    async function loadUser() {
+      const { data: { user: u } } = await supabase.auth.getUser()
+      if (!u) { router.push('/login'); return }
+      setUser(u)
+      setProfileLoaded(true)
+    }
+    loadUser()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const loadWorkouts = useCallback(async () => {
+    if (!user) return
+    setLoading(true)
+    let q = supabase
+      .from('workouts')
+      .select('id, title, type, date, created_at, duration, exercises(count)', { count: 'exact' })
+      .eq('user_id', user.id)
+      .order('date', { ascending: false })
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+    if (filter !== 'all') q = q.eq('type', filter)
+    if (dateRange.from) q = q.gte('date', dateRange.from + 'T00:00:00')
+    if (dateRange.to) q = q.lte('date', dateRange.to + 'T23:59:59')
+    const { data, count } = await q
+    setWorkouts(data ?? [])
+    setTotalCount(count ?? 0)
+    setLoading(false)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, filter, page, dateRange])
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true)
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
+    if (!profileLoaded || !user) return
+    loadWorkouts()
+  }, [profileLoaded, user, loadWorkouts])
 
-      if (!profile) {
-        const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-        setProfile(prof)
-      }
+  // Reset page when filters change
+  const handleFilterChange = (f: Filter) => { setFilter(f); setPage(0) }
+  const handleDateChange = (field: 'from' | 'to', val: string) => {
+    setDateRange(prev => ({ ...prev, [field]: val }))
+    setPage(0)
+  }
+  const clearDateFilter = () => { setDateRange({ from: '', to: '' }); setPage(0) }
 
-      let q = supabase
-        .from('workouts')
-        .select('id, title, type, date, created_at, duration, exercises(count)')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-      if (filter !== 'all') q = q.eq('type', filter)
-      const { data } = await q
-      setWorkouts(data ?? [])
-      setLoading(false)
-    }
-    fetchData()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter])
+  const hasDateFilter = dateRange.from || dateRange.to
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
@@ -65,7 +96,7 @@ export default function WorkoutsPage() {
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
           <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: '2.5rem', letterSpacing: '0.03em' }}>WORKOUTS</h1>
-          <Link href="/workouts/new" style={{
+          <Link href="/workouts/new" aria-label="Log new workout" style={{
             display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
             background: 'var(--teal-primary)', color: 'white',
             padding: '0.75rem 1.25rem', borderRadius: '0.5rem',
@@ -75,14 +106,14 @@ export default function WorkoutsPage() {
           </Link>
         </div>
 
-        {/* Filter tabs — scrollable on mobile */}
+        {/* Filter tabs */}
         <div style={{
           display: 'flex', gap: '0.5rem', overflowX: 'auto',
           WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none',
-          flexWrap: 'nowrap', marginBottom: '1.5rem', paddingBottom: '4px',
+          flexWrap: 'nowrap', marginBottom: '0.75rem', paddingBottom: '4px',
         }}>
           {tabs.map((t) => (
-            <button key={t.value} onClick={() => setFilter(t.value)} style={{
+            <button key={t.value} onClick={() => handleFilterChange(t.value)} style={{
               background: filter === t.value ? 'var(--teal-primary)' : 'var(--surface)',
               color: filter === t.value ? 'white' : 'var(--text-secondary)',
               border: `1px solid ${filter === t.value ? 'var(--teal-primary)' : 'var(--border)'}`,
@@ -95,8 +126,53 @@ export default function WorkoutsPage() {
           ))}
         </div>
 
+        {/* Date range filter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+          <button
+            aria-label="Toggle date filter"
+            onClick={() => setShowDateFilter(!showDateFilter)}
+            style={{
+              background: 'none', border: `1px solid ${hasDateFilter ? 'var(--teal-primary)' : 'var(--border)'}`,
+              borderRadius: '0.375rem', padding: '0.35rem 0.75rem',
+              color: hasDateFilter ? 'var(--teal-secondary)' : 'var(--text-secondary)',
+              fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.375rem', minHeight: 36,
+            }}
+          >
+            📅 {hasDateFilter ? 'Date filtered' : 'Filter by date'}
+          </button>
+          {hasDateFilter && (
+            <button onClick={clearDateFilter} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0 }}>
+              Clear ✕
+            </button>
+          )}
+          {totalCount > 0 && (
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginLeft: 'auto' }}>
+              {totalCount} workout{totalCount !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+
+        {showDateFilter && (
+          <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: '140px' }}>
+              <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>From</label>
+              <input type="date" value={dateRange.from}
+                onChange={e => handleDateChange('from', e.target.value)}
+                style={{ width: '100%', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', color: '#F2F2F2', fontSize: '0.9rem', outline: 'none' }} />
+            </div>
+            <div style={{ flex: 1, minWidth: '140px' }}>
+              <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>To</label>
+              <input type="date" value={dateRange.to}
+                onChange={e => handleDateChange('to', e.target.value)}
+                style={{ width: '100%', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', color: '#F2F2F2', fontSize: '0.9rem', outline: 'none' }} />
+            </div>
+          </div>
+        )}
+
         {loading ? (
-          <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>Loading…</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <WorkoutCardSkeleton /><WorkoutCardSkeleton /><WorkoutCardSkeleton />
+          </div>
         ) : workouts.length === 0 ? (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '4rem', textAlign: 'center' }}>
             <Dumbbell size={40} style={{ color: 'var(--text-secondary)', margin: '0 auto 1rem' }} />
@@ -106,60 +182,84 @@ export default function WorkoutsPage() {
             </Link>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {workouts.map((w) => {
-              const badge = typeBadge(w.type)
-              return (
-                <div key={w.id} style={{ position: 'relative' }}>
-                  <Link href={`/workouts/${w.id}`} style={{ textDecoration: 'none', display: 'block' }}>
-                    <div style={{
-                      background: 'var(--surface)', border: '1px solid var(--border)',
-                      borderRadius: '0.75rem', padding: '1.25rem', cursor: 'pointer',
-                      transition: 'all 0.2s', paddingRight: '3.5rem',
-                    }}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--teal-primary)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-1px)' }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)' }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                          <span style={{ fontSize: '1.5rem' }}>{badge.icon}</span>
-                          <div>
-                            <h3 style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.2rem' }}>{w.title}</h3>
-                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-                              {new Date(w.date ?? w.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                              {w.duration ? ` · ${w.duration} min` : ''}
-                              {(w.exercises as any[])?.[0]?.count ? ` · ${(w.exercises as any[])[0].count} exercises` : ''}
-                            </p>
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {workouts.map((w) => {
+                const badge = typeBadge(w.type)
+                return (
+                  <div key={w.id} style={{ position: 'relative' }}>
+                    <Link href={`/workouts/${w.id}`} style={{ textDecoration: 'none', display: 'block' }}>
+                      <div style={{
+                        background: 'var(--surface)', border: '1px solid var(--border)',
+                        borderRadius: '0.75rem', padding: '1.25rem', cursor: 'pointer',
+                        transition: 'all 0.2s', paddingRight: '3.5rem',
+                      }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--teal-primary)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-1px)' }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)' }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <span style={{ fontSize: '1.5rem' }}>{badge.icon}</span>
+                            <div>
+                              <h3 style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.2rem' }}>{w.title}</h3>
+                              <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                                {new Date(w.date ?? w.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                {w.duration ? ` · ${w.duration} min` : ''}
+                                {(w.exercises as any[])?.[0]?.count ? ` · ${(w.exercises as any[])[0].count} exercises` : ''}
+                              </p>
+                            </div>
                           </div>
+                          <span style={{
+                            fontSize: '0.65rem', fontWeight: 700, padding: '0.25rem 0.625rem',
+                            borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.07em',
+                            background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`,
+                          }}>
+                            {w.type}
+                          </span>
                         </div>
-                        <span style={{
-                          fontSize: '0.65rem', fontWeight: 700, padding: '0.25rem 0.625rem',
-                          borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.07em',
-                          background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`,
-                        }}>
-                          {w.type}
-                        </span>
                       </div>
-                    </div>
-                  </Link>
-                  {/* Edit button */}
-                  <Link
-                    href={`/workouts/${w.id}/edit`}
-                    onClick={e => e.stopPropagation()}
-                    style={{
-                      position: 'absolute', top: '50%', right: '1rem', transform: 'translateY(-50%)',
-                      background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem',
-                      padding: '0.35rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center',
-                      textDecoration: 'none', minHeight: 32,
-                    }}
-                    title="Edit workout"
-                  >
-                    <Pencil size={13} />
-                  </Link>
-                </div>
-              )
-            })}
-          </div>
+                    </Link>
+                    <Link
+                      href={`/workouts/${w.id}/edit`}
+                      aria-label="Edit workout"
+                      onClick={e => e.stopPropagation()}
+                      style={{
+                        position: 'absolute', top: '50%', right: '1rem', transform: 'translateY(-50%)',
+                        background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem',
+                        padding: '0.35rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center',
+                        textDecoration: 'none', minHeight: 32,
+                      }}
+                    >
+                      <Pencil size={13} />
+                    </Link>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Pagination */}
+            {totalCount > PAGE_SIZE && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginTop: '1.5rem' }}>
+                <button
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.875rem', cursor: page === 0 ? 'not-allowed' : 'pointer', opacity: page === 0 ? 0.4 : 1, minHeight: 40 }}
+                >
+                  ← Previous
+                </button>
+                <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                  Page {page + 1} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage(p => p + 1)}
+                  disabled={(page + 1) * PAGE_SIZE >= totalCount}
+                  style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.875rem', cursor: (page + 1) * PAGE_SIZE >= totalCount ? 'not-allowed' : 'pointer', opacity: (page + 1) * PAGE_SIZE >= totalCount ? 0.4 : 1, minHeight: 40 }}
+                >
+                  Next →
+                </button>
+              </div>
+            )}
+          </>
         )}
       </main>
     </div>
