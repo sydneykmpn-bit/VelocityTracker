@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Navbar from '@/components/Navbar'
 import { Trash2, ChevronDown, ChevronUp } from 'lucide-react'
+import { getLocalDateString } from '@/lib/utils'
 
 type Tab = 'members' | 'groups' | 'workouts' | 'leaderboard'
 type Role = 'member' | 'coach' | 'admin'
@@ -96,9 +97,8 @@ function WorkoutHistoryCard({ workout, supabase }: { workout: any; supabase: any
 
 function MemberProfileModal({ memberId, memberName, onClose }: { memberId: string; memberName: string; onClose: () => void }) {
   const supabase = createClient()
-  const [workoutLimit, setWorkoutLimit] = useState(10)
   const [profile, setProfile] = useState<any>(null)
-  const [recentWorkouts, setRecentWorkouts] = useState<any[]>([])
+  const [allWorkouts, setAllWorkouts] = useState<any[]>([])
   const [prs, setPRs] = useState<any[]>([])
   const [stats, setStats] = useState({ total: 0, thisMonth: 0, totalPRs: 0 })
   const [loadingModal, setLoadingModal] = useState(true)
@@ -108,11 +108,11 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
     async function load() {
       const { data: p } = await supabase.from('profiles').select('*').eq('id', memberId).single()
       setProfile(p)
-      const { data: w } = await supabase.from('workouts').select('*, exercises(count)').eq('user_id', memberId).order('date', { ascending: false }).limit(workoutLimit)
-      setRecentWorkouts(w || [])
-      const { data: pr } = await supabase.from('personal_records').select('*').eq('user_id', memberId).order('recorded_at', { ascending: false }).limit(10)
+      const { data: w } = await supabase.from('workouts').select('*, exercises(count)').eq('user_id', memberId).order('date', { ascending: false })
+      setAllWorkouts(w || [])
+      const { data: pr } = await supabase.from('personal_records').select('*').eq('user_id', memberId).order('value', { ascending: false })
       setPRs(pr || [])
-      const thisMonth = new Date().toISOString().slice(0, 7)
+      const thisMonth = getLocalDateString().slice(0, 7)
       setStats({
         total: w?.length || 0,
         thisMonth: w?.filter((wk: any) => wk.date?.startsWith(thisMonth)).length || 0,
@@ -122,7 +122,7 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
     }
     load()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [memberId, workoutLimit])
+  }, [memberId])
 
   const TYPE_BADGE_M: Record<string, { bg: string; color: string; border: string }> = {
     basketball: { bg: 'rgba(8,119,160,0.2)', color: '#34bac2', border: 'rgba(8,119,160,0.35)' },
@@ -156,14 +156,28 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
           <button onClick={onClose} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0, minHeight: 0 }}>✕</button>
         </div>
         {!loadingModal && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', background: 'var(--border)', borderBottom: '1px solid var(--border)' }}>
-            {[{ label: 'Total Workouts', value: stats.total }, { label: 'This Month', value: stats.thisMonth }, { label: 'Personal Records', value: stats.totalPRs }].map(s => (
-              <div key={s.label} style={{ padding: '1rem', textAlign: 'center', background: 'var(--surface)' }}>
-                <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '2rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{s.value}</p>
-                <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</p>
-              </div>
-            ))}
-          </div>
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', background: 'var(--border)', borderBottom: '1px solid var(--border)' }}>
+              {[{ label: 'Total Workouts', value: stats.total }, { label: 'This Month', value: stats.thisMonth }, { label: 'Personal Records', value: stats.totalPRs }].map(s => (
+                <div key={s.label} style={{ padding: '1rem', textAlign: 'center', background: 'var(--surface)' }}>
+                  <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '2rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{s.value}</p>
+                  <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</p>
+                </div>
+              ))}
+            </div>
+            {allWorkouts.length > 0 && (() => {
+              const counts = allWorkouts.reduce((acc, w) => { acc[w.type] = (acc[w.type] || 0) + 1; return acc }, {} as Record<string, number>)
+              return (
+                <div style={{ display: 'flex', gap: '0.5rem', padding: '0.625rem 1rem', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                  {Object.entries(counts).map(([type, count]) => (
+                    <span key={type} style={{ fontSize: '0.7rem', fontWeight: 600, padding: '0.2rem 0.5rem', borderRadius: '999px', ...(TYPE_BADGE_M[type] ?? TYPE_BADGE_M.both) }}>
+                      {type} · {count as number}
+                    </span>
+                  ))}
+                </div>
+              )
+            })()}
+          </>
         )}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
           {(['overview', 'workouts', 'prs'] as const).map(tab => (
@@ -184,7 +198,7 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div>
                     <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Recent Activity</p>
-                    {recentWorkouts.slice(0, 3).map(w => (
+                    {allWorkouts.slice(0, 3).map(w => (
                       <div key={w.id} style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '0.375rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div>
                           <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{w.title}</p>
@@ -193,41 +207,57 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
                         <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', ...(TYPE_BADGE_M[w.type] ?? TYPE_BADGE_M.both) }}>{w.type}</span>
                       </div>
                     ))}
-                    {recentWorkouts.length === 0 && <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No workouts yet.</p>}
+                    {allWorkouts.length === 0 && <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No workouts yet.</p>}
                   </div>
                 </div>
               )}
               {activeModalTab === 'workouts' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {recentWorkouts.length === 0 ? (
+                  {allWorkouts.length === 0 ? (
                     <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No workouts logged yet.</p>
-                  ) : recentWorkouts.map(w => (
+                  ) : allWorkouts.map(w => (
                     <WorkoutHistoryCard key={w.id} workout={w} supabase={supabase} />
                   ))}
-                  {recentWorkouts.length === workoutLimit && (
-                    <button
-                      onClick={() => setWorkoutLimit(prev => prev + 10)}
-                      style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.625rem', color: 'var(--text-secondary)', fontSize: '0.875rem', cursor: 'pointer', width: '100%', marginTop: '0.25rem' }}
-                    >
-                      Load More Workouts
-                    </button>
-                  )}
                 </div>
               )}
-              {activeModalTab === 'prs' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                  {prs.length === 0 ? <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No PRs yet.</p>
-                  : prs.map(pr => (
-                    <div key={pr.id} style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{pr.exercise_name}</p>
-                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>{new Date(pr.recorded_at || pr.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}{pr.is_public ? ' · 🌐' : ' · 🔒'}</p>
+              {activeModalTab === 'prs' && (() => {
+                if (prs.length === 0) return <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No PRs yet.</p>
+                type PRGroup = { exercise: string; unit: string; best: number; all: any[] }
+                const grouped = (Object.values(
+                  prs.reduce((acc, pr) => {
+                    const key = pr.exercise_name
+                    if (!acc[key]) acc[key] = { exercise: key, unit: pr.unit, best: pr.value, all: [] as any[] }
+                    if (pr.value > acc[key].best) acc[key].best = pr.value
+                    acc[key].all.push(pr)
+                    return acc
+                  }, {} as Record<string, PRGroup>)
+                ) as PRGroup[]).sort((a, b) => b.best - a.best)
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {grouped.map(group => (
+                      <div key={group.exercise} style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', overflow: 'hidden' }}>
+                        <div style={{ padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: group.all.length > 1 ? '1px solid var(--border)' : 'none' }}>
+                          <div>
+                            <p style={{ fontWeight: 700, fontSize: '0.875rem' }}>{group.exercise}</p>
+                            <p style={{ fontSize: '0.65rem', color: 'var(--teal-secondary)', marginTop: '0.1rem' }}>Personal Best</p>
+                          </div>
+                          <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', color: 'var(--teal-secondary)' }}>{group.best} <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{group.unit}</span></p>
+                        </div>
+                        {group.all.length > 1 && (
+                          <div style={{ padding: '0.5rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                            {group.all.map(pr => (
+                              <div key={pr.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                <span>{new Date(pr.recorded_at || pr.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                <span style={{ color: pr.value === group.best ? 'var(--teal-secondary)' : 'var(--text-secondary)', fontWeight: pr.value === group.best ? 700 : 400 }}>{pr.value} {pr.unit}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', color: 'var(--teal-secondary)' }}>{pr.value} {pr.unit}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )
+              })()}
             </>
           )}
         </div>

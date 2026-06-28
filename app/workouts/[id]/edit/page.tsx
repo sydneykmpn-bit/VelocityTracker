@@ -6,14 +6,15 @@ import Link from 'next/link'
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import Navbar from '@/components/Navbar'
+import { getLocalDateString } from '@/lib/utils'
 
 type WorkoutType = 'conditioning' | 'basketball' | 'both'
 
 interface ExerciseRow {
-  name: string; sets: string; reps: string; weight: string; duration: string; notes: string
+  name: string; sets: string; reps: string; weight: string; duration: string; distance: string; speed: string; isRunning: boolean; notes: string
 }
 
-const blank = (): ExerciseRow => ({ name: '', sets: '', reps: '', weight: '', duration: '', notes: '' })
+const blank = (): ExerciseRow => ({ name: '', sets: '', reps: '', weight: '', duration: '', distance: '', speed: '', isRunning: false, notes: '' })
 
 const inputBase: React.CSSProperties = {
   width: '100%', background: '#0d1a1e', border: '1px solid #1a2e34',
@@ -25,29 +26,41 @@ const labelBase: React.CSSProperties = {
   textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.375rem',
 }
 
-const STRENGTH_EXERCISES = [
-  'Back Squat','Front Squat','Deadlift','Romanian Deadlift','Bench Press','Overhead Press',
-  'Barbell Row','Pull Up','Chin Up','Dip','Push Up','Incline Bench Press','Sumo Deadlift',
-  'Hip Thrust','Leg Press','Lunges','Clean & Jerk','Snatch','Power Clean','Push Press',
-]
-const CONDITIONING_EXERCISES = [
-  '400m Run','800m Run','1km Run','5km Run','10km Run','Treadmill Sprint','Treadmill Endurance',
-  'Rowing 500m','Rowing 2000m','Assault Bike','Jump Rope','Box Jump','Burpees','Wall Balls','Kettlebell Swing',
-]
-const BASKETBALL_EXERCISES = [
-  'Free Throw %','3-Point %','Vertical Jump','Sprint 20m','Sprint 40m','Agility T-Test',
-]
-const ALL_EXERCISES = [...STRENGTH_EXERCISES, ...CONDITIONING_EXERCISES, ...BASKETBALL_EXERCISES]
+const EXERCISES_BY_TYPE: Record<WorkoutType, string[]> = {
+  conditioning: [
+    'Back Squat','Front Squat','Deadlift','Romanian Deadlift','Bench Press','Overhead Press',
+    'Barbell Row','Pull Up','Chin Up','Dip','Push Up','Incline Bench Press','Sumo Deadlift',
+    'Hip Thrust','Leg Press','Lunges','Clean & Jerk','Snatch','Power Clean','Push Press',
+    '400m Run','800m Run','1km Run','5km Run','10km Run','Treadmill Sprint','Treadmill Endurance',
+    'Rowing 500m','Rowing 2000m','Assault Bike','Jump Rope','Box Jump','Burpees','Wall Balls','Kettlebell Swing',
+  ],
+  basketball: [
+    'Free Throw %','3-Point %','Vertical Jump','Sprint 20m','Sprint 40m','Agility T-Test',
+    '400m Run','800m Run','1km Run','Treadmill Sprint','Jump Rope','Box Jump','Burpees',
+    'Back Squat','Deadlift','Overhead Press','Push Up','Pull Up',
+  ],
+  both: [
+    'Back Squat','Front Squat','Deadlift','Romanian Deadlift','Bench Press','Overhead Press',
+    'Barbell Row','Pull Up','Chin Up','Dip','Push Up',
+    'Free Throw %','3-Point %','Vertical Jump','Sprint 20m','Sprint 40m','Agility T-Test',
+    '400m Run','800m Run','1km Run','5km Run','Treadmill Sprint','Treadmill Endurance',
+    'Rowing 500m','Assault Bike','Jump Rope','Box Jump','Burpees','Kettlebell Swing',
+  ],
+}
+
+function getExerciseList(type: WorkoutType): string[] {
+  return EXERCISES_BY_TYPE[type]
+}
 
 function getSuggestions(query: string, type: WorkoutType): string[] {
   if (!query.trim()) return []
   const q = query.toLowerCase()
-  const ordered = type === 'basketball'
-    ? [...BASKETBALL_EXERCISES, ...CONDITIONING_EXERCISES, ...STRENGTH_EXERCISES]
-    : type === 'conditioning'
-    ? [...CONDITIONING_EXERCISES, ...STRENGTH_EXERCISES, ...BASKETBALL_EXERCISES]
-    : ALL_EXERCISES
-  return ordered.filter(e => e.toLowerCase().includes(q)).slice(0, 6)
+  return getExerciseList(type).filter(e => e.toLowerCase().includes(q)).slice(0, 6)
+}
+
+function isRunningExercise(name: string): boolean {
+  const keywords = ['run', 'sprint', 'treadmill', 'rowing', 'bike', 'assault', 'jump rope']
+  return keywords.some(k => name.toLowerCase().includes(k))
 }
 
 export default function EditWorkoutPage() {
@@ -57,7 +70,7 @@ export default function EditWorkoutPage() {
 
   const [workoutType, setWorkoutType] = useState<WorkoutType>('conditioning')
   const [title, setTitle] = useState('')
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(getLocalDateString())
   const [duration, setDuration] = useState('')
   const [notes, setNotes] = useState('')
   const [exercises, setExercises] = useState<ExerciseRow[]>([blank()])
@@ -76,7 +89,7 @@ export default function EditWorkoutPage() {
 
       setTitle(w.title ?? '')
       setWorkoutType(w.type ?? 'conditioning')
-      setDate(w.date ? w.date.split('T')[0] : new Date().toISOString().split('T')[0])
+      setDate(w.date ? w.date.split('T')[0] : getLocalDateString())
       setDuration(w.duration ? String(w.duration) : '')
       setNotes(w.notes ?? '')
 
@@ -88,6 +101,9 @@ export default function EditWorkoutPage() {
           reps: ex.reps ? String(ex.reps) : '',
           weight: ex.weight ? String(ex.weight) : '',
           duration: ex.duration ? String(ex.duration) : '',
+          distance: ex.distance ? String(ex.distance) : '',
+          speed: ex.speed ? String(ex.speed) : '',
+          isRunning: false,
           notes: ex.notes ?? '',
         })))
       }
@@ -97,10 +113,16 @@ export default function EditWorkoutPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
-  const update = (idx: number, field: keyof ExerciseRow, val: string) => {
-    const next = [...exercises]
-    next[idx] = { ...next[idx], [field]: val }
-    setExercises(next)
+  const update = (idx: number, field: keyof ExerciseRow, val: string | boolean) => {
+    setExercises(prev => {
+      const next = [...prev]
+      next[idx] = { ...next[idx], [field]: val }
+      return next
+    })
+  }
+
+  const removeExercise = (indexToRemove: number) => {
+    setExercises(prev => prev.filter((_, i) => i !== indexToRemove))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -108,33 +130,43 @@ export default function EditWorkoutPage() {
     if (!title.trim()) { setError('Please enter a workout title'); return }
     setSaving(true); setError('')
 
-    await supabase.from('workouts').update({
-      title: title.trim(),
-      type: workoutType,
-      date: new Date(date).toISOString(),
-      duration: duration ? Number(duration) : null,
-      notes: notes.trim() || null,
-    }).eq('id', id)
+    try {
+      const { error: workoutErr } = await supabase.from('workouts').update({
+        title: title.trim(),
+        type: workoutType,
+        date: new Date(date).toISOString(),
+        duration: duration ? Number(duration) : null,
+        notes: notes.trim() || null,
+      }).eq('id', id)
+      if (workoutErr) throw workoutErr
 
-    await supabase.from('exercises').delete().eq('workout_id', id)
+      const { error: deleteErr } = await supabase.from('exercises').delete().eq('workout_id', id)
+      if (deleteErr) throw deleteErr
 
-    const valid = exercises.filter(ex => ex.name.trim())
-    if (valid.length > 0) {
-      await supabase.from('exercises').insert(
-        valid.map(ex => ({
-          workout_id: id,
-          name: ex.name.trim(),
-          sets: ex.sets ? parseInt(ex.sets) : null,
-          reps: ex.reps ? parseInt(ex.reps) : null,
-          weight: ex.weight ? parseFloat(ex.weight) : null,
-          duration: ex.duration ? parseInt(ex.duration) : null,
-          notes: ex.notes.trim() || null,
-        }))
-      )
+      const valid = exercises.filter(ex => ex.name.trim())
+      if (valid.length > 0) {
+        const { error: insertErr } = await supabase.from('exercises').insert(
+          valid.map(ex => ({
+            workout_id: id,
+            name: ex.name.trim(),
+            sets: ex.sets ? parseInt(ex.sets) : null,
+            reps: ex.reps ? parseInt(ex.reps) : null,
+            weight: ex.weight ? parseFloat(ex.weight) : null,
+            duration: ex.duration ? parseInt(ex.duration) : null,
+            distance: ex.distance ? parseFloat(ex.distance) : null,
+            speed: ex.speed ? parseFloat(ex.speed) : null,
+            notes: ex.notes.trim() || null,
+          }))
+        )
+        if (insertErr) throw insertErr
+      }
+
+      router.push(`/workouts/${id}`)
+      router.refresh()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save workout. Please try again.')
+      setSaving(false)
     }
-
-    router.push(`/workouts/${id}`)
-    router.refresh()
   }
 
   const typeOptions: { value: WorkoutType; emoji: string; label: string }[] = [
@@ -142,8 +174,6 @@ export default function EditWorkoutPage() {
     { value: 'basketball', emoji: '🏀', label: 'Basketball' },
     { value: 'both', emoji: '💪', label: 'Both' },
   ]
-  const showStrength = workoutType !== 'basketball'
-  const showBall = workoutType !== 'conditioning'
 
   if (loading) {
     return (
@@ -225,12 +255,13 @@ export default function EditWorkoutPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 {exercises.map((ex, idx) => {
                   const suggestions = getSuggestions(ex.name, workoutType)
+                  const running = isRunningExercise(ex.name) || ex.isRunning
                   return (
                     <div key={idx} style={{ background: '#0a1518', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '1rem' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                         <span style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', fontWeight: 700, letterSpacing: '0.08em' }}>EXERCISE {idx + 1}</span>
                         {exercises.length > 1 && (
-                          <button type="button" onClick={() => setExercises(exercises.filter((_, i) => i !== idx))} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0 }}>
+                          <button type="button" onClick={() => removeExercise(idx)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0 }}>
                             <Trash2 size={14} />
                           </button>
                         )}
@@ -261,7 +292,22 @@ export default function EditWorkoutPage() {
                           </div>
                         )}
                       </div>
-                      {showStrength && (
+                      {running ? (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                          <div>
+                            <label style={labelBase}>Duration (min)</label>
+                            <input type="number" value={ex.duration} onChange={e => update(idx, 'duration', e.target.value)} style={inputBase} placeholder="30" min="0" />
+                          </div>
+                          <div>
+                            <label style={labelBase}>Distance (km)</label>
+                            <input type="number" value={ex.distance} onChange={e => update(idx, 'distance', e.target.value)} style={inputBase} placeholder="5" step="0.01" min="0" />
+                          </div>
+                          <div>
+                            <label style={labelBase}>Speed (km/h)</label>
+                            <input type="number" value={ex.speed} onChange={e => update(idx, 'speed', e.target.value)} style={inputBase} placeholder="10" step="0.1" min="0" />
+                          </div>
+                        </div>
+                      ) : (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: '0.5rem' }}>
                           {(['sets', 'reps', 'weight'] as const).map(f => (
                             <div key={f}>
@@ -271,23 +317,15 @@ export default function EditWorkoutPage() {
                           ))}
                         </div>
                       )}
-                      {showBall && (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                          <div>
-                            <label style={labelBase}>Duration (min)</label>
-                            <input type="number" value={ex.duration} onChange={e => update(idx, 'duration', e.target.value)} style={inputBase} placeholder="15" min="0" />
-                          </div>
-                          <div>
-                            <label style={labelBase}>Notes</label>
-                            <input type="text" value={ex.notes} onChange={e => update(idx, 'notes', e.target.value)} style={inputBase} placeholder="Focus on form" />
-                          </div>
-                        </div>
-                      )}
+                      <div>
+                        <label style={labelBase}>Notes</label>
+                        <input type="text" value={ex.notes} onChange={e => update(idx, 'notes', e.target.value)} style={inputBase} placeholder="Focus on form" />
+                      </div>
                     </div>
                   )
                 })}
               </div>
-              <button type="button" onClick={() => setExercises([...exercises, blank()])} style={{
+              <button type="button" onClick={() => setExercises(prev => [...prev, blank()])} style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
                 width: '100%', marginTop: '0.75rem',
                 background: 'transparent', border: '1px dashed #1a2e34', borderRadius: '0.5rem',
