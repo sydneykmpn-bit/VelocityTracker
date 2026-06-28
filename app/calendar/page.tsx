@@ -24,25 +24,38 @@ function classTypeColor(type: string): { bg: string; color: string } {
   return { bg: 'rgba(26,46,26,0.8)', color: '#4ade80' }
 }
 
-function generateRecurringDates(startDate: string, endDate: string, rule: string, days: string[]): string[] {
+function generateRecurringDates(
+  startDate: string,
+  endDate: string,
+  rule: string,
+  days: string[]
+): string[] {
+  if (!endDate || !startDate) return []
   const dates: string[] = []
-  const start = new Date(startDate + 'T00:00:00')
-  const end = new Date(endDate + 'T00:00:00')
+  const start = new Date(startDate + 'T12:00:00')
+  const end = new Date(endDate + 'T12:00:00')
   if (end <= start) return []
   const current = new Date(start)
   current.setDate(current.getDate() + 1)
+  const dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday']
   while (current <= end) {
-    const dayName = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][current.getDay()]
+    const dayName = dayNames[current.getDay()]
     const dateStr = current.toISOString().split('T')[0]
-    const weekNum = Math.floor((current.getTime() - start.getTime()) / (7*24*60*60*1000))
-    if (rule === 'daily') {
-      dates.push(dateStr)
-    } else if (rule === 'weekly') {
-      if (days.length === 0 || days.includes(dayName)) dates.push(dateStr)
-    } else if (rule === 'biweekly') {
-      if (weekNum % 2 === 0 && (days.length === 0 || days.includes(dayName))) dates.push(dateStr)
-    } else if (rule === 'monthly') {
-      if (current.getDate() === start.getDate()) dates.push(dateStr)
+    const msSinceStart = current.getTime() - start.getTime()
+    const weeksSinceStart = Math.floor(msSinceStart / (7 * 24 * 60 * 60 * 1000))
+    switch (rule) {
+      case 'daily':
+        dates.push(dateStr)
+        break
+      case 'weekly':
+        if (days.length === 0 || days.includes(dayName)) dates.push(dateStr)
+        break
+      case 'biweekly':
+        if (weeksSinceStart % 2 === 0 && (days.length === 0 || days.includes(dayName))) dates.push(dateStr)
+        break
+      case 'monthly':
+        if (current.getDate() === start.getDate()) dates.push(dateStr)
+        break
     }
     current.setDate(current.getDate() + 1)
   }
@@ -159,15 +172,41 @@ export default function CalendarPage() {
   const loadClasses = async () => {
     const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).toISOString().split('T')[0]
     const endOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).toISOString().split('T')[0]
-    const { data } = await supabase
+
+    const { data: classData } = await supabase
       .from('scheduled_classes')
       .select('*, groups(name), profiles!scheduled_classes_coach_id_fkey(name)')
       .gte('scheduled_date', startOfMonth)
       .lte('scheduled_date', endOfMonth)
       .order('scheduled_date')
-    setClasses(data ?? [])
+
+    let planQuery = supabase
+      .from('workout_plans')
+      .select('*, profiles!workout_plans_coach_id_fkey(name), profiles!workout_plans_member_id_fkey(name)')
+      .gte('scheduled_date', startOfMonth)
+      .lte('scheduled_date', endOfMonth)
+      .neq('status', 'completed')
+      .neq('status', 'skipped')
+
+    if (userRole === 'member') {
+      planQuery = planQuery.eq('member_id', userId)
+    } else if (userRole === 'coach') {
+      planQuery = planQuery.eq('coach_id', userId)
+    }
+
+    const { data: planData } = await planQuery.order('scheduled_date')
+
+    const normalizedPlans = (planData || []).map((p: any) => ({
+      ...p,
+      isPlan: true,
+      start_time: '00:00',
+      is_recurring: false,
+    }))
+
+    const allData = [...(classData || []), ...normalizedPlans]
+    setClasses(allData)
     if (selectedDate) {
-      setSelectedDateClasses((data ?? []).filter(c => c.scheduled_date === selectedDate))
+      setSelectedDateClasses(allData.filter(c => c.scheduled_date === selectedDate))
     }
   }
 
@@ -201,44 +240,108 @@ export default function CalendarPage() {
 
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!userId) return
     setCreateError('')
-    if (createForm.is_recurring && !createForm.recurrence_end_date) {
-      setCreateError('Please set an end date for recurring classes.')
-      return
-    }
-    if (createForm.is_recurring && createForm.recurrence_days.length === 0 && createForm.recurrence_rule !== 'daily' && createForm.recurrence_rule !== 'monthly') {
-      setCreateError('Please select at least one day of the week for recurring classes.')
-      return
-    }
-    setSaving(true)
 
-    const { data: newClass } = await supabase.from('scheduled_classes').insert({
-      title: createForm.title, description: createForm.description || null,
-      type: createForm.type, group_id: createForm.group_id || null, coach_id: userId,
-      scheduled_date: createForm.scheduled_date, start_time: createForm.start_time,
-      end_time: createForm.end_time, location: createForm.location || null,
-      is_recurring: createForm.is_recurring,
-      recurrence_rule: createForm.is_recurring ? createForm.recurrence_rule : null,
-      recurrence_days: createForm.is_recurring && createForm.recurrence_days.length > 0 ? createForm.recurrence_days : null,
-      recurrence_end_date: createForm.is_recurring && createForm.recurrence_end_date ? createForm.recurrence_end_date : null,
-      created_by: userId,
-    }).select().single()
+    if (!createForm.title.trim()) { setCreateError('Title is required.'); return }
+    if (!createForm.scheduled_date) { setCreateError('Date is required.'); return }
+    if (!createForm.start_time) { setCreateError('Start time is required.'); return }
 
-    if (newClass && createForm.is_recurring && createForm.recurrence_end_date) {
-      const instances = generateRecurringDates(
-        createForm.scheduled_date, createForm.recurrence_end_date,
-        createForm.recurrence_rule, createForm.recurrence_days
-      )
-      if (instances.length > 0) {
-        const { id: _, created_at: __, ...rest } = newClass
-        await supabase.from('scheduled_classes').insert(instances.map(date => ({ ...rest, scheduled_date: date })))
+    if (createForm.is_recurring) {
+      if (!createForm.recurrence_end_date) {
+        setCreateError('End date is required for recurring classes.')
+        return
+      }
+      if (createForm.recurrence_end_date <= createForm.scheduled_date) {
+        setCreateError('End date must be after the start date.')
+        return
+      }
+      if (
+        (createForm.recurrence_rule === 'weekly' || createForm.recurrence_rule === 'biweekly')
+        && createForm.recurrence_days.length === 0
+      ) {
+        setCreateError('Select at least one day of the week for weekly/bi-weekly recurrence.')
+        return
       }
     }
 
-    setShowCreateModal(false)
-    setCreateForm({ title: '', description: '', type: 'conditioning', group_id: '', scheduled_date: new Date().toISOString().split('T')[0], start_time: '06:00', end_time: '07:00', location: '', is_recurring: false, recurrence_rule: 'weekly', recurrence_days: [], recurrence_end_date: '' })
-    await loadClasses()
+    setSaving(true)
+
+    try {
+      const { data: newClass, error: insertError } = await supabase
+        .from('scheduled_classes')
+        .insert({
+          title: createForm.title,
+          description: createForm.description || null,
+          type: createForm.type,
+          group_id: createForm.group_id || null,
+          coach_id: userId,
+          scheduled_date: createForm.scheduled_date,
+          start_time: createForm.start_time,
+          end_time: createForm.end_time || null,
+          location: createForm.location || null,
+          is_recurring: createForm.is_recurring,
+          recurrence_rule: createForm.is_recurring ? createForm.recurrence_rule : null,
+          recurrence_days: createForm.is_recurring && createForm.recurrence_days.length > 0
+            ? createForm.recurrence_days : null,
+          recurrence_end_date: createForm.is_recurring ? createForm.recurrence_end_date : null,
+          created_by: userId,
+        })
+        .select()
+        .single()
+
+      if (insertError) {
+        setCreateError(`Failed to create class: ${insertError.message}`)
+        setSaving(false)
+        return
+      }
+
+      if (createForm.is_recurring && newClass && createForm.recurrence_end_date) {
+        const recurringDates = generateRecurringDates(
+          createForm.scheduled_date,
+          createForm.recurrence_end_date,
+          createForm.recurrence_rule,
+          createForm.recurrence_days
+        )
+        if (recurringDates.length > 0) {
+          const { error: recurringError } = await supabase
+            .from('scheduled_classes')
+            .insert(
+              recurringDates.map(date => ({
+                title: createForm.title,
+                description: createForm.description || null,
+                type: createForm.type,
+                group_id: createForm.group_id || null,
+                coach_id: userId,
+                scheduled_date: date,
+                start_time: createForm.start_time,
+                end_time: createForm.end_time || null,
+                location: createForm.location || null,
+                is_recurring: true,
+                recurrence_rule: createForm.recurrence_rule,
+                recurrence_days: createForm.recurrence_days.length > 0 ? createForm.recurrence_days : null,
+                recurrence_end_date: createForm.recurrence_end_date,
+                created_by: userId,
+              }))
+            )
+          if (recurringError) {
+            setCreateError(`Class created but some recurring instances failed: ${recurringError.message}`)
+          }
+        }
+      }
+
+      setShowCreateModal(false)
+      setCreateForm({
+        title: '', description: '', type: 'conditioning', group_id: '',
+        scheduled_date: selectedDate || new Date().toISOString().split('T')[0],
+        start_time: '06:00', end_time: '07:00', location: '',
+        is_recurring: false, recurrence_rule: 'weekly',
+        recurrence_days: [], recurrence_end_date: '',
+      })
+      await loadClasses()
+    } catch (err: any) {
+      setCreateError(err.message || 'Unexpected error creating class.')
+    }
+
     setSaving(false)
   }
 
@@ -332,6 +435,13 @@ export default function CalendarPage() {
                   >
                     <p style={{ fontSize: '0.7rem', fontWeight: 600, textAlign: 'right', color: isToday ? 'var(--teal-secondary)' : 'var(--text-secondary)', marginBottom: '0.2rem' }}>{day}</p>
                     {dayClasses.slice(0, 2).map(c => {
+                      if (c.isPlan) {
+                        return (
+                          <div key={c.id} style={{ background: 'rgba(8,119,160,0.25)', color: '#34bac2', border: '1px dashed rgba(8,119,160,0.5)', borderRadius: '0.2rem', fontSize: '0.6rem', padding: '0.1rem 0.3rem', marginBottom: '0.15rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                            📋 {c.title}
+                          </div>
+                        )
+                      }
                       const tc = classTypeColor(c.type)
                       return (
                         <div key={c.id} style={{ ...tc, borderRadius: '0.2rem', fontSize: '0.6rem', padding: '0.1rem 0.3rem', marginBottom: '0.15rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
@@ -356,7 +466,7 @@ export default function CalendarPage() {
                 {selectedDateClasses.length === 0 ? (
                   <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center' }}>
                     <p style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>📅</p>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No classes scheduled.</p>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No classes or plans scheduled.</p>
                     {(userRole === 'admin' || userRole === 'coach') && (
                       <button onClick={() => setShowCreateModal(true)} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', marginTop: '0.75rem' }}>
                         + Add Class
@@ -364,9 +474,37 @@ export default function CalendarPage() {
                     )}
                   </div>
                 ) : (
-                  selectedDateClasses.map(cls => (
-                    <ClassCard key={cls.id} cls={cls} userRole={userRole} onUpdate={loadClasses} />
-                  ))
+                  <>
+                    {/* Assigned Plans */}
+                    {selectedDateClasses.filter(c => c.isPlan).length > 0 && (
+                      <div style={{ marginBottom: '1rem' }}>
+                        <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--teal-secondary)', marginBottom: '0.5rem' }}>📋 Assigned Plans</p>
+                        {selectedDateClasses.filter(c => c.isPlan).map(plan => {
+                          const memberName = (plan as any)['profiles!workout_plans_member_id_fkey']?.name
+                          const coachName = (plan as any)['profiles!workout_plans_coach_id_fkey']?.name
+                          const tb = plan.type === 'basketball' ? { bg: 'rgba(8,119,160,0.2)', color: '#34bac2' } : plan.type === 'both' ? { bg: 'rgba(168,85,247,0.15)', color: '#c084fc' } : { bg: 'rgba(34,197,94,0.15)', color: '#4ade80' }
+                          return (
+                            <div key={plan.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderLeft: '2px dashed var(--teal-primary)', borderRadius: '0.75rem', padding: '0.875rem', marginBottom: '0.5rem' }}>
+                              <p style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.25rem' }}>{plan.title}</p>
+                              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.375rem' }}>
+                                {userRole === 'coach' || userRole === 'admin' ? `Member: ${memberName ?? '—'}` : `Coach: ${coachName ?? '—'}`}
+                              </p>
+                              <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '999px', textTransform: 'uppercase', ...tb }}>{plan.type}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                    {/* Scheduled Classes */}
+                    {selectedDateClasses.filter(c => !c.isPlan).length > 0 && (
+                      <div>
+                        <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>🏋️ Scheduled Classes</p>
+                        {selectedDateClasses.filter(c => !c.isPlan).map(cls => (
+                          <ClassCard key={cls.id} cls={cls} userRole={userRole} onUpdate={loadClasses} />
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             ) : (

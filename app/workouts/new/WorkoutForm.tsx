@@ -68,7 +68,7 @@ function getSuggestions(query: string, type: WorkoutType): string[] {
   return ordered.filter(e => e.toLowerCase().includes(q)).slice(0, 6)
 }
 
-export default function WorkoutForm({ defaultType }: { defaultType?: string }) {
+export default function WorkoutForm({ defaultType, templateId }: { defaultType?: string; templateId?: string }) {
   const router = useRouter()
   const [workoutType, setWorkoutType] = useState<WorkoutType>((defaultType as WorkoutType) ?? 'conditioning')
   const [title, setTitle] = useState('')
@@ -87,6 +87,31 @@ export default function WorkoutForm({ defaultType }: { defaultType?: string }) {
     supabase.from('workout_templates').select('*, workout_template_exercises(*)').eq('is_shared', true).order('title')
       .then(({ data }) => setSharedTemplates(data ?? []))
   }, [])
+
+  useEffect(() => {
+    if (!templateId) return
+    const supabase = createClient()
+    supabase.from('workout_templates')
+      .select('*, workout_template_exercises(*)')
+      .eq('id', templateId)
+      .single()
+      .then(({ data: t }) => {
+        if (!t) return
+        setTitle(t.title)
+        setWorkoutType(t.type as WorkoutType)
+        if (t.description) setNotes(t.description)
+        const exs = (t.workout_template_exercises || []).sort((a: any, b: any) => a.order_index - b.order_index)
+        setExercises(exs.length > 0 ? exs.map((ex: any) => ({
+          name: ex.name,
+          sets: ex.sets?.toString() || '',
+          reps: ex.reps?.toString() || '',
+          weight: ex.weight?.toString() || '',
+          duration: ex.duration?.toString() || '',
+          notes: ex.notes || '',
+        })) : [blank()])
+        setSelectedTemplate(t)
+      })
+  }, [templateId])
 
   const update = (idx: number, field: keyof Exercise, val: string) => {
     const next = [...exercises]

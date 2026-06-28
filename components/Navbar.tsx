@@ -22,6 +22,7 @@ function NavLinks({ role, onClick }: { role: string; onClick?: () => void }) {
     <>
       <Link href="/dashboard" style={linkStyle} onClick={onClick}>Dashboard</Link>
       <Link href="/calendar" style={linkStyle} onClick={onClick}>Calendar</Link>
+      <Link href="/templates" style={linkStyle} onClick={onClick}>Templates</Link>
       {role === 'admin' && (
         <>
           <Link href="/leaderboard" style={linkStyle} onClick={onClick}>Leaderboard</Link>
@@ -182,6 +183,7 @@ function NavLinksVertical({ role, onClose }: { role: string; onClose: () => void
     <>
       <Link href="/dashboard" style={linkStyle} onClick={onClose}>Dashboard</Link>
       <Link href="/calendar" style={linkStyle} onClick={onClose}>📅 Calendar</Link>
+      <Link href="/templates" style={linkStyle} onClick={onClose}>📋 Templates</Link>
       {role === 'admin' && (
         <>
           <Link href="/leaderboard" style={linkStyle} onClick={onClose}>🏆 Leaderboard</Link>

@@ -29,6 +29,148 @@ const roleBadgeStyle = (role: string): React.CSSProperties => ({
 
 const MEDALS: Record<number, string> = { 0: '🥇', 1: '🥈', 2: '🥉' }
 
+function MemberProfileModal({ memberId, memberName, onClose }: { memberId: string; memberName: string; onClose: () => void }) {
+  const supabase = createClient()
+  const [profile, setProfile] = useState<any>(null)
+  const [recentWorkouts, setRecentWorkouts] = useState<any[]>([])
+  const [prs, setPRs] = useState<any[]>([])
+  const [stats, setStats] = useState({ total: 0, thisMonth: 0, totalPRs: 0 })
+  const [loadingModal, setLoadingModal] = useState(true)
+  const [activeModalTab, setActiveModalTab] = useState<'overview'|'workouts'|'prs'>('overview')
+
+  useEffect(() => {
+    async function load() {
+      const { data: p } = await supabase.from('profiles').select('*').eq('id', memberId).single()
+      setProfile(p)
+      const { data: w } = await supabase.from('workouts').select('*, exercises(count)').eq('user_id', memberId).order('date', { ascending: false }).limit(10)
+      setRecentWorkouts(w || [])
+      const { data: pr } = await supabase.from('personal_records').select('*').eq('user_id', memberId).order('recorded_at', { ascending: false }).limit(10)
+      setPRs(pr || [])
+      const thisMonth = new Date().toISOString().slice(0, 7)
+      setStats({
+        total: w?.length || 0,
+        thisMonth: w?.filter((wk: any) => wk.date?.startsWith(thisMonth)).length || 0,
+        totalPRs: pr?.length || 0,
+      })
+      setLoadingModal(false)
+    }
+    load()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memberId])
+
+  const TYPE_BADGE_M: Record<string, { bg: string; color: string; border: string }> = {
+    basketball: { bg: 'rgba(8,119,160,0.2)', color: '#34bac2', border: 'rgba(8,119,160,0.35)' },
+    conditioning: { bg: 'rgba(34,197,94,0.15)', color: '#4ade80', border: 'rgba(34,197,94,0.25)' },
+    both: { bg: 'rgba(168,85,247,0.15)', color: '#c084fc', border: 'rgba(168,85,247,0.25)' },
+  }
+
+  return (
+    <div
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+    >
+      <div style={{ width: '100%', maxWidth: '640px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '1rem', background: 'var(--surface)', border: '1px solid var(--border)' }}>
+        <div style={{ padding: '1.5rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'var(--teal-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 700, flexShrink: 0 }}>
+              {profile?.name?.charAt(0)?.toUpperCase() || '?'}
+            </div>
+            <div>
+              <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>{memberName}</h2>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{profile?.email}</p>
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem', fontSize: '0.7rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
+                {profile?.gender && <span>{profile.gender === 'male' ? '♂ Male' : profile.gender === 'female' ? '♀ Female' : profile.gender}</span>}
+                {profile?.age && <span>Age {profile.age}</span>}
+                {profile?.weight_kg && <span>{profile.weight_kg} {profile.weight_unit || 'kg'}</span>}
+                <span style={{ textTransform: 'capitalize' }}>{profile?.role}</span>
+                {profile?.created_at && <span>Since {new Date(profile.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>}
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0, minHeight: 0 }}>✕</button>
+        </div>
+        {!loadingModal && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', background: 'var(--border)', borderBottom: '1px solid var(--border)' }}>
+            {[{ label: 'Total Workouts', value: stats.total }, { label: 'This Month', value: stats.thisMonth }, { label: 'Personal Records', value: stats.totalPRs }].map(s => (
+              <div key={s.label} style={{ padding: '1rem', textAlign: 'center', background: 'var(--surface)' }}>
+                <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '2rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{s.value}</p>
+                <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</p>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
+          {(['overview', 'workouts', 'prs'] as const).map(tab => (
+            <button key={tab} onClick={() => setActiveModalTab(tab)} style={{
+              flex: 1, padding: '0.75rem', fontSize: '0.8rem', fontWeight: 600, textTransform: 'capitalize', cursor: 'pointer', background: 'none', border: 'none',
+              color: activeModalTab === tab ? 'var(--teal-secondary)' : 'var(--text-secondary)',
+              borderBottom: `2px solid ${activeModalTab === tab ? 'var(--teal-primary)' : 'transparent'}`,
+              minHeight: 0,
+            }}>
+              {tab === 'prs' ? 'PRs' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
+        </div>
+        <div style={{ padding: '1.25rem' }}>
+          {loadingModal ? <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Loading…</p> : (
+            <>
+              {activeModalTab === 'overview' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div>
+                    <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Recent Activity</p>
+                    {recentWorkouts.slice(0, 3).map(w => (
+                      <div key={w.id} style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '0.375rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div>
+                          <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{w.title}</p>
+                          <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>{new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}{w.duration ? ` · ${w.duration}min` : ''}</p>
+                        </div>
+                        <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', ...(TYPE_BADGE_M[w.type] ?? TYPE_BADGE_M.both) }}>{w.type}</span>
+                      </div>
+                    ))}
+                    {recentWorkouts.length === 0 && <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No workouts yet.</p>}
+                  </div>
+                </div>
+              )}
+              {activeModalTab === 'workouts' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {recentWorkouts.length === 0 ? <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No workouts yet.</p>
+                  : recentWorkouts.map(w => (
+                    <div key={w.id} style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.875rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.25rem' }}>
+                        <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{w.title}</p>
+                        <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', ...(TYPE_BADGE_M[w.type] ?? TYPE_BADGE_M.both) }}>{w.type}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                        <span>📅 {new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        {w.duration && <span>⏱ {w.duration}min</span>}
+                        <span>💪 {(w.exercises as any[])?.[0]?.count ?? 0} ex</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {activeModalTab === 'prs' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                  {prs.length === 0 ? <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No PRs yet.</p>
+                  : prs.map(pr => (
+                    <div key={pr.id} style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{pr.exercise_name}</p>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>{new Date(pr.recorded_at || pr.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}{pr.is_public ? ' · 🌐' : ' · 🔒'}</p>
+                      </div>
+                      <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', color: 'var(--teal-secondary)' }}>{pr.value} {pr.unit}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function AdminPage() {
   const router = useRouter()
   const supabase = createClient()
@@ -58,6 +200,7 @@ export default function AdminPage() {
 
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [selectedMemberProfile, setSelectedMemberProfile] = useState<{id: string; name: string} | null>(null)
 
   const loadProfiles = async () => {
     const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
@@ -206,7 +349,12 @@ export default function AdminPage() {
                 <tbody>
                   {profiles.map(p => (
                     <tr key={p.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td style={{ padding: '0.875rem 1rem', fontWeight: 600, fontSize: '0.875rem' }}>{p.name}</td>
+                      <td style={{ padding: '0.875rem 1rem', fontWeight: 600, fontSize: '0.875rem' }}>
+                        <span
+                          onClick={() => setSelectedMemberProfile({ id: p.id, name: p.name })}
+                          style={{ cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(52,186,194,0.4)', textUnderlineOffset: '2px' }}
+                        >{p.name}</span>
+                      </td>
                       <td style={{ padding: '0.875rem 1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{p.email}</td>
                       <td style={{ padding: '0.875rem 1rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -272,7 +420,10 @@ export default function AdminPage() {
                                 {gms.map(gm => (
                                   <div key={gm.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div>
-                                      <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{gm.profiles?.name}</span>
+                                      <span
+                                        onClick={() => gm.profiles?.name && setSelectedMemberProfile({ id: gm.member_id, name: gm.profiles.name })}
+                                        style={{ fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(52,186,194,0.4)', textUnderlineOffset: '2px' }}
+                                      >{gm.profiles?.name}</span>
                                       <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginLeft: '0.5rem' }}>{gm.profiles?.email}</span>
                                     </div>
                                     <button onClick={() => handleRemoveFromGroup(g.id, gm.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', display: 'flex' }}>
@@ -410,6 +561,13 @@ export default function AdminPage() {
           </div>
         )}
       </main>
+      {selectedMemberProfile && (
+        <MemberProfileModal
+          memberId={selectedMemberProfile.id}
+          memberName={selectedMemberProfile.name}
+          onClose={() => setSelectedMemberProfile(null)}
+        />
+      )}
     </div>
   )
 }

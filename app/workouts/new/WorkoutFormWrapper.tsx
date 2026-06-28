@@ -6,5 +6,6 @@ import WorkoutForm from './WorkoutForm'
 export default function WorkoutFormWrapper() {
   const searchParams = useSearchParams()
   const type = searchParams.get('type') ?? undefined
-  return <WorkoutForm defaultType={type} />
+  const templateId = searchParams.get('template') ?? undefined
+  return <WorkoutForm defaultType={type} templateId={templateId} />
 }
