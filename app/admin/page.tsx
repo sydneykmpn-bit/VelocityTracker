@@ -147,7 +147,7 @@ export default function AdminPage() {
 
   const coaches = profiles.filter(p => p.role === 'coach' || p.role === 'admin')
   const members = profiles.filter(p => p.role === 'member')
-  const filteredPRs = prFilter.trim() ? allPRs.filter(r => r.exercise.toLowerCase().includes(prFilter.toLowerCase())) : allPRs
+  const filteredPRs = prFilter.trim() ? allPRs.filter(r => (r.exercise_name ?? r.exercise ?? '').toLowerCase().includes(prFilter.toLowerCase())) : allPRs
 
   if (loading) {
     return (
@@ -395,7 +395,7 @@ export default function AdminPage() {
                           {MEDALS[idx] ? <span style={{ fontSize: '1.1rem' }}>{MEDALS[idx]}</span> : <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>#{idx + 1}</span>}
                         </td>
                         <td style={{ padding: '0.875rem 1rem', fontWeight: 600, fontSize: '0.875rem' }}>{r.profiles?.name ?? '—'}</td>
-                        <td style={{ padding: '0.875rem 1rem', fontSize: '0.875rem' }}>{r.exercise}</td>
+                        <td style={{ padding: '0.875rem 1rem', fontSize: '0.875rem' }}>{r.exercise_name ?? r.exercise}</td>
                         <td style={{ padding: '0.875rem 1rem', fontFamily: 'var(--font-bebas)', fontSize: '1.1rem', color: 'var(--teal-secondary)' }}>{r.value}</td>
                         <td style={{ padding: '0.875rem 1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{r.unit}</td>
                         <td style={{ padding: '0.875rem 1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>

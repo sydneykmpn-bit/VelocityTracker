@@ -7,29 +7,52 @@ import Navbar from '@/components/Navbar'
 import { Trash2 } from 'lucide-react'
 
 type LeaderTab = 'public' | 'mine'
-const UNITS = ['kg', 'lbs', 'reps', 'seconds'] as const
+const UNITS = ['kg', 'lbs', 'reps', 'seconds', 'minutes', 'km/h', 'mph'] as const
 type Unit = typeof UNITS[number]
 
-const inputBase: React.CSSProperties = {
-  background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem',
-  padding: '0.6rem 0.875rem', color: '#F2F2F2', fontSize: '0.875rem', outline: 'none',
-}
-const labelBase: React.CSSProperties = {
-  display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)',
-  textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.375rem',
-}
+const EXERCISE_LIST = [
+  'Back Squat','Front Squat','Deadlift','Romanian Deadlift','Bench Press','Overhead Press',
+  'Barbell Row','Pull Up','Chin Up','Dip','Push Up','Incline Bench Press','Sumo Deadlift',
+  'Hip Thrust','Leg Press','Lunges','Clean & Jerk','Snatch','Power Clean','Push Press',
+  '400m Run','800m Run','1km Run','5km Run','10km Run','Treadmill Sprint','Treadmill Endurance',
+  'Rowing 500m','Rowing 2000m','Assault Bike','Jump Rope','Box Jump','Burpees','Wall Balls','Kettlebell Swing',
+  'Free Throw %','3-Point %','Vertical Jump','Sprint 20m','Sprint 40m','Agility T-Test',
+]
+
+const FEATURED_EXERCISES = [
+  { key: 'all', label: 'All', icon: '🏆' },
+  { key: 'Back Squat', label: 'Squat', icon: '🏋️' },
+  { key: 'Deadlift', label: 'Deadlift', icon: '💀' },
+  { key: 'Bench Press', label: 'Bench', icon: '🛋️' },
+  { key: 'Overhead Press', label: 'OHP', icon: '☝️' },
+  { key: 'Sprint 40m', label: 'Sprint', icon: '💨' },
+]
+
+const GENDER_FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'male', label: '♂ Men' },
+  { key: 'female', label: '♀ Women' },
+]
+
 const MEDALS: Record<number, { emoji: string; color: string }> = {
   0: { emoji: '🥇', color: '#FFD700' },
   1: { emoji: '🥈', color: '#C0C0C0' },
   2: { emoji: '🥉', color: '#CD7F32' },
 }
 
+const inputBase: React.CSSProperties = {
+  background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem',
+  padding: '0.6rem 0.875rem', color: '#F2F2F2', fontSize: '1rem', outline: 'none',
+}
+const labelBase: React.CSSProperties = {
+  display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)',
+  textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.375rem',
+}
+
 function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
     <div
-      onClick={onToggle}
-      role="switch"
-      aria-checked={on}
+      onClick={onToggle} role="switch" aria-checked={on}
       style={{
         width: '42px', height: '22px', borderRadius: '999px', flexShrink: 0,
         background: on ? 'var(--teal-primary)' : '#2a3a40',
@@ -38,14 +61,18 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
       }}
     >
       <div style={{
-        position: 'absolute', top: '2px',
-        left: on ? '21px' : '2px',
+        position: 'absolute', top: '2px', left: on ? '21px' : '2px',
         width: '16px', height: '16px', borderRadius: '50%',
-        background: 'white', transition: 'left 0.2s',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+        background: 'white', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
       }} />
     </div>
   )
+}
+
+function genderBadge(gender?: string) {
+  if (gender === 'male') return <span style={{ color: '#60a5fa', fontSize: '0.7rem' }}> ♂</span>
+  if (gender === 'female') return <span style={{ color: '#f472b6', fontSize: '0.7rem' }}> ♀</span>
+  return null
 }
 
 export default function LeaderboardPage() {
@@ -55,12 +82,17 @@ export default function LeaderboardPage() {
   const [activeTab, setActiveTab] = useState<LeaderTab>('public')
   const [publicRecords, setPublicRecords] = useState<any[]>([])
   const [myRecords, setMyRecords] = useState<any[]>([])
-  const [filter, setFilter] = useState('')
   const [loading, setLoading] = useState(true)
 
-  // Form state
+  // Filters
+  const [featuredFilter, setFeaturedFilter] = useState('all')
+  const [genderFilter, setGenderFilter] = useState('all')
+  const [searchFilter, setSearchFilter] = useState('')
+
+  // Form
   const [showForm, setShowForm] = useState(false)
   const [exercise, setExercise] = useState('')
+  const [showSuggestions, setShowSuggestions] = useState(false)
   const [value, setValue] = useState('')
   const [unit, setUnit] = useState<Unit>('kg')
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
@@ -71,21 +103,35 @@ export default function LeaderboardPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
+  const filteredExerciseSuggestions = exercise.trim()
+    ? EXERCISE_LIST.filter(e => e.toLowerCase().includes(exercise.toLowerCase())).slice(0, 6)
+    : []
+
+  const loadPublicRecords = async () => {
+    let query = supabase
+      .from('personal_records')
+      .select('*, profiles(name, gender)')
+      .eq('is_public', true)
+      .order('value', { ascending: false })
+    if (featuredFilter !== 'all') query = query.eq('exercise_name', featuredFilter)
+    if (searchFilter) query = query.ilike('exercise_name', `%${searchFilter}%`)
+    const { data } = await query
+    let filtered = data ?? []
+    if (genderFilter !== 'all') filtered = filtered.filter((r: any) => r.profiles?.gender === genderFilter)
+    setPublicRecords(filtered)
+  }
+
+  const loadMyRecords = async (uid: string) => {
+    const { data } = await supabase
+      .from('personal_records')
+      .select('*')
+      .eq('user_id', uid)
+      .order('recorded_at', { ascending: false })
+    setMyRecords(data ?? [])
+  }
+
   const loadData = async (uid: string) => {
-    const [{ data: publicPRs }, { data: myPRs }] = await Promise.all([
-      supabase
-        .from('personal_records')
-        .select('*, profiles(name)')
-        .eq('is_public', true)
-        .order('value', { ascending: false }),
-      supabase
-        .from('personal_records')
-        .select('*')
-        .eq('user_id', uid)
-        .order('recorded_at', { ascending: false }),
-    ])
-    setPublicRecords(publicPRs ?? [])
-    setMyRecords(myPRs ?? [])
+    await Promise.all([loadPublicRecords(), loadMyRecords(uid)])
   }
 
   useEffect(() => {
@@ -100,6 +146,11 @@ export default function LeaderboardPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    if (userId) loadPublicRecords()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [featuredFilter, genderFilter, searchFilter])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!exercise.trim() || !value || !userId) return
@@ -108,8 +159,7 @@ export default function LeaderboardPage() {
       user_id: userId,
       exercise_name: exercise.trim(),
       value: Number(value),
-      unit,
-      date,
+      unit, date,
       recorded_at: new Date(date).toISOString(),
       is_public: isPublic,
     })
@@ -141,10 +191,6 @@ export default function LeaderboardPage() {
     setDeleting(null)
   }
 
-  const filteredPublic = filter.trim()
-    ? publicRecords.filter(r => (r.exercise_name ?? r.exercise ?? '').toLowerCase().includes(filter.toLowerCase()))
-    : publicRecords
-
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--background)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -161,7 +207,7 @@ export default function LeaderboardPage() {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
       <Navbar />
-      <main style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+      <main style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem 1rem' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
@@ -172,7 +218,7 @@ export default function LeaderboardPage() {
               background: showForm ? 'var(--surface)' : 'var(--teal-primary)',
               color: 'white', border: showForm ? '1px solid var(--border)' : 'none',
               borderRadius: '0.5rem', padding: '0.75rem 1.25rem',
-              fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer',
+              fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', minHeight: 44,
             }}
           >
             {showForm ? 'Cancel' : '+ Submit PR'}
@@ -186,9 +232,28 @@ export default function LeaderboardPage() {
             {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{error}</div>}
             {success && <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#4ade80', fontSize: '0.875rem' }}>{success}</div>}
             <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div style={{ gridColumn: '1 / -1' }}>
+              {/* Exercise name with suggestions */}
+              <div style={{ gridColumn: '1 / -1', position: 'relative' }}>
                 <label style={labelBase}>Exercise Name *</label>
-                <input type="text" value={exercise} onChange={e => setExercise(e.target.value)} required style={{ ...inputBase, width: '100%' }} placeholder="e.g. Back Squat" />
+                <input
+                  type="text" value={exercise} autoComplete="off"
+                  onChange={e => { setExercise(e.target.value); setShowSuggestions(e.target.value.length > 0) }}
+                  onFocus={() => exercise.length > 0 && setShowSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                  required style={{ ...inputBase, width: '100%' }} placeholder="e.g. Back Squat"
+                />
+                {showSuggestions && filteredExerciseSuggestions.length > 0 && (
+                  <div style={{ position: 'absolute', top: 'calc(100% - 1px)', left: 0, right: 0, zIndex: 20, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0 0 0.5rem 0.5rem', maxHeight: '180px', overflowY: 'auto' }}>
+                    {filteredExerciseSuggestions.map(s => (
+                      <button key={s} type="button"
+                        onMouseDown={() => { setExercise(s); setShowSuggestions(false) }}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.5rem 0.875rem', background: 'none', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.04)', color: '#F2F2F2', fontSize: '0.875rem', cursor: 'pointer', minHeight: 36 }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(8,119,160,0.15)' }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none' }}
+                      >{s}</button>
+                    ))}
+                  </div>
+                )}
               </div>
               <div>
                 <label style={labelBase}>Value *</label>
@@ -206,15 +271,13 @@ export default function LeaderboardPage() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <Toggle on={isPublic} onToggle={() => setIsPublic(!isPublic)} />
-                <span style={{ fontSize: '0.8rem', color: isPublic ? '#F2F2F2' : 'var(--text-secondary)' }}>
-                  Show on public leaderboard
-                </span>
+                <span style={{ fontSize: '0.8rem', color: isPublic ? '#F2F2F2' : 'var(--text-secondary)' }}>Show on public leaderboard</span>
               </div>
               <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end' }}>
                 <button type="submit" disabled={submitting} style={{
                   background: submitting ? '#0d1a1e' : 'var(--teal-primary)', color: 'white',
                   border: 'none', borderRadius: '0.5rem', padding: '0.65rem 1.5rem',
-                  fontWeight: 700, fontSize: '0.875rem', cursor: submitting ? 'not-allowed' : 'pointer',
+                  fontWeight: 700, fontSize: '0.875rem', cursor: submitting ? 'not-allowed' : 'pointer', minHeight: 44,
                 }}>
                   {submitting ? 'Saving…' : 'Submit PR'}
                 </button>
@@ -227,10 +290,10 @@ export default function LeaderboardPage() {
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '1.5rem' }}>
           {tabs.map(t => (
             <button key={t.value} onClick={() => setActiveTab(t.value)} style={{
-              background: 'none', border: 'none',
+              background: 'none', border: 'none', width: '50%',
               borderBottom: activeTab === t.value ? '2px solid var(--teal-primary)' : '2px solid transparent',
               color: activeTab === t.value ? 'var(--teal-secondary)' : 'var(--text-secondary)',
-              padding: '0.75rem 1.25rem', cursor: 'pointer',
+              padding: '0.75rem 0.5rem', cursor: 'pointer',
               fontFamily: 'var(--font-bebas)', fontSize: '1rem', letterSpacing: '0.04em',
               marginBottom: '-1px', transition: 'all 0.15s',
             }}>
@@ -242,97 +305,116 @@ export default function LeaderboardPage() {
         {/* ── PUBLIC LEADERBOARD TAB ── */}
         {activeTab === 'public' && (
           <>
-            <div style={{ marginBottom: '1.25rem' }}>
-              <input
-                type="text" value={filter} onChange={e => setFilter(e.target.value)}
-                placeholder="Filter by exercise…"
-                style={{ ...inputBase, width: '100%', maxWidth: '320px' }}
-              />
+            {/* Featured exercise pills */}
+            <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', paddingBottom: '4px', marginBottom: '0.75rem' }}>
+              {FEATURED_EXERCISES.map(ex => (
+                <button key={ex.key}
+                  onClick={() => { setFeaturedFilter(ex.key); setSearchFilter('') }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '0.375rem',
+                    padding: '0.5rem 0.875rem', borderRadius: '999px', fontSize: '0.8rem',
+                    fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, cursor: 'pointer',
+                    background: featuredFilter === ex.key ? 'var(--teal-primary)' : 'var(--surface)',
+                    color: featuredFilter === ex.key ? '#fff' : 'var(--text-secondary)',
+                    border: `1px solid ${featuredFilter === ex.key ? 'var(--teal-primary)' : 'var(--border)'}`,
+                    transition: 'all 0.15s', minHeight: 38,
+                  }}>
+                  {ex.icon} {ex.label}
+                </button>
+              ))}
             </div>
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem', overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    {['Rank', 'Name', 'Exercise', 'Value', 'Unit', 'Date'].map(h => (
-                      <th key={h} style={{ padding: '0.875rem 1rem', textAlign: 'left', fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredPublic.length === 0 ? (
-                    <tr><td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No public records yet.</td></tr>
-                  ) : (
-                    filteredPublic.map((r, idx) => {
-                      const medal = MEDALS[idx]
-                      return (
-                        <tr key={r.id} style={{ borderBottom: '1px solid var(--border)', background: medal ? `${medal.color}08` : 'transparent' }}>
-                          <td style={{ padding: '0.875rem 1rem' }}>
-                            {medal
-                              ? <span style={{ fontSize: '1.1rem' }}>{medal.emoji}</span>
-                              : <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>#{idx + 1}</span>}
-                          </td>
-                          <td style={{ padding: '0.875rem 1rem', fontWeight: 600, fontSize: '0.875rem' }}>{r.profiles?.name ?? '—'}</td>
-                          <td style={{ padding: '0.875rem 1rem', fontSize: '0.875rem' }}>{r.exercise_name ?? r.exercise}</td>
-                          <td style={{ padding: '0.875rem 1rem', fontFamily: 'var(--font-bebas)', fontSize: '1.1rem', color: 'var(--teal-secondary)' }}>{r.value}</td>
-                          <td style={{ padding: '0.875rem 1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{r.unit}</td>
-                          <td style={{ padding: '0.875rem 1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                            {new Date(r.date ?? r.recorded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          </td>
-                        </tr>
-                      )
-                    })
-                  )}
-                </tbody>
-              </table>
+
+            {/* Gender pills */}
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+              {GENDER_FILTERS.map(g => (
+                <button key={g.key} onClick={() => setGenderFilter(g.key)} style={{
+                  padding: '0.4rem 0.875rem', borderRadius: '999px', fontSize: '0.8rem',
+                  fontWeight: 500, cursor: 'pointer',
+                  background: genderFilter === g.key ? 'var(--surface)' : 'transparent',
+                  color: genderFilter === g.key ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  border: `1px solid ${genderFilter === g.key ? 'var(--teal-primary)' : 'var(--border)'}`,
+                  transition: 'all 0.15s', minHeight: 36,
+                }}>{g.label}</button>
+              ))}
+              {/* Search filter (shown when All exercise is selected) */}
+              {featuredFilter === 'all' && (
+                <input type="text" value={searchFilter}
+                  onChange={e => { setSearchFilter(e.target.value); setFeaturedFilter('all') }}
+                  placeholder="Search exercise…"
+                  style={{ ...inputBase, flex: '1', minWidth: '140px', padding: '0.4rem 0.875rem' }}
+                />
+              )}
+            </div>
+
+            {/* Mobile card layout */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }} className="lb-mobile">
+              {publicRecords.length === 0 ? (
+                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                  No public records yet.
+                </div>
+              ) : (
+                publicRecords.map((r, i) => {
+                  const medal = MEDALS[i]
+                  return (
+                    <div key={r.id} className="card-vel" style={{ padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: medal ? `${medal.color}08` : 'var(--surface)' }}>
+                      <span style={{ fontSize: '1.1rem', width: '2rem', textAlign: 'center', flexShrink: 0 }}>
+                        {medal ? medal.emoji : `#${i + 1}`}
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {r.profiles?.name ?? '—'}{genderBadge(r.profiles?.gender)}
+                        </p>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.exercise_name ?? r.exercise}</p>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.2rem', color: 'var(--teal-secondary)' }}>{r.value} <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{r.unit}</span></p>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                          {new Date(r.date ?? r.recorded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
             </div>
           </>
         )}
 
         {/* ── MY PRs TAB ── */}
         {activeTab === 'mine' && (
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem', overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  {['Exercise', 'Value', 'Unit', 'Date', 'Public', ''].map(h => (
-                    <th key={h} style={{ padding: '0.875rem 1rem', textAlign: 'left', fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {myRecords.length === 0 ? (
-                  <tr><td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No PRs yet. Submit your first one above.</td></tr>
-                ) : (
-                  myRecords.map(r => (
-                    <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td style={{ padding: '0.875rem 1rem', fontSize: '0.875rem', fontWeight: 600 }}>{r.exercise_name ?? r.exercise}</td>
-                      <td style={{ padding: '0.875rem 1rem', fontFamily: 'var(--font-bebas)', fontSize: '1.1rem', color: 'var(--teal-secondary)' }}>{r.value}</td>
-                      <td style={{ padding: '0.875rem 1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{r.unit}</td>
-                      <td style={{ padding: '0.875rem 1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                        {new Date(r.date ?? r.recorded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </td>
-                      <td style={{ padding: '0.875rem 1rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: updating === r.id ? 0.5 : 1 }}>
-                          <Toggle on={r.is_public ?? false} onToggle={() => updating === null && handleTogglePublic(r)} />
-                          <span style={{ fontSize: '0.7rem', color: r.is_public ? 'var(--teal-secondary)' : 'var(--text-secondary)' }}>
-                            {r.is_public ? 'Public' : 'Private'}
-                          </span>
-                        </div>
-                      </td>
-                      <td style={{ padding: '0.875rem 1rem' }}>
-                        <button
-                          onClick={() => deleting === null && handleDelete(r.id)}
-                          disabled={deleting === r.id}
-                          style={{ background: 'none', border: 'none', cursor: deleting === r.id ? 'not-allowed' : 'pointer', color: '#f87171', display: 'flex', opacity: deleting === r.id ? 0.5 : 1 }}
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {myRecords.length === 0 ? (
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                No PRs yet. Submit your first one above.
+              </div>
+            ) : (
+              myRecords.map(r => (
+                <div key={r.id} className="card-vel" style={{ padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{r.exercise_name ?? r.exercise}</p>
+                    <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>
+                      {new Date(r.date ?? r.recorded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </p>
+                  </div>
+                  <span style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.2rem', color: 'var(--teal-secondary)', flexShrink: 0 }}>
+                    {r.value} <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{r.unit}</span>
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0, opacity: updating === r.id ? 0.5 : 1 }}>
+                    <Toggle on={r.is_public ?? false} onToggle={() => updating === null && handleTogglePublic(r)} />
+                    <span style={{ fontSize: '0.7rem', color: r.is_public ? 'var(--teal-secondary)' : 'var(--text-secondary)', minWidth: '40px' }}>
+                      {r.is_public ? 'Public' : 'Private'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => deleting === null && handleDelete(r.id)}
+                    disabled={deleting === r.id}
+                    style={{ background: 'none', border: 'none', cursor: deleting === r.id ? 'not-allowed' : 'pointer', color: '#f87171', display: 'flex', opacity: deleting === r.id ? 0.5 : 1, flexShrink: 0, minHeight: 0 }}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         )}
       </main>

@@ -38,6 +38,36 @@ const labelBase: React.CSSProperties = {
   marginBottom: '0.375rem',
 }
 
+const STRENGTH_EXERCISES = [
+  'Back Squat', 'Front Squat', 'Deadlift', 'Romanian Deadlift',
+  'Bench Press', 'Overhead Press', 'Barbell Row', 'Pull Up',
+  'Chin Up', 'Dip', 'Push Up', 'Incline Bench Press',
+  'Sumo Deadlift', 'Hip Thrust', 'Leg Press', 'Lunges',
+  'Clean & Jerk', 'Snatch', 'Power Clean', 'Push Press',
+]
+const CONDITIONING_EXERCISES = [
+  '400m Run', '800m Run', '1km Run', '5km Run', '10km Run',
+  'Treadmill Sprint', 'Treadmill Endurance', 'Rowing 500m',
+  'Rowing 2000m', 'Assault Bike', 'Jump Rope', 'Box Jump',
+  'Burpees', 'Wall Balls', 'Kettlebell Swing',
+]
+const BASKETBALL_EXERCISES = [
+  'Free Throw %', '3-Point %', 'Vertical Jump',
+  'Sprint 20m', 'Sprint 40m', 'Agility T-Test',
+]
+const ALL_EXERCISES = [...STRENGTH_EXERCISES, ...CONDITIONING_EXERCISES, ...BASKETBALL_EXERCISES]
+
+function getSuggestions(query: string, type: WorkoutType): string[] {
+  if (!query.trim()) return []
+  const q = query.toLowerCase()
+  const ordered = type === 'basketball'
+    ? [...BASKETBALL_EXERCISES, ...CONDITIONING_EXERCISES, ...STRENGTH_EXERCISES]
+    : type === 'conditioning'
+    ? [...CONDITIONING_EXERCISES, ...STRENGTH_EXERCISES, ...BASKETBALL_EXERCISES]
+    : ALL_EXERCISES
+  return ordered.filter(e => e.toLowerCase().includes(q)).slice(0, 6)
+}
+
 export default function WorkoutForm({ defaultType }: { defaultType?: string }) {
   const router = useRouter()
   const [workoutType, setWorkoutType] = useState<WorkoutType>((defaultType as WorkoutType) ?? 'conditioning')
@@ -48,6 +78,7 @@ export default function WorkoutForm({ defaultType }: { defaultType?: string }) {
   const [exercises, setExercises] = useState<Exercise[]>([blank()])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [activeSuggestion, setActiveSuggestion] = useState<number | null>(null)
 
   const update = (idx: number, field: keyof Exercise, val: string) => {
     const next = [...exercises]
@@ -164,46 +195,84 @@ export default function WorkoutForm({ defaultType }: { defaultType?: string }) {
       <div>
         <label style={{ ...labelBase, marginBottom: '0.75rem' }}>Exercises</label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          {exercises.map((ex, idx) => (
-            <div key={idx} style={{ background: '#0a1518', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                <span style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', fontWeight: 700, letterSpacing: '0.08em' }}>
-                  EXERCISE {idx + 1}
-                </span>
-                {exercises.length > 1 && (
-                  <button type="button" onClick={() => setExercises(exercises.filter((_, i) => i !== idx))} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex' }}>
-                    <Trash2 size={14} />
-                  </button>
+          {exercises.map((ex, idx) => {
+            const suggestions = getSuggestions(ex.name, workoutType)
+            return (
+              <div key={idx} style={{ background: '#0a1518', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', fontWeight: 700, letterSpacing: '0.08em' }}>
+                    EXERCISE {idx + 1}
+                  </span>
+                  {exercises.length > 1 && (
+                    <button type="button" onClick={() => setExercises(exercises.filter((_, i) => i !== idx))} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex' }}>
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Exercise name with suggestions */}
+                <div style={{ marginBottom: '0.75rem', position: 'relative' }}>
+                  <label style={labelBase}>Name *</label>
+                  <input
+                    type="text"
+                    value={ex.name}
+                    onChange={(e) => { update(idx, 'name', e.target.value); setActiveSuggestion(idx) }}
+                    onFocus={() => { if (ex.name.length > 0) setActiveSuggestion(idx) }}
+                    onBlur={() => setTimeout(() => setActiveSuggestion(null), 150)}
+                    style={inputBase}
+                    placeholder="e.g. Bench Press"
+                    autoComplete="off"
+                  />
+                  {activeSuggestion === idx && suggestions.length > 0 && (
+                    <div style={{
+                      position: 'absolute', top: 'calc(100% - 1px)', left: 0, right: 0, zIndex: 20,
+                      background: 'var(--surface)', border: '1px solid var(--border)',
+                      borderRadius: '0 0 0.5rem 0.5rem', maxHeight: '180px', overflowY: 'auto',
+                    }}>
+                      {suggestions.map(s => (
+                        <button key={s} type="button"
+                          onMouseDown={() => { update(idx, 'name', s); setActiveSuggestion(null) }}
+                          style={{
+                            display: 'block', width: '100%', textAlign: 'left',
+                            padding: '0.5rem 0.875rem', background: 'none', border: 'none',
+                            borderBottom: '1px solid rgba(255,255,255,0.04)',
+                            color: '#F2F2F2', fontSize: '0.875rem', cursor: 'pointer',
+                          }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(8,119,160,0.15)' }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none' }}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {showStrength && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    {(['sets', 'reps', 'weight'] as const).map((f) => (
+                      <div key={f}>
+                        <label style={labelBase}>{f === 'weight' ? 'Weight (kg)' : f.charAt(0).toUpperCase() + f.slice(1)}</label>
+                        <input type="number" value={ex[f]} onChange={(e) => update(idx, f, e.target.value)} style={inputBase} placeholder={f === 'weight' ? '50' : f === 'sets' ? '3' : '10'} step={f === 'weight' ? '0.5' : '1'} min="0" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {showBall && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                    <div>
+                      <label style={labelBase}>Duration (min)</label>
+                      <input type="number" value={ex.duration} onChange={(e) => update(idx, 'duration', e.target.value)} style={inputBase} placeholder="15" min="0" />
+                    </div>
+                    <div>
+                      <label style={labelBase}>Notes</label>
+                      <input type="text" value={ex.notes} onChange={(e) => update(idx, 'notes', e.target.value)} style={inputBase} placeholder="e.g. Focus on form" />
+                    </div>
+                  </div>
                 )}
               </div>
-              <div style={{ marginBottom: '0.75rem' }}>
-                <label style={labelBase}>Name *</label>
-                <input type="text" value={ex.name} onChange={(e) => update(idx, 'name', e.target.value)} style={inputBase} placeholder="e.g. Bench Press" />
-              </div>
-              {showStrength && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  {(['sets', 'reps', 'weight'] as const).map((f) => (
-                    <div key={f}>
-                      <label style={labelBase}>{f === 'weight' ? 'Weight (kg)' : f.charAt(0).toUpperCase() + f.slice(1)}</label>
-                      <input type="number" value={ex[f]} onChange={(e) => update(idx, f, e.target.value)} style={inputBase} placeholder={f === 'weight' ? '50' : f === 'sets' ? '3' : '10'} step={f === 'weight' ? '0.5' : '1'} min="0" />
-                    </div>
-                  ))}
-                </div>
-              )}
-              {showBall && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                  <div>
-                    <label style={labelBase}>Duration (min)</label>
-                    <input type="number" value={ex.duration} onChange={(e) => update(idx, 'duration', e.target.value)} style={inputBase} placeholder="15" min="0" />
-                  </div>
-                  <div>
-                    <label style={labelBase}>Notes</label>
-                    <input type="text" value={ex.notes} onChange={(e) => update(idx, 'notes', e.target.value)} style={inputBase} placeholder="e.g. Focus on form" />
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
         <button type="button" onClick={() => setExercises([...exercises, blank()])} style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',

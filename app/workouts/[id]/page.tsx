@@ -1,73 +1,102 @@
-import { redirect } from 'next/navigation'
-import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
-import Navbar from '@/components/Navbar'
-import DeleteWorkoutButton from './DeleteWorkoutButton'
+'use client'
 
-function typeStyle(type: string) {
-  const map: Record<string, { color: string; icon: string }> = {
-    basketball: { color: '#34bac2', icon: '🏀' },
-    conditioning: { color: '#4ade80', icon: '🏋️' },
-    both: { color: '#c084fc', icon: '💪' },
-  }
-  return map[type] ?? map.both
+import { useEffect, useState } from 'react'
+import { useRouter, useParams } from 'next/navigation'
+import Link from 'next/link'
+import { ArrowLeft, Trash2, Pencil } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import Navbar from '@/components/Navbar'
+
+const TYPE_STYLE: Record<string, { color: string; bg: string; border: string; icon: string }> = {
+  basketball: { color: '#34bac2', bg: 'rgba(8,119,160,0.2)', border: 'rgba(8,119,160,0.35)', icon: '🏀' },
+  conditioning: { color: '#4ade80', bg: 'rgba(34,197,94,0.15)', border: 'rgba(34,197,94,0.25)', icon: '🏋️' },
+  both: { color: '#c084fc', bg: 'rgba(168,85,247,0.15)', border: 'rgba(168,85,247,0.25)', icon: '💪' },
 }
 
-export default async function WorkoutDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
-  const { id } = await params
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+export default function WorkoutDetailPage() {
+  const { id } = useParams<{ id: string }>()
+  const router = useRouter()
+  const supabase = createClient()
+  const [workout, setWorkout] = useState<any>(null)
+  const [exercises, setExercises] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [confirming, setConfirming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
-  const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-  const { data: workout } = await supabase
-    .from('workouts')
-    .select('*, exercises(*)')
-    .eq('id', id)
-    .single()
+  useEffect(() => {
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.push('/login'); return }
 
-  if (!workout) redirect('/workouts')
+      const { data: w } = await supabase
+        .from('workouts')
+        .select('*')
+        .eq('id', id)
+        .single()
 
-  const ts = typeStyle(workout.type)
+      if (!w) { router.push('/workouts'); return }
+      setWorkout(w)
+
+      const { data: exs } = await supabase
+        .from('exercises')
+        .select('*')
+        .eq('workout_id', id)
+        .order('id')
+      setExercises(exs ?? [])
+      setLoading(false)
+    }
+    load()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
+  const handleDelete = async () => {
+    if (!confirming) { setConfirming(true); return }
+    setDeleting(true)
+    await supabase.from('workouts').delete().eq('id', id)
+    router.push('/workouts')
+  }
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--background)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p style={{ color: 'var(--text-secondary)' }}>Loading…</p>
+      </div>
+    )
+  }
+
+  const ts = TYPE_STYLE[workout.type] ?? TYPE_STYLE.both
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
       <Navbar />
-      <main style={{ maxWidth: '700px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+      <main style={{ maxWidth: '700px', margin: '0 auto', padding: '2rem 1rem' }}>
 
         <Link href="/workouts" style={{
           display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
-          color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '0.875rem', marginBottom: '1.5rem',
+          color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '0.875rem',
+          marginBottom: '1.5rem', minHeight: 0,
         }}>
           <ArrowLeft size={16} /> Back to Workouts
         </Link>
 
         {/* Header card */}
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '2rem', marginBottom: '1.5rem' }}>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '0.75rem' }}>
-            <div>
-              <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: '2rem', letterSpacing: '0.03em', marginBottom: '0.4rem' }}>
-                {workout.title}
-              </h1>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-                {new Date(workout.date ?? workout.created_at).toLocaleDateString('en-US', {
-                  weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-                })}
-                {workout.duration ? ` · ${workout.duration} minutes` : ''}
-              </p>
-            </div>
+            <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: '2rem', letterSpacing: '0.03em' }}>
+              {workout.title}
+            </h1>
             <span style={{
               fontSize: '0.75rem', fontWeight: 700, padding: '0.375rem 0.875rem',
               borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.07em',
-              color: ts.color, background: `${ts.color}22`, border: `1px solid ${ts.color}44`,
+              color: ts.color, background: ts.bg, border: `1px solid ${ts.border}`,
+              whiteSpace: 'nowrap',
             }}>
               {ts.icon} {workout.type}
             </span>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: workout.notes ? '1rem' : 0 }}>
+            <span>{new Date(workout.date ?? workout.created_at).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+            {workout.duration && <span>· {workout.duration} min</span>}
           </div>
           {workout.notes && (
             <p style={{
@@ -80,39 +109,68 @@ export default async function WorkoutDetailPage({
         </div>
 
         {/* Exercises */}
-        {workout.exercises && workout.exercises.length > 0 && (
-          <div style={{ marginBottom: '1.5rem' }}>
-            <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>
-              EXERCISES ({workout.exercises.length})
-            </h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {(workout.exercises as any[]).map((ex, idx) => (
-                <div key={ex.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                    <span style={{
-                      background: 'rgba(8,119,160,0.15)', color: 'var(--teal-secondary)',
-                      width: '28px', height: '28px', borderRadius: '50%',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '0.75rem', fontWeight: 700, flexShrink: 0,
-                    }}>
-                      {idx + 1}
+        <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>
+          EXERCISES ({exercises.length})
+        </h2>
+
+        {exercises.length === 0 ? (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '2.5rem', textAlign: 'center', marginBottom: '1.5rem' }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No exercises logged for this workout.</p>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
+            {exercises.map((ex) => (
+              <div key={ex.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
+                <h3 style={{ fontWeight: 700, fontSize: '0.95rem', marginBottom: '0.625rem' }}>{ex.name}</h3>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.625rem' }}>
+                  {ex.sets && ex.reps && (
+                    <span style={{ fontSize: '0.8rem', color: '#F2F2F2', background: 'rgba(8,119,160,0.15)', border: '1px solid rgba(8,119,160,0.25)', borderRadius: '0.375rem', padding: '0.2rem 0.5rem' }}>
+                      {ex.sets} × {ex.reps}
                     </span>
-                    <h3 style={{ fontWeight: 600 }}>{ex.name}</h3>
-                  </div>
-                  <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap' }}>
-                    {ex.sets && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}><strong style={{ color: '#F2F2F2' }}>{ex.sets}</strong> sets</span>}
-                    {ex.reps && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}><strong style={{ color: '#F2F2F2' }}>{ex.reps}</strong> reps</span>}
-                    {ex.weight && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}><strong style={{ color: '#F2F2F2' }}>{ex.weight}</strong> kg</span>}
-                    {ex.duration && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}><strong style={{ color: '#F2F2F2' }}>{ex.duration}</strong> min</span>}
-                  </div>
-                  {ex.notes && <p style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{ex.notes}</p>}
+                  )}
+                  {ex.sets && !ex.reps && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{ex.sets} sets</span>}
+                  {!ex.sets && ex.reps && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{ex.reps} reps</span>}
+                  {ex.weight && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}><strong style={{ color: '#F2F2F2' }}>{ex.weight}</strong> kg</span>}
+                  {ex.duration && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}><strong style={{ color: '#F2F2F2' }}>{ex.duration}</strong> min</span>}
+                  {ex.distance && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}><strong style={{ color: '#F2F2F2' }}>{ex.distance}</strong> km</span>}
                 </div>
-              ))}
-            </div>
+                {ex.notes && (
+                  <p style={{ marginTop: '0.5rem', fontSize: '0.775rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{ex.notes}</p>
+                )}
+              </div>
+            ))}
           </div>
         )}
 
-        <DeleteWorkoutButton workoutId={workout.id} />
+        {/* Action buttons */}
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <Link href={`/workouts/${id}/edit`} style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+            background: 'transparent', color: 'var(--text-secondary)',
+            border: '1px solid var(--border)', borderRadius: '0.5rem',
+            padding: '0.75rem 1.25rem', textDecoration: 'none',
+            fontSize: '0.875rem', fontWeight: 500, flex: '1 1 auto', minHeight: 44,
+          }}>
+            <Pencil size={15} /> Edit Workout
+          </Link>
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+              background: confirming ? 'rgba(239,68,68,0.15)' : 'transparent',
+              color: confirming ? '#f87171' : 'var(--text-secondary)',
+              border: `1px solid ${confirming ? 'rgba(239,68,68,0.4)' : 'var(--border)'}`,
+              borderRadius: '0.5rem', padding: '0.75rem 1.25rem',
+              cursor: deleting ? 'not-allowed' : 'pointer', fontSize: '0.875rem',
+              fontWeight: 500, transition: 'all 0.2s', flex: '1 1 auto',
+            }}
+          >
+            <Trash2 size={16} />
+            {deleting ? 'Deleting…' : confirming ? 'Confirm Delete' : 'Delete Workout'}
+          </button>
+        </div>
+
       </main>
     </div>
   )

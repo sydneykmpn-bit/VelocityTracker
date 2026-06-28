@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Dumbbell } from 'lucide-react'
+import { Plus, Dumbbell, Pencil } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import Navbar from '@/components/Navbar'
 
@@ -33,7 +33,7 @@ export default function WorkoutsPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const fetch = async () => {
+    const fetchData = async () => {
       setLoading(true)
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
@@ -54,14 +54,14 @@ export default function WorkoutsPage() {
       setWorkouts(data ?? [])
       setLoading(false)
     }
-    fetch()
+    fetchData()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter])
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
       <Navbar />
-      <main style={{ maxWidth: '800px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+      <main style={{ maxWidth: '800px', margin: '0 auto', padding: '2rem 1rem' }}>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
           <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: '2.5rem', letterSpacing: '0.03em' }}>WORKOUTS</h1>
@@ -69,22 +69,26 @@ export default function WorkoutsPage() {
             display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
             background: 'var(--teal-primary)', color: 'white',
             padding: '0.75rem 1.25rem', borderRadius: '0.5rem',
-            textDecoration: 'none', fontWeight: 700, fontSize: '0.875rem',
+            textDecoration: 'none', fontWeight: 700, fontSize: '0.875rem', minHeight: 44,
           }}>
             <Plus size={16} /> Log Workout
           </Link>
         </div>
 
-        {/* Filter tabs */}
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+        {/* Filter tabs — scrollable on mobile */}
+        <div style={{
+          display: 'flex', gap: '0.5rem', overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none',
+          flexWrap: 'nowrap', marginBottom: '1.5rem', paddingBottom: '4px',
+        }}>
           {tabs.map((t) => (
             <button key={t.value} onClick={() => setFilter(t.value)} style={{
               background: filter === t.value ? 'var(--teal-primary)' : 'var(--surface)',
               color: filter === t.value ? 'white' : 'var(--text-secondary)',
               border: `1px solid ${filter === t.value ? 'var(--teal-primary)' : 'var(--border)'}`,
               borderRadius: '0.5rem', padding: '0.5rem 1rem',
-              cursor: 'pointer', fontSize: '0.875rem',
-              fontWeight: filter === t.value ? 700 : 400, transition: 'all 0.2s',
+              cursor: 'pointer', fontSize: '0.875rem', whiteSpace: 'nowrap', flexShrink: 0,
+              fontWeight: filter === t.value ? 700 : 400, transition: 'all 0.2s', minHeight: 40,
             }}>
               {t.label}
             </button>
@@ -97,7 +101,7 @@ export default function WorkoutsPage() {
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '4rem', textAlign: 'center' }}>
             <Dumbbell size={40} style={{ color: 'var(--text-secondary)', margin: '0 auto 1rem' }} />
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>No workouts found.</p>
-            <Link href="/workouts/new" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontWeight: 600 }}>
+            <Link href="/workouts/new" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontWeight: 600, minHeight: 0, display: 'inline' }}>
               + Log workout
             </Link>
           </div>
@@ -106,37 +110,53 @@ export default function WorkoutsPage() {
             {workouts.map((w) => {
               const badge = typeBadge(w.type)
               return (
-                <Link key={w.id} href={`/workouts/${w.id}`} style={{ textDecoration: 'none' }}>
-                  <div style={{
-                    background: 'var(--surface)', border: '1px solid var(--border)',
-                    borderRadius: '0.75rem', padding: '1.25rem', cursor: 'pointer',
-                    transition: 'all 0.2s',
-                  }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--teal-primary)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-1px)' }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)' }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <span style={{ fontSize: '1.5rem' }}>{badge.icon}</span>
-                        <div>
-                          <h3 style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.2rem' }}>{w.title}</h3>
-                          <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-                            {new Date(w.date ?? w.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            {w.duration ? ` · ${w.duration} min` : ''}
-                            {(w.exercises as any[])?.[0]?.count ? ` · ${(w.exercises as any[])[0].count} exercises` : ''}
-                          </p>
+                <div key={w.id} style={{ position: 'relative' }}>
+                  <Link href={`/workouts/${w.id}`} style={{ textDecoration: 'none', display: 'block' }}>
+                    <div style={{
+                      background: 'var(--surface)', border: '1px solid var(--border)',
+                      borderRadius: '0.75rem', padding: '1.25rem', cursor: 'pointer',
+                      transition: 'all 0.2s', paddingRight: '3.5rem',
+                    }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--teal-primary)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-1px)' }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)' }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                          <span style={{ fontSize: '1.5rem' }}>{badge.icon}</span>
+                          <div>
+                            <h3 style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.2rem' }}>{w.title}</h3>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                              {new Date(w.date ?? w.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              {w.duration ? ` · ${w.duration} min` : ''}
+                              {(w.exercises as any[])?.[0]?.count ? ` · ${(w.exercises as any[])[0].count} exercises` : ''}
+                            </p>
+                          </div>
                         </div>
+                        <span style={{
+                          fontSize: '0.65rem', fontWeight: 700, padding: '0.25rem 0.625rem',
+                          borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.07em',
+                          background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`,
+                        }}>
+                          {w.type}
+                        </span>
                       </div>
-                      <span style={{
-                        fontSize: '0.65rem', fontWeight: 700, padding: '0.25rem 0.625rem',
-                        borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.07em',
-                        background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`,
-                      }}>
-                        {w.type}
-                      </span>
                     </div>
-                  </div>
-                </Link>
+                  </Link>
+                  {/* Edit button */}
+                  <Link
+                    href={`/workouts/${w.id}/edit`}
+                    onClick={e => e.stopPropagation()}
+                    style={{
+                      position: 'absolute', top: '50%', right: '1rem', transform: 'translateY(-50%)',
+                      background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem',
+                      padding: '0.35rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center',
+                      textDecoration: 'none', minHeight: 32,
+                    }}
+                    title="Edit workout"
+                  >
+                    <Pencil size={13} />
+                  </Link>
+                </div>
               )
             })}
           </div>

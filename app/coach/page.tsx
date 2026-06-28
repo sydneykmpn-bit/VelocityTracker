@@ -4,17 +4,53 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Navbar from '@/components/Navbar'
-import { ChevronDown, ChevronUp, Trash2, Pencil } from 'lucide-react'
+import { ChevronDown, ChevronUp, Trash2, Pencil, Plus, Calendar } from 'lucide-react'
 
-type Tab = 'members' | 'groups' | 'assign' | 'notes'
+type Tab = 'members' | 'groups' | 'assign' | 'calendar' | 'notes'
 
 const inputBase: React.CSSProperties = {
   background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem',
-  padding: '0.6rem 0.875rem', color: '#F2F2F2', fontSize: '0.875rem', outline: 'none',
+  padding: '0.6rem 0.875rem', color: '#F2F2F2', fontSize: '1rem', outline: 'none',
 }
 const labelBase: React.CSSProperties = {
   display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)',
   textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.375rem',
+}
+
+const STRENGTH_EXERCISES = [
+  'Back Squat','Front Squat','Deadlift','Romanian Deadlift','Bench Press','Overhead Press',
+  'Barbell Row','Pull Up','Chin Up','Dip','Push Up','Incline Bench Press','Sumo Deadlift',
+  'Hip Thrust','Leg Press','Lunges','Clean & Jerk','Snatch','Power Clean','Push Press',
+]
+const CONDITIONING_EXERCISES = [
+  '400m Run','800m Run','1km Run','5km Run','10km Run','Treadmill Sprint','Treadmill Endurance',
+  'Rowing 500m','Rowing 2000m','Assault Bike','Jump Rope','Box Jump','Burpees','Wall Balls','Kettlebell Swing',
+]
+const BASKETBALL_EXERCISES = [
+  'Free Throw %','3-Point %','Vertical Jump','Sprint 20m','Sprint 40m','Agility T-Test',
+]
+const ALL_EXERCISES = [...STRENGTH_EXERCISES, ...CONDITIONING_EXERCISES, ...BASKETBALL_EXERCISES]
+
+function getSuggestions(query: string, type: string): string[] {
+  if (!query.trim()) return []
+  const q = query.toLowerCase()
+  const ordered = type === 'basketball'
+    ? [...BASKETBALL_EXERCISES, ...CONDITIONING_EXERCISES, ...STRENGTH_EXERCISES]
+    : type === 'conditioning'
+    ? [...CONDITIONING_EXERCISES, ...STRENGTH_EXERCISES, ...BASKETBALL_EXERCISES]
+    : ALL_EXERCISES
+  return ordered.filter(e => e.toLowerCase().includes(q)).slice(0, 6)
+}
+
+interface PlanExercise {
+  name: string; sets: string; reps: string; weight: string; duration: string; distance: string; notes: string
+}
+const blankEx = (): PlanExercise => ({ name: '', sets: '', reps: '', weight: '', duration: '', distance: '', notes: '' })
+
+const TYPE_BADGE: Record<string, { bg: string; color: string; border: string }> = {
+  basketball: { bg: 'rgba(8,119,160,0.2)', color: '#34bac2', border: 'rgba(8,119,160,0.35)' },
+  conditioning: { bg: 'rgba(34,197,94,0.15)', color: '#4ade80', border: 'rgba(34,197,94,0.25)' },
+  both: { bg: 'rgba(168,85,247,0.15)', color: '#c084fc', border: 'rgba(168,85,247,0.25)' },
 }
 
 export default function CoachPage() {
@@ -26,12 +62,12 @@ export default function CoachPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  // My Members tab
+  // My Members
   const [myMembers, setMyMembers] = useState<any[]>([])
   const [expandedMember, setExpandedMember] = useState<string | null>(null)
   const [memberWorkouts, setMemberWorkouts] = useState<Record<string, any[]>>({})
 
-  // Groups tab
+  // Groups
   const [myGroups, setMyGroups] = useState<any[]>([])
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
   const [groupMembers, setGroupMembers] = useState<Record<string, any[]>>({})
@@ -41,14 +77,24 @@ export default function CoachPage() {
   const [newGroupDesc, setNewGroupDesc] = useState('')
   const [groupSaving, setGroupSaving] = useState(false)
 
-  // Assign Workout tab
-  const [assignMemberId, setAssignMemberId] = useState('')
-  const [planTitle, setPlanTitle] = useState('')
-  const [planDesc, setPlanDesc] = useState('')
-  const [planType, setPlanType] = useState('conditioning')
+  // Assign Workout Plan
+  const [assignForm, setAssignForm] = useState({
+    member_id: '', title: '', description: '', type: 'conditioning',
+    scheduled_date: new Date().toISOString().split('T')[0],
+  })
+  const [planExercises, setPlanExercises] = useState<PlanExercise[]>([blankEx()])
   const [planSaving, setPlanSaving] = useState(false)
+  const [assignedPlans, setAssignedPlans] = useState<any[]>([])
+  const [activePlanSuggestion, setActivePlanSuggestion] = useState<number | null>(null)
 
-  // Notes tab
+  // Workout Calendar
+  const [calendarDate, setCalendarDate] = useState(new Date().toISOString().split('T')[0])
+  const [calendarWorkouts, setCalendarWorkouts] = useState<any[]>([])
+  const [expandedCalWorkout, setExpandedCalWorkout] = useState<string | null>(null)
+  const [memberFilter, setMemberFilter] = useState('all')
+  const [calLoading, setCalLoading] = useState(false)
+
+  // Notes
   const [notes, setNotes] = useState<any[]>([])
   const [notesMemberId, setNotesMemberId] = useState('')
   const [noteText, setNoteText] = useState('')
@@ -60,19 +106,12 @@ export default function CoachPage() {
     const { data: groupData } = await supabase.from('groups').select('id').eq('coach_id', coachId)
     if (!groupData || groupData.length === 0) { setMyMembers([]); return }
     const groupIds = groupData.map((g: any) => g.id)
-    const { data: gmData } = await supabase
-      .from('group_members')
-      .select('member_id, profiles(id, name, email)')
-      .in('group_id', groupIds)
+    const { data: gmData } = await supabase.from('group_members').select('member_id, profiles(id, name, email)').in('group_id', groupIds)
     const seen = new Set<string>()
     const unique: any[] = []
     for (const gm of gmData ?? []) {
-      if (!seen.has(gm.member_id)) {
-        seen.add(gm.member_id)
-        unique.push(gm.profiles)
-      }
+      if (!seen.has(gm.member_id)) { seen.add(gm.member_id); unique.push(gm.profiles) }
     }
-    // Fetch workout counts
     const withCounts = await Promise.all(unique.map(async m => {
       const { count } = await supabase.from('workouts').select('*', { count: 'exact', head: true }).eq('user_id', m.id)
       const { data: last } = await supabase.from('workouts').select('date, created_at').eq('user_id', m.id).order('created_at', { ascending: false }).limit(1)
@@ -82,11 +121,7 @@ export default function CoachPage() {
   }
 
   const loadMyGroups = async (coachId: string) => {
-    const { data } = await supabase
-      .from('groups')
-      .select('*, group_members(count)')
-      .eq('coach_id', coachId)
-      .order('created_at', { ascending: false })
+    const { data } = await supabase.from('groups').select('*, group_members(count)').eq('coach_id', coachId).order('created_at', { ascending: false })
     setMyGroups(data ?? [])
   }
 
@@ -96,36 +131,53 @@ export default function CoachPage() {
   }
 
   const loadNotes = async (coachId: string) => {
-    const { data } = await supabase
-      .from('coach_notes')
-      .select('*, member:profiles!coach_notes_member_id_fkey(name)')
-      .eq('coach_id', coachId)
-      .order('created_at', { ascending: false })
+    const { data } = await supabase.from('coach_notes').select('*, member:profiles!coach_notes_member_id_fkey(name)').eq('coach_id', coachId).order('created_at', { ascending: false })
     setNotes(data ?? [])
+  }
+
+  const loadAssignedPlans = async (coachId: string) => {
+    const { data } = await supabase
+      .from('workout_plans')
+      .select('*, profiles!workout_plans_member_id_fkey(name), workout_plan_exercises(count)')
+      .eq('coach_id', coachId)
+      .order('scheduled_date', { ascending: false })
+    setAssignedPlans(data ?? [])
+  }
+
+  const loadCalendarWorkouts = async () => {
+    setCalLoading(true)
+    let query = supabase
+      .from('workouts')
+      .select('*, profiles(name), exercises(*)')
+      .gte('date', `${calendarDate}T00:00:00`)
+      .lte('date', `${calendarDate}T23:59:59`)
+      .order('date', { ascending: false })
+    if (memberFilter !== 'all') query = query.eq('user_id', memberFilter)
+    const { data } = await query
+    setCalendarWorkouts(data ?? [])
+    setCalLoading(false)
   }
 
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-
       const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).single()
       if (prof?.role !== 'coach' && prof?.role !== 'admin') { router.push('/dashboard'); return }
-
       setUserId(user.id)
       const { data: membersData } = await supabase.from('profiles').select('id, name, email').eq('role', 'member')
       setAllMembers(membersData ?? [])
-
-      await Promise.all([
-        loadMyMembers(user.id),
-        loadMyGroups(user.id),
-        loadNotes(user.id),
-      ])
+      await Promise.all([loadMyMembers(user.id), loadMyGroups(user.id), loadNotes(user.id), loadAssignedPlans(user.id)])
       setLoading(false)
     }
     init()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (!loading) loadCalendarWorkouts()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendarDate, memberFilter])
 
   const toggleMember = async (memberId: string) => {
     if (expandedMember === memberId) { setExpandedMember(null); return }
@@ -145,11 +197,8 @@ export default function CoachPage() {
   const handleCreateGroup = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newGroupName.trim() || !userId) return
-    setGroupSaving(true)
-    setError('')
-    const { error: err } = await supabase.from('groups').insert({
-      name: newGroupName.trim(), description: newGroupDesc.trim() || null, coach_id: userId,
-    })
+    setGroupSaving(true); setError('')
+    const { error: err } = await supabase.from('groups').insert({ name: newGroupName.trim(), description: newGroupDesc.trim() || null, coach_id: userId })
     if (err) { setError(err.message) } else {
       setSuccess('Group created!'); setNewGroupName(''); setNewGroupDesc('')
       await loadMyGroups(userId)
@@ -175,27 +224,58 @@ export default function CoachPage() {
     await loadMyMembers(userId)
   }
 
-  const handleAssign = async (e: React.FormEvent) => {
+  const handleAssignPlan = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!planTitle.trim() || !userId) return
+    if (!assignForm.title.trim() || !assignForm.member_id || !userId) return
     setPlanSaving(true); setError(''); setSuccess('')
-    const { error: err } = await supabase.from('workout_plans').insert({
-      coach_id: userId, member_id: assignMemberId || null,
-      title: planTitle.trim(), description: planDesc.trim() || null, type: planType,
-    })
-    if (err) { setError(err.message) } else {
-      setSuccess('Plan assigned!'); setPlanTitle(''); setPlanDesc(''); setAssignMemberId('')
+    const { data: plan, error: planErr } = await supabase.from('workout_plans').insert({
+      coach_id: userId,
+      member_id: assignForm.member_id,
+      title: assignForm.title.trim(),
+      description: assignForm.description.trim() || null,
+      type: assignForm.type,
+      scheduled_date: assignForm.scheduled_date,
+      status: 'pending',
+    }).select().single()
+    if (planErr || !plan) { setError(planErr?.message ?? 'Failed to create plan'); setPlanSaving(false); return }
+    const validExs = planExercises.filter(e => e.name.trim())
+    if (validExs.length > 0) {
+      await supabase.from('workout_plan_exercises').insert(
+        validExs.map((ex, i) => ({
+          plan_id: plan.id, name: ex.name.trim(),
+          sets: ex.sets ? Number(ex.sets) : null,
+          reps: ex.reps ? Number(ex.reps) : null,
+          weight: ex.weight ? Number(ex.weight) : null,
+          duration: ex.duration ? Number(ex.duration) : null,
+          distance: ex.distance ? Number(ex.distance) : null,
+          notes: ex.notes || null, order_index: i,
+        }))
+      )
     }
+    setSuccess('Plan assigned!')
+    setAssignForm({ member_id: '', title: '', description: '', type: 'conditioning', scheduled_date: new Date().toISOString().split('T')[0] })
+    setPlanExercises([blankEx()])
+    await loadAssignedPlans(userId)
     setPlanSaving(false)
+  }
+
+  const handleDeletePlan = async (planId: string) => {
+    if (!userId) return
+    await supabase.from('workout_plans').delete().eq('id', planId)
+    await loadAssignedPlans(userId)
+  }
+
+  const updatePlanEx = (idx: number, field: keyof PlanExercise, val: string) => {
+    const next = [...planExercises]
+    next[idx] = { ...next[idx], [field]: val }
+    setPlanExercises(next)
   }
 
   const handleAddNote = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!noteText.trim() || !userId) return
     setNoteSaving(true); setError(''); setSuccess('')
-    const { error: err } = await supabase.from('coach_notes').insert({
-      coach_id: userId, member_id: notesMemberId || null, note: noteText.trim(),
-    })
+    const { error: err } = await supabase.from('coach_notes').insert({ coach_id: userId, member_id: notesMemberId || null, note: noteText.trim() })
     if (err) { setError(err.message) } else {
       setSuccess('Note saved!'); setNoteText(''); setNotesMemberId('')
       await loadNotes(userId)
@@ -224,21 +304,29 @@ export default function CoachPage() {
     )
   }
 
-  const tabs: { value: Tab; label: string }[] = [
-    { value: 'members', label: 'My Members' },
-    { value: 'groups', label: 'Groups / Classes' },
-    { value: 'assign', label: 'Assign Workout' },
-    { value: 'notes', label: 'Notes' },
-  ]
-
   const typeBadgeColor: Record<string, string> = {
     basketball: '#34bac2', conditioning: '#4ade80', both: '#c084fc',
   }
 
+  const PLAN_STATUS: Record<string, { label: string; color: string }> = {
+    pending: { label: '🟡 Pending', color: '#f59e0b' },
+    completed: { label: '✅ Completed', color: '#22c55e' },
+    skipped: { label: '⏭️ Skipped', color: '#8A8A8A' },
+    rescheduled: { label: '📅 Rescheduled', color: '#60a5fa' },
+  }
+
+  const tabs: { value: Tab; label: string }[] = [
+    { value: 'members', label: 'My Members' },
+    { value: 'groups', label: 'Groups' },
+    { value: 'assign', label: 'Assign Plan' },
+    { value: 'calendar', label: 'Workout Calendar' },
+    { value: 'notes', label: 'Notes' },
+  ]
+
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
       <Navbar />
-      <main style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+      <main style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem 1rem' }}>
         <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: '2.5rem', letterSpacing: '0.03em', marginBottom: '1.5rem' }}>
           COACH DASHBOARD
         </h1>
@@ -246,15 +334,15 @@ export default function CoachPage() {
         {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{error}</div>}
         {success && <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#4ade80', fontSize: '0.875rem' }}>{success}</div>}
 
-        {/* Tab Bar */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '1.5rem' }}>
+        {/* Tab Bar — scrollable */}
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '1.5rem', overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
           {tabs.map(t => (
             <button key={t.value} onClick={() => { setActiveTab(t.value); setError(''); setSuccess('') }} style={{
-              background: 'none', border: 'none',
+              background: 'none', border: 'none', flexShrink: 0,
               borderBottom: activeTab === t.value ? '2px solid var(--teal-primary)' : '2px solid transparent',
               color: activeTab === t.value ? 'var(--teal-secondary)' : 'var(--text-secondary)',
               padding: '0.75rem 1.25rem', cursor: 'pointer', fontSize: '0.875rem',
-              fontWeight: activeTab === t.value ? 700 : 400, marginBottom: '-1px', transition: 'all 0.15s',
+              fontWeight: activeTab === t.value ? 700 : 400, marginBottom: '-1px', transition: 'all 0.15s', whiteSpace: 'nowrap',
             }}>
               {t.label}
             </button>
@@ -278,44 +366,36 @@ export default function CoachPage() {
                   const wks = memberWorkouts[m.id] ?? []
                   return (
                     <div key={m.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', overflow: 'hidden' }}>
-                      <button
-                        onClick={() => toggleMember(m.id)}
-                        style={{ width: '100%', background: 'none', border: 'none', padding: '1.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#F2F2F2' }}
-                      >
+                      <button onClick={() => toggleMember(m.id)} style={{ width: '100%', background: 'none', border: 'none', padding: '1.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#F2F2F2' }}>
                         <div style={{ textAlign: 'left' }}>
                           <h3 style={{ fontWeight: 600, marginBottom: '0.2rem' }}>{m.name}</h3>
                           <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{m.email}</p>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <button
+                            onClick={e => { e.stopPropagation(); setMemberFilter(m.id); setActiveTab('calendar') }}
+                            style={{ background: 'rgba(8,119,160,0.15)', border: '1px solid rgba(8,119,160,0.35)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: 'var(--teal-secondary)', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', minHeight: 0 }}
+                          >
+                            <Calendar size={12} /> View Day
+                          </button>
                           <div style={{ textAlign: 'right' }}>
                             <div style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{m.workoutCount}</div>
                             <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>workouts</div>
                           </div>
-                          {m.lastWorkout && (
-                            <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Last</div>
-                              <div style={{ fontSize: '0.75rem' }}>{new Date(m.lastWorkout).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
-                            </div>
-                          )}
                           {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />}
                         </div>
                       </button>
-
                       {isExpanded && (
                         <div style={{ borderTop: '1px solid var(--border)', padding: '1rem 1.25rem' }}>
                           <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>Recent workouts</p>
-                          {wks.length === 0 ? (
-                            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No workouts logged yet.</p>
-                          ) : (
+                          {wks.length === 0 ? <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No workouts logged yet.</p> : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                               {wks.map(w => (
                                 <div key={w.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                                   <span style={{ fontSize: '0.875rem' }}>{w.title}</span>
                                   <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
                                     <span style={{ fontSize: '0.7rem', color: typeBadgeColor[w.type] ?? '#8A8A8A', textTransform: 'uppercase' }}>{w.type}</span>
-                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                                      {new Date(w.date ?? w.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                    </span>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{new Date(w.date ?? w.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                                   </div>
                                 </div>
                               ))}
@@ -333,44 +413,31 @@ export default function CoachPage() {
 
         {/* ── GROUPS TAB ── */}
         {activeTab === 'groups' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '1.5rem', alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
             <div>
-              <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>
-                MY GROUPS ({myGroups.length})
-              </h2>
-              {myGroups.length === 0 ? (
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No groups yet. Create one →</p>
-              ) : (
+              <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>MY GROUPS ({myGroups.length})</h2>
+              {myGroups.length === 0 ? <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No groups yet. Create one →</p> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {myGroups.map(g => {
                     const isExpanded = expandedGroup === g.id
                     const gms = groupMembers[g.id] ?? []
                     return (
                       <div key={g.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', overflow: 'hidden' }}>
-                        <button
-                          onClick={() => toggleGroup(g.id)}
-                          style={{ width: '100%', background: 'none', border: 'none', padding: '1rem 1.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#F2F2F2' }}
-                        >
+                        <button onClick={() => toggleGroup(g.id)} style={{ width: '100%', background: 'none', border: 'none', padding: '1rem 1.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#F2F2F2' }}>
                           <div style={{ textAlign: 'left' }}>
                             <h3 style={{ fontWeight: 600, marginBottom: '0.15rem' }}>{g.name}</h3>
                             <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{(g.group_members as any[])?.[0]?.count ?? 0} members</p>
                           </div>
                           {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)' }} />}
                         </button>
-
                         {isExpanded && (
                           <div style={{ borderTop: '1px solid var(--border)', padding: '1rem 1.25rem' }}>
-                            {gms.length === 0 ? (
-                              <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.75rem' }}>No members yet.</p>
-                            ) : (
+                            {gms.length === 0 ? <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.75rem' }}>No members yet.</p> : (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
                                 {gms.map(gm => (
                                   <div key={gm.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div>
-                                      <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{gm.profiles?.name}</span>
-                                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginLeft: '0.5rem' }}>{gm.profiles?.email}</span>
-                                    </div>
-                                    <button onClick={() => handleRemoveFromGroup(g.id, gm.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', display: 'flex' }}>
+                                    <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{gm.profiles?.name}</span>
+                                    <button onClick={() => handleRemoveFromGroup(g.id, gm.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', display: 'flex', minHeight: 0 }}>
                                       <Trash2 size={14} />
                                     </button>
                                   </div>
@@ -382,7 +449,7 @@ export default function CoachPage() {
                                 <option value="">Add member…</option>
                                 {allMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                               </select>
-                              <button onClick={() => handleAddToGroup(g.id)} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.55rem 0.875rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700 }}>Add</button>
+                              <button onClick={() => handleAddToGroup(g.id)} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.55rem 0.875rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700, minHeight: 0 }}>Add</button>
                             </div>
                           </div>
                         )}
@@ -392,8 +459,6 @@ export default function CoachPage() {
                 </div>
               )}
             </div>
-
-            {/* Create Group */}
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>NEW GROUP</h2>
               <form onSubmit={handleCreateGroup} style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
@@ -413,66 +478,252 @@ export default function CoachPage() {
           </div>
         )}
 
-        {/* ── ASSIGN WORKOUT TAB ── */}
+        {/* ── ASSIGN PLAN TAB ── */}
         {activeTab === 'assign' && (
-          <div style={{ maxWidth: '500px' }}>
-            <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>ASSIGN WORKOUT PLAN</h2>
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.5rem' }}>
-              <form onSubmit={handleAssign} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div>
-                  <label style={labelBase}>Member (optional — leave blank for all)</label>
-                  <select value={assignMemberId} onChange={e => setAssignMemberId(e.target.value)} style={{ ...inputBase, width: '100%', cursor: 'pointer' }}>
-                    <option value="">All members</option>
-                    {allMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
+          <div>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.5rem' }}>
+              <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>ASSIGN WORKOUT PLAN</h2>
+              <form onSubmit={handleAssignPlan} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {/* Row 1: Member + Date */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label style={labelBase}>Member *</label>
+                    <select value={assignForm.member_id} onChange={e => setAssignForm(p => ({ ...p, member_id: e.target.value }))} required style={{ ...inputBase, width: '100%', cursor: 'pointer' }}>
+                      <option value="">Select member…</option>
+                      {allMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelBase}>Scheduled Date</label>
+                    <input type="date" value={assignForm.scheduled_date} onChange={e => setAssignForm(p => ({ ...p, scheduled_date: e.target.value }))} style={{ ...inputBase, width: '100%' }} />
+                  </div>
                 </div>
-                <div>
-                  <label style={labelBase}>Plan Title *</label>
-                  <input type="text" value={planTitle} onChange={e => setPlanTitle(e.target.value)} required style={{ ...inputBase, width: '100%' }} placeholder="e.g. Week 1 Strength Block" />
+                {/* Row 2: Title + Type */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '1rem', alignItems: 'end' }}>
+                  <div>
+                    <label style={labelBase}>Plan Title *</label>
+                    <input type="text" value={assignForm.title} onChange={e => setAssignForm(p => ({ ...p, title: e.target.value }))} required style={{ ...inputBase, width: '100%' }} placeholder="e.g. Week 1 Strength Block" />
+                  </div>
+                  <div>
+                    <label style={labelBase}>Type</label>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      {(['conditioning', 'basketball', 'both'] as const).map(t => (
+                        <button key={t} type="button" onClick={() => setAssignForm(p => ({ ...p, type: t }))} style={{
+                          background: assignForm.type === t ? 'rgba(8,119,160,0.2)' : '#0d1a1e',
+                          border: `1px solid ${assignForm.type === t ? 'var(--teal-primary)' : '#1a2e34'}`,
+                          borderRadius: '0.375rem', padding: '0.5rem 0.75rem',
+                          color: assignForm.type === t ? 'var(--teal-secondary)' : 'var(--text-secondary)',
+                          fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize', minHeight: 0,
+                        }}>{t === 'conditioning' ? '🏋️' : t === 'basketball' ? '🏀' : '💪'}</button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
+                {/* Row 3: Description */}
                 <div>
-                  <label style={labelBase}>Description</label>
-                  <textarea value={planDesc} onChange={e => setPlanDesc(e.target.value)} style={{ ...inputBase, width: '100%', minHeight: '70px', resize: 'vertical' }} placeholder="Plan details…" />
+                  <label style={labelBase}>Description (optional)</label>
+                  <textarea value={assignForm.description} onChange={e => setAssignForm(p => ({ ...p, description: e.target.value }))} style={{ ...inputBase, width: '100%', minHeight: '60px', resize: 'vertical' }} placeholder="Plan details…" />
                 </div>
+                {/* Exercises */}
                 <div>
-                  <label style={labelBase}>Type</label>
-                  <select value={planType} onChange={e => setPlanType(e.target.value)} style={{ ...inputBase, width: '100%', cursor: 'pointer' }}>
-                    <option value="conditioning">Conditioning</option>
-                    <option value="basketball">Basketball</option>
-                    <option value="both">Both</option>
-                  </select>
+                  <label style={{ ...labelBase, marginBottom: '0.5rem' }}>Exercises</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {planExercises.map((ex, idx) => {
+                      const suggestions = getSuggestions(ex.name, assignForm.type)
+                      return (
+                        <div key={idx} style={{ background: '#0a1518', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.875rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                            <span style={{ fontSize: '0.65rem', color: 'var(--teal-secondary)', fontWeight: 700, letterSpacing: '0.08em' }}>EXERCISE {idx + 1}</span>
+                            {planExercises.length > 1 && (
+                              <button type="button" onClick={() => setPlanExercises(planExercises.filter((_, i) => i !== idx))} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0 }}>
+                                <Trash2 size={12} />
+                              </button>
+                            )}
+                          </div>
+                          {/* Name with suggestions */}
+                          <div style={{ position: 'relative', marginBottom: '0.5rem' }}>
+                            <input
+                              type="text" value={ex.name} autoComplete="off" placeholder="Exercise name"
+                              onChange={e => { updatePlanEx(idx, 'name', e.target.value); setActivePlanSuggestion(idx) }}
+                              onFocus={() => ex.name.length > 0 && setActivePlanSuggestion(idx)}
+                              onBlur={() => setTimeout(() => setActivePlanSuggestion(null), 150)}
+                              style={{ ...inputBase, width: '100%' }}
+                            />
+                            {activePlanSuggestion === idx && suggestions.length > 0 && (
+                              <div style={{ position: 'absolute', top: 'calc(100% - 1px)', left: 0, right: 0, zIndex: 20, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0 0 0.5rem 0.5rem', maxHeight: '160px', overflowY: 'auto' }}>
+                                {suggestions.map(s => (
+                                  <button key={s} type="button"
+                                    onMouseDown={() => { updatePlanEx(idx, 'name', s); setActivePlanSuggestion(null) }}
+                                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.4rem 0.875rem', background: 'none', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.04)', color: '#F2F2F2', fontSize: '0.8rem', cursor: 'pointer', minHeight: 32 }}
+                                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(8,119,160,0.15)' }}
+                                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none' }}
+                                  >{s}</button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+                            {(['sets', 'reps', 'weight'] as const).map(f => (
+                              <div key={f}>
+                                <label style={{ ...labelBase, marginBottom: '0.2rem' }}>{f === 'weight' ? 'Weight kg' : f.charAt(0).toUpperCase() + f.slice(1)}</label>
+                                <input type="number" value={ex[f]} onChange={e => updatePlanEx(idx, f, e.target.value)} style={{ ...inputBase, width: '100%' }} placeholder="—" min="0" step="0.5" />
+                              </div>
+                            ))}
+                            {(['duration', 'distance'] as const).map(f => (
+                              <div key={f}>
+                                <label style={{ ...labelBase, marginBottom: '0.2rem' }}>{f === 'duration' ? 'Dur. (min)' : 'Dist. (km)'}</label>
+                                <input type="number" value={ex[f]} onChange={e => updatePlanEx(idx, f, e.target.value)} style={{ ...inputBase, width: '100%' }} placeholder="—" min="0" step="0.1" />
+                              </div>
+                            ))}
+                            <div style={{ gridColumn: '3' }}>
+                              <label style={{ ...labelBase, marginBottom: '0.2rem' }}>Notes</label>
+                              <input type="text" value={ex.notes} onChange={e => updatePlanEx(idx, 'notes', e.target.value)} style={{ ...inputBase, width: '100%' }} placeholder="—" />
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <button type="button" onClick={() => setPlanExercises([...planExercises, blankEx()])} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem',
+                    width: '100%', marginTop: '0.5rem',
+                    background: 'transparent', border: '1px dashed #1a2e34', borderRadius: '0.5rem',
+                    padding: '0.6rem', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem',
+                  }}>
+                    <Plus size={14} /> Add Exercise
+                  </button>
                 </div>
-                <button type="submit" disabled={planSaving} style={{ background: planSaving ? '#0d1a1e' : 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.75rem', fontWeight: 700, fontSize: '0.875rem', cursor: planSaving ? 'not-allowed' : 'pointer' }}>
+                <button type="submit" disabled={planSaving} style={{ background: planSaving ? '#0d1a1e' : 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.875rem', fontWeight: 700, fontSize: '0.95rem', cursor: planSaving ? 'not-allowed' : 'pointer' }}>
                   {planSaving ? 'Assigning…' : 'Assign Plan'}
                 </button>
               </form>
             </div>
+
+            {/* Assigned Plans List */}
+            <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>ASSIGNED PLANS ({assignedPlans.length})</h2>
+            {assignedPlans.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No plans assigned yet.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {assignedPlans.map(p => {
+                  const tb = TYPE_BADGE[p.type] ?? TYPE_BADGE.both
+                  const st = PLAN_STATUS[p.status ?? 'pending'] ?? PLAN_STATUS.pending
+                  return (
+                    <div key={p.id} className="card-vel" style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                          <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{p.title}</span>
+                          <span style={{ ...tb, fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase' }}>{p.type}</span>
+                        </div>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          {p.profiles?.name} · {p.scheduled_date} · {(p.workout_plan_exercises as any[])?.[0]?.count ?? 0} exercises
+                        </p>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '0.75rem', color: st.color }}>{st.label}</span>
+                        <button onClick={() => handleDeletePlan(p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', display: 'flex', minHeight: 0 }}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── WORKOUT CALENDAR TAB ── */}
+        {activeTab === 'calendar' && (
+          <div>
+            <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>WORKOUT CALENDAR</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+              <div>
+                <label style={labelBase}>Date</label>
+                <input type="date" value={calendarDate} onChange={e => setCalendarDate(e.target.value)} style={{ ...inputBase, width: '100%' }} />
+              </div>
+              <div>
+                <label style={labelBase}>Member</label>
+                <select value={memberFilter} onChange={e => setMemberFilter(e.target.value)} style={{ ...inputBase, width: '100%', cursor: 'pointer' }}>
+                  <option value="all">All Members</option>
+                  {allMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {calLoading ? (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Loading…</p>
+            ) : calendarWorkouts.length === 0 ? (
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '3rem', textAlign: 'center' }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No workouts logged on this date.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {calendarWorkouts.map(w => {
+                  const isExpanded = expandedCalWorkout === w.id
+                  const tb = TYPE_BADGE[w.type] ?? TYPE_BADGE.both
+                  return (
+                    <div key={w.id} style={{ background: 'var(--surface)', border: `1px solid ${isExpanded ? 'var(--teal-primary)' : 'var(--border)'}`, borderRadius: '0.75rem', overflow: 'hidden', borderLeft: isExpanded ? '3px solid var(--teal-primary)' : '1px solid var(--border)' }}>
+                      <button onClick={() => setExpandedCalWorkout(isExpanded ? null : w.id)} style={{ width: '100%', background: 'none', border: 'none', padding: '1rem 1.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#F2F2F2' }}>
+                        <div style={{ textAlign: 'left' }}>
+                          <p style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', fontWeight: 700, marginBottom: '0.2rem' }}>{w.profiles?.name}</p>
+                          <h3 style={{ fontWeight: 600, fontSize: '0.95rem' }}>{w.title}</h3>
+                          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
+                            {w.duration ? `${w.duration} min · ` : ''}{(w.exercises as any[])?.length ?? 0} exercises
+                          </p>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.25rem 0.5rem', borderRadius: '999px', textTransform: 'uppercase', ...tb }}>{w.type}</span>
+                          {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />}
+                        </div>
+                      </button>
+                      {isExpanded && (
+                        <div style={{ borderTop: '1px solid var(--border)', padding: '1rem 1.25rem' }}>
+                          {(w.exercises as any[])?.length === 0 ? (
+                            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No exercises logged.</p>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                              {(w.exercises as any[]).map((ex: any) => (
+                                <div key={ex.id} style={{ padding: '0.625rem 0.75rem', background: '#0a1518', borderRadius: '0.375rem' }}>
+                                  <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.25rem' }}>{ex.name}</p>
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.625rem' }}>
+                                    {ex.sets && ex.reps && <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{ex.sets}×{ex.reps}</span>}
+                                    {ex.weight && <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{ex.weight}kg</span>}
+                                    {ex.duration && <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{ex.duration}min</span>}
+                                    {ex.distance && <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{ex.distance}km</span>}
+                                    {ex.notes && <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>{ex.notes}</span>}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {w.notes && <p style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>"{w.notes}"</p>}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
 
         {/* ── NOTES TAB ── */}
         {activeTab === 'notes' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '1.5rem', alignItems: 'start' }}>
-            {/* Notes list */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
             <div>
-              <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>
-                NOTES ({notes.length})
-              </h2>
-              {notes.length === 0 ? (
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No notes yet.</p>
-              ) : (
+              <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>NOTES ({notes.length})</h2>
+              {notes.length === 0 ? <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No notes yet.</p> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {notes.map(n => (
                     <div key={n.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)' }}>
-                          {n.member?.name ?? 'General note'}
-                        </p>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)' }}>{n.member?.name ?? 'General note'}</p>
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button onClick={() => { setEditingNote(n.id); setEditText(n.note) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex' }}>
+                          <button onClick={() => { setEditingNote(n.id); setEditText(n.note) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', minHeight: 0 }}>
                             <Pencil size={14} />
                           </button>
-                          <button onClick={() => handleDeleteNote(n.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', display: 'flex' }}>
+                          <button onClick={() => handleDeleteNote(n.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', display: 'flex', minHeight: 0 }}>
                             <Trash2 size={14} />
                           </button>
                         </div>
@@ -481,13 +732,11 @@ export default function CoachPage() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                           <textarea value={editText} onChange={e => setEditText(e.target.value)} style={{ ...inputBase, width: '100%', minHeight: '60px', resize: 'vertical' }} />
                           <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <button onClick={() => handleUpdateNote(n.id)} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.4rem 0.875rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}>Save</button>
-                            <button onClick={() => { setEditingNote(null); setEditText('') }} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.4rem 0.875rem', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>Cancel</button>
+                            <button onClick={() => handleUpdateNote(n.id)} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.4rem 0.875rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}>Save</button>
+                            <button onClick={() => { setEditingNote(null); setEditText('') }} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.4rem 0.875rem', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer', minHeight: 0 }}>Cancel</button>
                           </div>
                         </div>
-                      ) : (
-                        <p style={{ fontSize: '0.875rem', lineHeight: 1.6 }}>{n.note}</p>
-                      )}
+                      ) : <p style={{ fontSize: '0.875rem', lineHeight: 1.6 }}>{n.note}</p>}
                       <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
                         {new Date(n.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </p>
@@ -496,8 +745,6 @@ export default function CoachPage() {
                 </div>
               )}
             </div>
-
-            {/* Add Note */}
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>ADD NOTE</h2>
               <form onSubmit={handleAddNote} style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>

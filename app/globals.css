@@ -11,6 +11,18 @@
   --teal-glow: rgba(8, 119, 160, 0.3);
   --text-primary: #F2F2F2;
   --text-secondary: #8A8A8A;
+
+  /* vel aliases for new components */
+  --vel-black: #080e10;
+  --vel-surface: #0d1a1e;
+  --vel-surface-2: #111f24;
+  --vel-border: #1a2e34;
+  --vel-teal: #0877a0;
+  --vel-teal-secondary: #34bac2;
+  --vel-text-primary: #F2F2F2;
+  --vel-text-secondary: #8A8A8A;
+  --vel-text-dim: #4a5a60;
+  --vel-success: #22c55e;
 }
 
 * {
@@ -19,13 +31,42 @@
   box-sizing: border-box;
 }
 
+html {
+  overflow-x: hidden;
+}
+
 body {
   background-color: var(--background);
   color: var(--text-primary);
+  overflow-x: hidden;
 }
 
+/* Prevent iOS input zoom */
 input, textarea, select {
   color-scheme: dark;
+  font-size: 16px;
+}
+
+/* Touch-friendly interactive elements */
+button, a {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+button {
+  min-height: 44px;
+}
+
+a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Inline links that don't need 44px */
+p a, span a, td a {
+  min-height: unset;
+  display: inline;
 }
 
 @keyframes fadeInUp {
@@ -50,4 +91,126 @@ input, textarea, select {
 
 .glow-pulse {
   animation: glowPulse 2s ease-in-out infinite;
+}
+
+/* Utility classes */
+.card-vel {
+  background: var(--vel-surface);
+  border: 1px solid var(--vel-border);
+  border-radius: 0.75rem;
+}
+
+.btn-primary {
+  background: var(--teal-primary);
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  font-weight: 700;
+  font-size: 0.875rem;
+  cursor: pointer;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-primary:disabled {
+  background: #0d1a1e;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tag-basketball {
+  background: rgba(8,119,160,0.2);
+  color: #34bac2;
+  border: 1px solid rgba(8,119,160,0.35);
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.25rem 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  white-space: nowrap;
+}
+
+.tag-conditioning {
+  background: rgba(34,197,94,0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34,197,94,0.25);
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.25rem 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  white-space: nowrap;
+}
+
+.tag-both {
+  background: rgba(168,85,247,0.15);
+  color: #c084fc;
+  border: 1px solid rgba(168,85,247,0.25);
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.25rem 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  white-space: nowrap;
+}
+
+.font-display {
+  font-family: var(--font-bebas);
+  letter-spacing: 0.03em;
+}
+
+.section-label {
+  color: var(--teal-secondary);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Sticky submit on mobile */
+@media (max-width: 767px) {
+  .sticky-submit-mobile {
+    position: sticky;
+    bottom: 0;
+    background: var(--background);
+    padding-top: 1rem;
+    padding-bottom: 1.5rem;
+    z-index: 10;
+  }
 }
