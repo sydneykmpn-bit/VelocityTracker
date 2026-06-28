@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -79,6 +79,14 @@ export default function WorkoutForm({ defaultType }: { defaultType?: string }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [activeSuggestion, setActiveSuggestion] = useState<number | null>(null)
+  const [sharedTemplates, setSharedTemplates] = useState<any[]>([])
+  const [selectedTemplate, setSelectedTemplate] = useState<any>(null)
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.from('workout_templates').select('*, workout_template_exercises(*)').eq('is_shared', true).order('title')
+      .then(({ data }) => setSharedTemplates(data ?? []))
+  }, [])
 
   const update = (idx: number, field: keyof Exercise, val: string) => {
     const next = [...exercises]
@@ -145,6 +153,39 @@ export default function WorkoutForm({ defaultType }: { defaultType?: string }) {
       {error && (
         <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', color: '#f87171', fontSize: '0.875rem' }}>
           {error}
+        </div>
+      )}
+
+      {/* Load from Shared Template */}
+      {sharedTemplates.length > 0 && (
+        <div>
+          <label style={labelBase}>Load from Template</label>
+          <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', paddingBottom: '4px' }}>
+            {sharedTemplates.map(t => (
+              <button key={t.id} type="button" onClick={() => {
+                setSelectedTemplate(t)
+                setTitle(t.title)
+                setWorkoutType(t.type as WorkoutType)
+                if (t.description) setNotes(t.description)
+                const exs = t.workout_template_exercises.sort((a: any, b: any) => a.order_index - b.order_index)
+                setExercises(exs.length > 0 ? exs.map((ex: any) => ({
+                  name: ex.name, sets: ex.sets?.toString() || '', reps: ex.reps?.toString() || '',
+                  weight: ex.weight?.toString() || '', duration: ex.duration?.toString() || '', notes: ex.notes || '',
+                })) : [blank()])
+              }} style={{
+                flexShrink: 0, padding: '0.5rem 0.875rem', borderRadius: '0.5rem', textAlign: 'left', cursor: 'pointer',
+                background: selectedTemplate?.id === t.id ? 'rgba(8,119,160,0.2)' : '#0d1a1e',
+                border: `1px solid ${selectedTemplate?.id === t.id ? 'var(--teal-primary)' : '#1a2e34'}`,
+                color: '#F2F2F2', minWidth: '130px', minHeight: 0,
+              }}>
+                <p style={{ fontWeight: 600, fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</p>
+                <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>{t.type} · {t.workout_template_exercises?.length || 0} exercises</p>
+              </button>
+            ))}
+          </div>
+          {selectedTemplate && (
+            <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)', marginTop: '0.375rem' }}>✓ Template loaded — you can still customize</p>
+          )}
         </div>
       )}
 

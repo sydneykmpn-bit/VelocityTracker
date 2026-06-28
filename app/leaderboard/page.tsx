@@ -108,10 +108,12 @@ export default function LeaderboardPage() {
     : []
 
   const loadPublicRecords = async () => {
+    const currentMonth = new Date().toISOString().slice(0, 7)
     let query = supabase
       .from('personal_records')
-      .select('*, profiles(name, gender)')
+      .select('*, profiles(id, name, gender)')
       .eq('is_public', true)
+      .eq('month_year', currentMonth)
       .order('value', { ascending: false })
     if (featuredFilter !== 'all') query = query.eq('exercise_name', featuredFilter)
     if (searchFilter) query = query.ilike('exercise_name', `%${searchFilter}%`)
@@ -133,6 +135,16 @@ export default function LeaderboardPage() {
   const loadData = async (uid: string) => {
     await Promise.all([loadPublicRecords(), loadMyRecords(uid)])
   }
+
+  useEffect(() => {
+    const today = new Date()
+    if (today.getDate() === 1) {
+      supabase.rpc('reset_monthly_leaderboard').then(() => {
+        loadPublicRecords()
+      })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     async function init() {
@@ -162,6 +174,7 @@ export default function LeaderboardPage() {
       unit, date,
       recorded_at: new Date(date).toISOString(),
       is_public: isPublic,
+      month_year: new Date().toISOString().slice(0, 7),
     })
     if (err) {
       setError(err.message)
@@ -305,6 +318,9 @@ export default function LeaderboardPage() {
         {/* ── PUBLIC LEADERBOARD TAB ── */}
         {activeTab === 'public' && (
           <>
+            <p style={{ fontSize: '0.75rem', marginBottom: '1rem', color: 'var(--vel-text-dim, #4a5a60)' }}>
+              🏆 Monthly leaderboard — resets on the 1st of each month. Past records are archived.
+            </p>
             {/* Featured exercise pills */}
             <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', paddingBottom: '4px', marginBottom: '0.75rem' }}>
               {FEATURED_EXERCISES.map(ex => (

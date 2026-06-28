@@ -87,6 +87,18 @@ export default function CoachPage() {
   const [assignedPlans, setAssignedPlans] = useState<any[]>([])
   const [activePlanSuggestion, setActivePlanSuggestion] = useState<number | null>(null)
 
+  // Templates
+  const [templates, setTemplates] = useState<any[]>([])
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false)
+  const [templateName, setTemplateName] = useState('')
+  const [selectedTemplate, setSelectedTemplate] = useState<any>(null)
+
+  // Edit assigned plan
+  const [editingPlan, setEditingPlan] = useState<string | null>(null)
+  const [editPlanForm, setEditPlanForm] = useState<any>({})
+  const [editPlanExercises, setEditPlanExercises] = useState<PlanExercise[]>([])
+  const [activePlanEditSuggestion, setActivePlanEditSuggestion] = useState<number | null>(null)
+
   // Workout Calendar
   const [calendarDate, setCalendarDate] = useState(new Date().toISOString().split('T')[0])
   const [calendarWorkouts, setCalendarWorkouts] = useState<any[]>([])
@@ -167,6 +179,12 @@ export default function CoachPage() {
       setUserId(user.id)
       const { data: membersData } = await supabase.from('profiles').select('id, name, email').eq('role', 'member')
       setAllMembers(membersData ?? [])
+      const { data: tmpl } = await supabase
+        .from('workout_templates')
+        .select('*, workout_template_exercises(*)')
+        .or(`created_by.eq.${user.id},is_shared.eq.true`)
+        .order('created_at', { ascending: false })
+      setTemplates(tmpl ?? [])
       await Promise.all([loadMyMembers(user.id), loadMyGroups(user.id), loadNotes(user.id), loadAssignedPlans(user.id)])
       setLoading(false)
     }
@@ -182,10 +200,8 @@ export default function CoachPage() {
   const toggleMember = async (memberId: string) => {
     if (expandedMember === memberId) { setExpandedMember(null); return }
     setExpandedMember(memberId)
-    if (!memberWorkouts[memberId]) {
-      const { data } = await supabase.from('workouts').select('id, title, type, date, created_at').eq('user_id', memberId).order('created_at', { ascending: false }).limit(10)
-      setMemberWorkouts(prev => ({ ...prev, [memberId]: data ?? [] }))
-    }
+    const { data } = await supabase.from('workouts').select('id, title, type, date, created_at, duration, exercises(count)').eq('user_id', memberId).order('date', { ascending: false }).limit(5)
+    setMemberWorkouts(prev => ({ ...prev, [memberId]: data ?? [] }))
   }
 
   const toggleGroup = async (groupId: string) => {
@@ -269,6 +285,42 @@ export default function CoachPage() {
     const next = [...planExercises]
     next[idx] = { ...next[idx], [field]: val }
     setPlanExercises(next)
+  }
+
+  const updateEditPlanEx = (idx: number, field: keyof PlanExercise, val: string) => {
+    const next = [...editPlanExercises]
+    next[idx] = { ...next[idx], [field]: val }
+    setEditPlanExercises(next)
+  }
+
+  const handleSavePlanEdit = async () => {
+    if (!editingPlan || !userId) return
+    await supabase.from('workout_plans').update({
+      title: editPlanForm.title,
+      description: editPlanForm.description || null,
+      type: editPlanForm.type,
+      scheduled_date: editPlanForm.scheduled_date,
+    }).eq('id', editingPlan)
+    await supabase.from('workout_plan_exercises').delete().eq('plan_id', editingPlan)
+    const toInsert = editPlanExercises.filter(e => e.name.trim()).map((ex, i) => ({
+      plan_id: editingPlan,
+      name: ex.name, sets: ex.sets ? Number(ex.sets) : null,
+      reps: ex.reps ? Number(ex.reps) : null, weight: ex.weight ? Number(ex.weight) : null,
+      duration: ex.duration ? Number(ex.duration) : null, distance: ex.distance ? Number(ex.distance) : null,
+      notes: ex.notes || null, order_index: i,
+    }))
+    if (toInsert.length > 0) await supabase.from('workout_plan_exercises').insert(toInsert)
+    setEditingPlan(null)
+    await loadAssignedPlans(userId)
+  }
+
+  const refreshTemplates = async (uid: string) => {
+    const { data } = await supabase
+      .from('workout_templates')
+      .select('*, workout_template_exercises(*)')
+      .or(`created_by.eq.${uid},is_shared.eq.true`)
+      .order('created_at', { ascending: false })
+    setTemplates(data ?? [])
   }
 
   const handleAddNote = async (e: React.FormEvent) => {
@@ -387,15 +439,23 @@ export default function CoachPage() {
                       </button>
                       {isExpanded && (
                         <div style={{ borderTop: '1px solid var(--border)', padding: '1rem 1.25rem' }}>
-                          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>Recent workouts</p>
-                          {wks.length === 0 ? <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No workouts logged yet.</p> : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>Recent Workouts</p>
+                          {wks.length === 0 ? (
+                            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No workouts logged yet.</p>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
                               {wks.map(w => (
-                                <div key={w.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                  <span style={{ fontSize: '0.875rem' }}>{w.title}</span>
-                                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                                    <span style={{ fontSize: '0.7rem', color: typeBadgeColor[w.type] ?? '#8A8A8A', textTransform: 'uppercase' }}>{w.type}</span>
-                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{new Date(w.date ?? w.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                <div key={w.id} style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
+                                  <div>
+                                    <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{w.title}</p>
+                                    <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>
+                                      {new Date(w.date ?? w.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                      {w.duration ? ` · ${w.duration}min` : ''}
+                                    </p>
+                                  </div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                                    <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', ...TYPE_BADGE[w.type] ?? TYPE_BADGE.both }}>{w.type}</span>
+                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{(w.exercises as any[])?.[0]?.count ?? 0} ex</span>
                                   </div>
                                 </div>
                               ))}
@@ -481,6 +541,39 @@ export default function CoachPage() {
         {/* ── ASSIGN PLAN TAB ── */}
         {activeTab === 'assign' && (
           <div>
+            {/* Load from Template */}
+            {templates.length > 0 && (
+              <div style={{ marginBottom: '1.5rem' }}>
+                <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>Load from Saved Template</p>
+                <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.375rem', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+                  {templates.map(t => (
+                    <button key={t.id} type="button" onClick={() => {
+                      setSelectedTemplate(t)
+                      setAssignForm(p => ({ ...p, title: t.title, description: t.description || '', type: t.type }))
+                      setPlanExercises(
+                        t.workout_template_exercises.sort((a: any, b: any) => a.order_index - b.order_index).map((ex: any) => ({
+                          name: ex.name, sets: ex.sets?.toString() || '', reps: ex.reps?.toString() || '',
+                          weight: ex.weight?.toString() || '', duration: ex.duration?.toString() || '',
+                          distance: ex.distance?.toString() || '', notes: ex.notes || '',
+                        }))
+                      )
+                    }} style={{
+                      flexShrink: 0, padding: '0.625rem 0.875rem', borderRadius: '0.5rem', textAlign: 'left', cursor: 'pointer',
+                      background: selectedTemplate?.id === t.id ? 'rgba(8,119,160,0.2)' : 'var(--surface-raised)',
+                      border: `1px solid ${selectedTemplate?.id === t.id ? 'var(--teal-primary)' : 'var(--border)'}`,
+                      color: 'var(--text-primary)', minWidth: '140px', minHeight: 0,
+                    }}>
+                      <p style={{ fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</p>
+                      <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>{t.type} · {t.workout_template_exercises?.length || 0} exercises</p>
+                    </button>
+                  ))}
+                </div>
+                {selectedTemplate && (
+                  <p style={{ fontSize: '0.75rem', marginTop: '0.5rem', color: 'var(--teal-secondary)' }}>✓ Template loaded — you can still customize before assigning</p>
+                )}
+              </div>
+            )}
+
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.5rem' }}>
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>ASSIGN WORKOUT PLAN</h2>
               <form onSubmit={handleAssignPlan} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -593,6 +686,45 @@ export default function CoachPage() {
                     <Plus size={14} /> Add Exercise
                   </button>
                 </div>
+                {/* Save as Template */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem', paddingTop: '0.875rem', borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                  {!showSaveTemplate ? (
+                    <button type="button" onClick={() => setShowSaveTemplate(true)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.4rem 0.875rem', color: 'var(--text-secondary)', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0 }}>
+                      💾 Save as Template
+                    </button>
+                  ) : (
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', flex: 1 }}>
+                      <input type="text" value={templateName} onChange={e => setTemplateName(e.target.value)} placeholder="Template name…" style={{ ...inputBase, flex: 1, minWidth: '140px' }} />
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                        <input type="checkbox" id="shareTemplate" style={{ width: '14px', height: '14px' }} />
+                        Share with coaches
+                      </label>
+                      <button type="button" onClick={async () => {
+                        if (!templateName.trim() || !userId) return
+                        const { data: tmpl } = await supabase.from('workout_templates').insert({
+                          created_by: userId, title: templateName, description: assignForm.description,
+                          type: assignForm.type,
+                          is_shared: (document.getElementById('shareTemplate') as HTMLInputElement)?.checked || false,
+                        }).select().single()
+                        if (tmpl) {
+                          const exs = planExercises.filter(e => e.name.trim()).map((ex, i) => ({
+                            template_id: tmpl.id, name: ex.name,
+                            sets: ex.sets ? Number(ex.sets) : null, reps: ex.reps ? Number(ex.reps) : null,
+                            weight: ex.weight ? Number(ex.weight) : null, duration: ex.duration ? Number(ex.duration) : null,
+                            distance: ex.distance ? Number(ex.distance) : null, notes: ex.notes || null, order_index: i,
+                          }))
+                          if (exs.length > 0) await supabase.from('workout_template_exercises').insert(exs)
+                          await refreshTemplates(userId)
+                        }
+                        setTemplateName(''); setShowSaveTemplate(false)
+                      }} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.4rem 0.875rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}>
+                        Save
+                      </button>
+                      <button type="button" onClick={() => setShowSaveTemplate(false)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.4rem 0.625rem', color: 'var(--text-secondary)', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0 }}>✕</button>
+                    </div>
+                  )}
+                </div>
+
                 <button type="submit" disabled={planSaving} style={{ background: planSaving ? '#0d1a1e' : 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.875rem', fontWeight: 700, fontSize: '0.95rem', cursor: planSaving ? 'not-allowed' : 'pointer' }}>
                   {planSaving ? 'Assigning…' : 'Assign Plan'}
                 </button>
@@ -604,27 +736,130 @@ export default function CoachPage() {
             {assignedPlans.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No plans assigned yet.</p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 {assignedPlans.map(p => {
                   const tb = TYPE_BADGE[p.type] ?? TYPE_BADGE.both
                   const st = PLAN_STATUS[p.status ?? 'pending'] ?? PLAN_STATUS.pending
+                  const isEditingThis = editingPlan === p.id
                   return (
-                    <div key={p.id} className="card-vel" style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                          <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{p.title}</span>
-                          <span style={{ ...tb, fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase' }}>{p.type}</span>
+                    <div key={p.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', overflow: 'hidden' }}>
+                      <div style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{p.title}</span>
+                            <span style={{ ...tb, fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase' }}>{p.type}</span>
+                            <span style={{ fontSize: '0.75rem', color: st.color }}>{st.label}</span>
+                          </div>
+                          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                            {p.profiles?.name} · {p.scheduled_date} · {(p.workout_plan_exercises as any[])?.[0]?.count ?? 0} exercises
+                          </p>
                         </div>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                          {p.profiles?.name} · {p.scheduled_date} · {(p.workout_plan_exercises as any[])?.[0]?.count ?? 0} exercises
-                        </p>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ fontSize: '0.75rem', color: st.color }}>{st.label}</span>
-                        <button onClick={() => handleDeletePlan(p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', display: 'flex', minHeight: 0 }}>
-                          <Trash2 size={14} />
+                      <div style={{ display: 'flex', gap: '0.5rem', padding: '0 1rem 0.875rem' }}>
+                        <button onClick={async () => {
+                          if (isEditingThis) { setEditingPlan(null); return }
+                          const { data: exs } = await supabase.from('workout_plan_exercises').select('*').eq('plan_id', p.id).order('order_index')
+                          setEditPlanForm({ title: p.title, description: p.description || '', type: p.type, scheduled_date: p.scheduled_date, member_id: p.member_id })
+                          setEditPlanExercises((exs || []).map(ex => ({
+                            name: ex.name, sets: ex.sets?.toString() || '', reps: ex.reps?.toString() || '',
+                            weight: ex.weight?.toString() || '', duration: ex.duration?.toString() || '',
+                            distance: ex.distance?.toString() || '', notes: ex.notes || '',
+                          })))
+                          setEditingPlan(p.id)
+                        }} style={{ flex: 1, background: isEditingThis ? 'rgba(8,119,160,0.15)' : 'none', border: `1px solid ${isEditingThis ? 'var(--teal-primary)' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: isEditingThis ? 'var(--teal-secondary)' : 'var(--text-secondary)', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
+                          ✏️ {isEditingThis ? 'Editing…' : 'Edit'}
+                        </button>
+                        <button onClick={async () => {
+                          if (!confirm('Remove this assigned plan?') || !userId) return
+                          await supabase.from('workout_plans').delete().eq('id', p.id)
+                          await loadAssignedPlans(userId)
+                        }} style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: '#f87171', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
+                          🗑️ Remove
                         </button>
                       </div>
+
+                      {isEditingThis && (
+                        <div style={{ borderTop: '1px solid var(--border)', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.875rem', background: '#0a1518' }}>
+                          <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--teal-secondary)' }}>EDIT PLAN</p>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                            <div>
+                              <label style={labelBase}>Title</label>
+                              <input type="text" value={editPlanForm.title || ''} onChange={e => setEditPlanForm((prev: any) => ({ ...prev, title: e.target.value }))} style={{ ...inputBase, width: '100%' }} />
+                            </div>
+                            <div>
+                              <label style={labelBase}>Date</label>
+                              <input type="date" value={editPlanForm.scheduled_date || ''} onChange={e => setEditPlanForm((prev: any) => ({ ...prev, scheduled_date: e.target.value }))} style={{ ...inputBase, width: '100%' }} />
+                            </div>
+                          </div>
+                          <div>
+                            <label style={labelBase}>Type</label>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              {(['conditioning', 'basketball', 'both'] as const).map(t => (
+                                <button key={t} type="button" onClick={() => setEditPlanForm((prev: any) => ({ ...prev, type: t }))} style={{
+                                  flex: 1, background: editPlanForm.type === t ? 'rgba(8,119,160,0.2)' : '#0d1a1e',
+                                  border: `1px solid ${editPlanForm.type === t ? 'var(--teal-primary)' : '#1a2e34'}`,
+                                  borderRadius: '0.375rem', padding: '0.4rem', color: editPlanForm.type === t ? 'var(--teal-secondary)' : 'var(--text-secondary)',
+                                  fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize', minHeight: 0,
+                                }}>{t === 'conditioning' ? '🏋️' : t === 'basketball' ? '🏀' : '💪'}</button>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <label style={labelBase}>Description</label>
+                            <textarea value={editPlanForm.description || ''} onChange={e => setEditPlanForm((prev: any) => ({ ...prev, description: e.target.value }))} style={{ ...inputBase, width: '100%', minHeight: '50px', resize: 'vertical' }} />
+                          </div>
+                          <div>
+                            <label style={{ ...labelBase, marginBottom: '0.375rem' }}>Exercises</label>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                              {editPlanExercises.map((ex, idx) => {
+                                const sug = getSuggestions(ex.name, editPlanForm.type || 'conditioning')
+                                return (
+                                  <div key={idx} style={{ background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.375rem', padding: '0.625rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
+                                      <span style={{ fontSize: '0.65rem', color: 'var(--teal-secondary)', fontWeight: 700 }}>EX {idx + 1}</span>
+                                      {editPlanExercises.length > 1 && (
+                                        <button type="button" onClick={() => setEditPlanExercises(editPlanExercises.filter((_, i) => i !== idx))} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0 }}>
+                                          <Trash2 size={12} />
+                                        </button>
+                                      )}
+                                    </div>
+                                    <div style={{ position: 'relative', marginBottom: '0.375rem' }}>
+                                      <input type="text" value={ex.name} autoComplete="off" placeholder="Exercise name"
+                                        onChange={e => { updateEditPlanEx(idx, 'name', e.target.value); setActivePlanEditSuggestion(idx) }}
+                                        onFocus={() => ex.name.length > 0 && setActivePlanEditSuggestion(idx)}
+                                        onBlur={() => setTimeout(() => setActivePlanEditSuggestion(null), 150)}
+                                        style={{ ...inputBase, width: '100%' }}
+                                      />
+                                      {activePlanEditSuggestion === idx && sug.length > 0 && (
+                                        <div style={{ position: 'absolute', top: 'calc(100% - 1px)', left: 0, right: 0, zIndex: 20, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0 0 0.375rem 0.375rem', maxHeight: '140px', overflowY: 'auto' }}>
+                                          {sug.map(s => (
+                                            <button key={s} type="button"
+                                              onMouseDown={() => { updateEditPlanEx(idx, 'name', s); setActivePlanEditSuggestion(null) }}
+                                              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.4rem 0.75rem', background: 'none', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.04)', color: '#F2F2F2', fontSize: '0.8rem', cursor: 'pointer', minHeight: 30 }}
+                                            >{s}</button>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.375rem' }}>
+                                      {(['sets', 'reps', 'weight'] as const).map(f => (
+                                        <input key={f} type="number" value={ex[f]} onChange={e => updateEditPlanEx(idx, f, e.target.value)} style={{ ...inputBase, width: '100%' }} placeholder={f === 'weight' ? 'kg' : f === 'sets' ? 'Sets' : 'Reps'} min="0" />
+                                      ))}
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                              <button type="button" onClick={() => setEditPlanExercises([...editPlanExercises, blankEx()])} style={{ background: 'transparent', border: '1px dashed #1a2e34', borderRadius: '0.375rem', padding: '0.4rem', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.75rem', minHeight: 0 }}>
+                                + Add Exercise
+                              </button>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button type="button" onClick={handleSavePlanEdit} style={{ flex: 1, background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.625rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', minHeight: 0 }}>Save Changes</button>
+                            <button type="button" onClick={() => setEditingPlan(null)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.625rem 0.875rem', color: 'var(--text-secondary)', fontSize: '0.875rem', cursor: 'pointer', minHeight: 0 }}>Cancel</button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )
                 })}

@@ -26,22 +26,23 @@ function classTypeColor(type: string): { bg: string; color: string } {
 
 function generateRecurringDates(startDate: string, endDate: string, rule: string, days: string[]): string[] {
   const dates: string[] = []
-  const start = new Date(startDate)
-  const end = new Date(endDate)
-  const dayMap: Record<string, number> = { sunday:0, monday:1, tuesday:2, wednesday:3, thursday:4, friday:5, saturday:6 }
+  const start = new Date(startDate + 'T00:00:00')
+  const end = new Date(endDate + 'T00:00:00')
+  if (end <= start) return []
   const current = new Date(start)
   current.setDate(current.getDate() + 1)
   while (current <= end) {
     const dayName = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][current.getDay()]
+    const dateStr = current.toISOString().split('T')[0]
+    const weekNum = Math.floor((current.getTime() - start.getTime()) / (7*24*60*60*1000))
     if (rule === 'daily') {
-      dates.push(current.toISOString().split('T')[0])
-    } else if (rule === 'weekly' && days.includes(dayName)) {
-      dates.push(current.toISOString().split('T')[0])
+      dates.push(dateStr)
+    } else if (rule === 'weekly') {
+      if (days.length === 0 || days.includes(dayName)) dates.push(dateStr)
     } else if (rule === 'biweekly') {
-      const weekDiff = Math.floor((current.getTime() - start.getTime()) / (7*24*60*60*1000))
-      if (weekDiff % 2 === 0 && days.includes(dayName)) dates.push(current.toISOString().split('T')[0])
-    } else if (rule === 'monthly' && current.getDate() === start.getDate()) {
-      dates.push(current.toISOString().split('T')[0])
+      if (weekNum % 2 === 0 && (days.length === 0 || days.includes(dayName))) dates.push(dateStr)
+    } else if (rule === 'monthly') {
+      if (current.getDate() === start.getDate()) dates.push(dateStr)
     }
     current.setDate(current.getDate() + 1)
   }
@@ -145,6 +146,7 @@ export default function CalendarPage() {
   const [groups, setGroups] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [createError, setCreateError] = useState('')
 
   const [createForm, setCreateForm] = useState({
     title: '', description: '', type: 'conditioning', group_id: '',
@@ -200,6 +202,15 @@ export default function CalendarPage() {
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!userId) return
+    setCreateError('')
+    if (createForm.is_recurring && !createForm.recurrence_end_date) {
+      setCreateError('Please set an end date for recurring classes.')
+      return
+    }
+    if (createForm.is_recurring && createForm.recurrence_days.length === 0 && createForm.recurrence_rule !== 'daily' && createForm.recurrence_rule !== 'monthly') {
+      setCreateError('Please select at least one day of the week for recurring classes.')
+      return
+    }
     setSaving(true)
 
     const { data: newClass } = await supabase.from('scheduled_classes').insert({
@@ -374,10 +385,16 @@ export default function CalendarPage() {
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '1.5rem', width: '100%', maxWidth: '540px', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>SCHEDULE CLASS</h2>
-              <button onClick={() => setShowCreateModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0 }}>
+              <button onClick={() => { setShowCreateModal(false); setCreateError('') }} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0 }}>
                 <X size={20} />
               </button>
             </div>
+
+            {createError && (
+              <div style={{ background: 'rgba(127,29,29,0.4)', color: '#fca5a5', border: '1px solid #7f1d1d', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
+                ⚠️ {createError}
+              </div>
+            )}
 
             <form onSubmit={handleCreateClass} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
@@ -480,8 +497,13 @@ export default function CalendarPage() {
                   )}
                   {/* End date */}
                   <div>
-                    <label style={labelBase}>End Date</label>
-                    <input type="date" value={createForm.recurrence_end_date} onChange={e => setCreateForm(p => ({ ...p, recurrence_end_date: e.target.value }))} style={inputBase} min={createForm.scheduled_date} />
+                    <label style={labelBase}>End Date <span style={{ color: '#f87171' }}>*</span></label>
+                    <input type="date" value={createForm.recurrence_end_date} onChange={e => setCreateForm(p => ({ ...p, recurrence_end_date: e.target.value }))} style={inputBase}
+                      min={createForm.scheduled_date ? new Date(new Date(createForm.scheduled_date + 'T00:00:00').getTime() + 86400000).toISOString().split('T')[0] : undefined}
+                    />
+                    {!createForm.recurrence_end_date && (
+                      <p style={{ fontSize: '0.7rem', color: '#f87171', marginTop: '0.25rem' }}>End date is required for recurring classes</p>
+                    )}
                   </div>
                 </div>
               )}

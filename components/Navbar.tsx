@@ -103,6 +103,15 @@ export default function Navbar() {
               <p style={{ fontSize: '0.65rem', color: 'var(--teal-primary)', textTransform: 'capitalize' }}>{userRole}</p>
             </div>
           )}
+          {/* Profile avatar */}
+          <Link href="/profile" style={{
+            width: '36px', height: '36px', borderRadius: '50%', flexShrink: 0,
+            background: 'var(--teal-primary)', color: 'white',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '0.875rem', fontWeight: 700, textDecoration: 'none',
+          }}>
+            {userName?.charAt(0)?.toUpperCase() || '?'}
+          </Link>
           <button
             onClick={handleLogout}
             title="Logout"

@@ -27,11 +27,45 @@ function TodayPlanCard({ plan, onUpdate }: { plan: any; onUpdate: () => void }) 
   const [showReschedule, setShowReschedule] = useState(false)
   const [newDate, setNewDate] = useState('')
   const [loading, setLoading] = useState(false)
+  const [justCompleted, setJustCompleted] = useState(false)
 
   const handleComplete = async () => {
     setLoading(true)
-    await supabase.from('workout_plans').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', plan.id)
-    onUpdate(); setLoading(false)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setLoading(false); return }
+
+    const { data: newWorkout } = await supabase.from('workouts').insert({
+      user_id: user.id,
+      title: plan.title,
+      type: plan.type,
+      notes: `Auto-logged from assigned plan. ${plan.description || ''}`.trim(),
+      duration: null,
+      date: new Date().toISOString(),
+    }).select().single()
+
+    if (newWorkout && (plan.workout_plan_exercises?.length ?? 0) > 0) {
+      await supabase.from('exercises').insert(
+        plan.workout_plan_exercises
+          .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
+          .map((ex: any) => ({
+            workout_id: newWorkout.id,
+            name: ex.name, sets: ex.sets, reps: ex.reps,
+            weight: ex.weight, duration: ex.duration,
+            distance: ex.distance, notes: ex.notes,
+          }))
+      )
+    }
+
+    await supabase.from('workout_plans').update({
+      status: 'completed',
+      completed_at: new Date().toISOString(),
+      auto_logged_workout_id: newWorkout?.id ?? null,
+    }).eq('id', plan.id)
+
+    setJustCompleted(true)
+    setTimeout(() => setJustCompleted(false), 3000)
+    onUpdate()
+    setLoading(false)
   }
   const handleSkip = async () => {
     setLoading(true)
@@ -94,6 +128,12 @@ function TodayPlanCard({ plan, onUpdate }: { plan: any; onUpdate: () => void }) 
           <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} min={new Date().toISOString().split('T')[0]} style={{ ...inputBase, flex: 1 }} />
           <button onClick={handleReschedule} disabled={loading || !newDate} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.875rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}>Confirm</button>
           <button onClick={() => setShowReschedule(false)} style={{ background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.875rem', cursor: 'pointer', minHeight: 0 }}>Cancel</button>
+        </div>
+      )}
+
+      {justCompleted && (
+        <div style={{ background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.75rem', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
+          ✅ Workout logged automatically to your workout history!
         </div>
       )}
 
