@@ -314,6 +314,8 @@ export default function CoachPage() {
   const [templates, setTemplates] = useState<any[]>([])
   const [showSaveTemplate, setShowSaveTemplate] = useState(false)
   const [templateName, setTemplateName] = useState('')
+  const [shareTemplate, setShareTemplate] = useState(false)
+  const [templateSaved, setTemplateSaved] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null)
 
   // Edit assigned plan
@@ -938,40 +940,57 @@ export default function CoachPage() {
                   </button>
                 </div>
                 {/* Save as Template */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem', paddingTop: '0.875rem', borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                <div style={{ marginTop: '0.5rem', paddingTop: '0.875rem', borderTop: '1px solid var(--border)' }}>
+                  {templateSaved && (
+                    <div style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.625rem 0.875rem', marginBottom: '0.75rem', color: '#4ade80', fontSize: '0.8rem' }}>
+                      ✅ Template saved!{shareTemplate ? " It's now visible in Shared by Coaches." : ''}
+                    </div>
+                  )}
                   {!showSaveTemplate ? (
-                    <button type="button" onClick={() => setShowSaveTemplate(true)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.4rem 0.875rem', color: 'var(--text-secondary)', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0 }}>
-                      💾 Save as Template
+                    <button type="button" onClick={() => setShowSaveTemplate(true)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.4rem 0.875rem', color: 'var(--text-secondary)', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0, width: '100%' }}>
+                      💾 Save as Reusable Template
                     </button>
                   ) : (
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', flex: 1 }}>
-                      <input type="text" value={templateName} onChange={e => setTemplateName(e.target.value)} placeholder="Template name…" style={{ ...inputBase, flex: 1, minWidth: '140px' }} />
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                        <input type="checkbox" id="shareTemplate" style={{ width: '14px', height: '14px' }} />
-                        Share with coaches
+                    <div style={{ background: '#0a1518', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                      <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)' }}>Save as Template</p>
+                      <input type="text" value={templateName} onChange={e => setTemplateName(e.target.value)} placeholder="Template name…" style={{ ...inputBase, width: '100%' }} />
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer' }}>
+                        <div
+                          onClick={() => setShareTemplate(!shareTemplate)}
+                          style={{ width: '36px', height: '22px', borderRadius: '999px', position: 'relative', flexShrink: 0, background: shareTemplate ? 'var(--teal-primary)' : 'var(--border)', cursor: 'pointer', transition: 'background 0.2s' }}
+                        >
+                          <div style={{ position: 'absolute', top: '3px', width: '16px', height: '16px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s', left: shareTemplate ? '17px' : '3px' }} />
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Share with all coaches</p>
+                          <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', margin: 0 }}>{shareTemplate ? 'Will appear in Shared by Coaches tab' : 'Only you can see this template'}</p>
+                        </div>
                       </label>
-                      <button type="button" onClick={async () => {
-                        if (!templateName.trim() || !userId) return
-                        const { data: tmpl } = await supabase.from('workout_templates').insert({
-                          created_by: userId, title: templateName, description: assignForm.description,
-                          type: assignForm.type,
-                          is_shared: (document.getElementById('shareTemplate') as HTMLInputElement)?.checked || false,
-                        }).select().single()
-                        if (tmpl) {
-                          const exs = planExercises.filter(e => e.name.trim()).map((ex, i) => ({
-                            template_id: tmpl.id, name: ex.name,
-                            sets: ex.sets ? Number(ex.sets) : null, reps: ex.reps ? Number(ex.reps) : null,
-                            weight: ex.weight ? Number(ex.weight) : null, duration: ex.duration ? Number(ex.duration) : null,
-                            distance: ex.distance ? Number(ex.distance) : null, notes: ex.notes || null, order_index: i,
-                          }))
-                          if (exs.length > 0) await supabase.from('workout_template_exercises').insert(exs)
-                          await refreshTemplates(userId)
-                        }
-                        setTemplateName(''); setShowSaveTemplate(false)
-                      }} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.4rem 0.875rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}>
-                        Save
-                      </button>
-                      <button type="button" onClick={() => setShowSaveTemplate(false)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.4rem 0.625rem', color: 'var(--text-secondary)', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0 }}>✕</button>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button type="button" onClick={async () => {
+                          if (!templateName.trim() || !userId) return
+                          const { data: tmpl } = await supabase.from('workout_templates').insert({
+                            created_by: userId, title: templateName.trim(), description: assignForm.description || null,
+                            type: assignForm.type, is_shared: shareTemplate, is_default: false, is_visible_to_members: false,
+                          }).select().single()
+                          if (tmpl) {
+                            const exs = planExercises.filter(e => e.name.trim()).map((ex, i) => ({
+                              template_id: tmpl.id, name: ex.name,
+                              sets: ex.sets ? Number(ex.sets) : null, reps: ex.reps ? Number(ex.reps) : null,
+                              weight: ex.weight ? Number(ex.weight) : null, duration: ex.duration ? Number(ex.duration) : null,
+                              distance: ex.distance ? Number(ex.distance) : null, notes: ex.notes || null, order_index: i,
+                            }))
+                            if (exs.length > 0) await supabase.from('workout_template_exercises').insert(exs)
+                            await refreshTemplates(userId)
+                          }
+                          setTemplateSaved(true)
+                          setTemplateName(''); setShowSaveTemplate(false); setShareTemplate(false)
+                          setTimeout(() => setTemplateSaved(false), 3000)
+                        }} style={{ flex: 1, background: templateName.trim() ? 'var(--teal-primary)' : '#0d1a1e', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.5rem 0.875rem', fontSize: '0.8rem', fontWeight: 700, cursor: templateName.trim() ? 'pointer' : 'not-allowed', minHeight: 0 }}>
+                          Save Template
+                        </button>
+                        <button type="button" onClick={() => { setShowSaveTemplate(false); setTemplateName(''); setShareTemplate(false) }} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.5rem 0.625rem', color: 'var(--text-secondary)', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0 }}>Cancel</button>
+                      </div>
                     </div>
                   )}
                 </div>

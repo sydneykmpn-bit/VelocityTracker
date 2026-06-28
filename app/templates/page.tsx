@@ -47,11 +47,11 @@ export default function TemplatesPage() {
 
     const { data: shared } = await supabase
       .from('workout_templates')
-      .select('*, workout_template_exercises(*), profiles(name)')
+      .select('*, workout_template_exercises(*), profiles(id, name, role)')
       .eq('is_shared', true)
       .eq('is_default', false)
       .order('updated_at', { ascending: false })
-    setSharedTemplates(shared?.filter(t => t.created_by !== uid) || [])
+    setSharedTemplates(shared || [])
 
     const { data: mine } = await supabase
       .from('workout_templates')
@@ -245,9 +245,17 @@ export default function TemplatesPage() {
                         {t.description && <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{t.description}</p>}
                         <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>{t.workout_template_exercises?.length || 0} exercises</p>
                         {activeTab === 'shared' && (
-                          <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>
-                            Shared by {(t.profiles as any)?.name || 'Coach'} · {new Date(t.updated_at || t.created_at).toLocaleDateString()}
-                          </p>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+                            <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--teal-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, flexShrink: 0 }}>
+                              {(t.profiles as any)?.name?.charAt(0)?.toUpperCase() || 'C'}
+                            </div>
+                            <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', margin: 0 }}>
+                              Shared by <span style={{ color: 'var(--teal-secondary)' }}>{(t.profiles as any)?.name || 'Coach'}</span>
+                              {(t.updated_at || t.created_at) && (
+                                <span style={{ color: 'var(--text-secondary)' }}> · {new Date(t.updated_at || t.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                              )}
+                            </p>
+                          </div>
                         )}
                       </div>
                       <div style={{ display: 'flex', gap: '0.375rem', flexShrink: 0, flexWrap: 'wrap' }}>

@@ -81,9 +81,21 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
   const [activeSuggestion, setActiveSuggestion] = useState<number | null>(null)
   const [sharedTemplates, setSharedTemplates] = useState<any[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null)
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false)
+  const [templateName, setTemplateName] = useState('')
+  const [shareTemplate, setShareTemplate] = useState(false)
+  const [templateSaved, setTemplateSaved] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState('')
+  const [userRole, setUserRole] = useState('')
 
   useEffect(() => {
     const supabase = createClient()
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return
+      setCurrentUserId(user.id)
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+      setUserRole(profile?.role || 'member')
+    })
     supabase.from('workout_templates').select('*, workout_template_exercises(*)').eq('is_shared', true).order('title')
       .then(({ data }) => setSharedTemplates(data ?? []))
   }, [])
@@ -112,6 +124,45 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
         setSelectedTemplate(t)
       })
   }, [templateId])
+
+  const handleSaveTemplate = async () => {
+    if (!templateName.trim() || !currentUserId) return
+    const supabase = createClient()
+    const { data: tmpl } = await supabase
+      .from('workout_templates')
+      .insert({
+        created_by: currentUserId,
+        title: templateName.trim(),
+        description: notes || null,
+        type: workoutType,
+        is_shared: shareTemplate && (userRole === 'coach' || userRole === 'admin'),
+        is_default: false,
+        is_visible_to_members: shareTemplate && userRole === 'admin',
+      })
+      .select()
+      .single()
+    if (tmpl && exercises.filter(e => e.name.trim()).length > 0) {
+      await supabase.from('workout_template_exercises').insert(
+        exercises
+          .filter(e => e.name.trim())
+          .map((ex, i) => ({
+            template_id: tmpl.id,
+            name: ex.name,
+            sets: ex.sets ? Number(ex.sets) : null,
+            reps: ex.reps ? Number(ex.reps) : null,
+            weight: ex.weight ? Number(ex.weight) : null,
+            duration: ex.duration ? Number(ex.duration) : null,
+            notes: ex.notes || null,
+            order_index: i,
+          }))
+      )
+    }
+    setTemplateSaved(true)
+    setShowSaveTemplate(false)
+    setTemplateName('')
+    setShareTemplate(false)
+    setTimeout(() => setTemplateSaved(false), 3000)
+  }
 
   const update = (idx: number, field: keyof Exercise, val: string) => {
     const next = [...exercises]
@@ -352,6 +403,77 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
         >
           <Plus size={16} /> Add Exercise
         </button>
+      </div>
+
+      {/* Save as Template */}
+      <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
+        {templateSaved && (
+          <div style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '0.75rem', color: '#4ade80', fontSize: '0.875rem' }}>
+            ✅ Template saved! Find it in the Templates library.
+          </div>
+        )}
+        {!showSaveTemplate ? (
+          <button
+            type="button"
+            onClick={() => setShowSaveTemplate(true)}
+            style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.6rem 1rem', color: 'var(--text-secondary)', fontSize: '0.875rem', cursor: 'pointer', width: '100%' }}
+          >
+            💾 Save Current Workout as Template
+          </button>
+        ) : (
+          <div style={{ background: '#0a1518', border: '1px solid #1a2e34', borderRadius: '0.75rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)' }}>Save as Template</p>
+            <input
+              type="text"
+              value={templateName}
+              onChange={e => setTemplateName(e.target.value)}
+              placeholder="Template name (e.g. Monday Push Day)"
+              style={inputBase}
+            />
+            {(userRole === 'coach' || userRole === 'admin') && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
+                  <div
+                    onClick={() => setShareTemplate(!shareTemplate)}
+                    style={{
+                      width: '40px', height: '24px', borderRadius: '999px', position: 'relative', flexShrink: 0,
+                      background: shareTemplate ? 'var(--teal-primary)' : 'var(--border)', cursor: 'pointer', transition: 'background 0.2s',
+                    }}
+                  >
+                    <div style={{
+                      position: 'absolute', top: '4px', width: '16px', height: '16px', borderRadius: '50%',
+                      background: '#fff', transition: 'left 0.2s', left: shareTemplate ? '20px' : '4px',
+                    }} />
+                  </div>
+                  <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Share with other coaches</span>
+                </label>
+                {shareTemplate && (
+                  <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)' }}>✓ This template will appear in the "Shared by Coaches" tab for all coaches</p>
+                )}
+              </div>
+            )}
+            {userRole === 'member' && (
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>This template will be saved to your personal templates library.</p>
+            )}
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={handleSaveTemplate}
+                disabled={!templateName.trim()}
+                style={{ flex: 1, background: templateName.trim() ? 'var(--teal-primary)' : '#0d1a1e', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.625rem', fontWeight: 700, fontSize: '0.875rem', cursor: templateName.trim() ? 'pointer' : 'not-allowed' }}
+              >
+                Save Template
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowSaveTemplate(false); setTemplateName(''); setShareTemplate(false) }}
+                style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.625rem 0.875rem', color: 'var(--text-secondary)', fontSize: '0.875rem', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <button type="submit" disabled={loading} style={{
