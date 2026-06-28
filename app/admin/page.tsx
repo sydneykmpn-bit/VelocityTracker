@@ -29,8 +29,74 @@ const roleBadgeStyle = (role: string): React.CSSProperties => ({
 
 const MEDALS: Record<number, string> = { 0: '🥇', 1: '🥈', 2: '🥉' }
 
+function WorkoutHistoryCard({ workout, supabase }: { workout: any; supabase: any }) {
+  const [expanded, setExpanded] = useState(false)
+  const [exercises, setExercises] = useState<any[]>([])
+  const [loadingEx, setLoadingEx] = useState(false)
+
+  const toggleExpand = async () => {
+    if (!expanded && exercises.length === 0) {
+      setLoadingEx(true)
+      const { data } = await supabase.from('exercises').select('*').eq('workout_id', workout.id).order('id')
+      setExercises(data || [])
+      setLoadingEx(false)
+    }
+    setExpanded(!expanded)
+  }
+
+  const TYPE_BADGE_WH: Record<string, { bg: string; color: string; border: string }> = {
+    basketball: { bg: 'rgba(8,119,160,0.2)', color: '#34bac2', border: 'rgba(8,119,160,0.35)' },
+    conditioning: { bg: 'rgba(34,197,94,0.15)', color: '#4ade80', border: 'rgba(34,197,94,0.25)' },
+    both: { bg: 'rgba(168,85,247,0.15)', color: '#c084fc', border: 'rgba(168,85,247,0.25)' },
+  }
+  const tb = TYPE_BADGE_WH[workout.type] ?? TYPE_BADGE_WH.both
+
+  return (
+    <div style={{ borderRadius: '0.75rem', overflow: 'hidden', border: '1px solid var(--border)' }}>
+      <div style={{ padding: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', background: 'var(--surface-raised)' }} onClick={toggleExpand}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', ...tb }}>{workout.type}</span>
+            {workout.duration && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>⏱ {workout.duration}min</span>}
+          </div>
+          <p style={{ fontWeight: 600, fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{workout.title}</p>
+          <p style={{ fontSize: '0.7rem', marginTop: '0.15rem', color: 'var(--text-secondary)' }}>
+            {new Date(workout.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+          </p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
+          <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{workout.exercises?.[0]?.count || 0} ex</span>
+          <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{expanded ? '▲' : '▼'}</span>
+        </div>
+      </div>
+      {expanded && (
+        <div style={{ padding: '1rem', background: 'var(--surface)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {workout.notes && <p style={{ fontSize: '0.875rem', fontStyle: 'italic', marginBottom: '0.5rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)' }}>"{workout.notes}"</p>}
+          {loadingEx ? (
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Loading exercises…</p>
+          ) : exercises.length === 0 ? (
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No exercises logged for this workout.</p>
+          ) : exercises.map(ex => (
+            <div key={ex.id} style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.75rem' }}>
+              <p style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.25rem' }}>{ex.name}</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', fontSize: '0.75rem' }}>
+                {ex.sets && ex.reps && <span><span style={{ color: 'var(--text-secondary)' }}>Sets×Reps </span><span style={{ fontWeight: 600 }}>{ex.sets}×{ex.reps}</span></span>}
+                {ex.weight && <span><span style={{ color: 'var(--text-secondary)' }}>Weight </span><span style={{ fontWeight: 600, color: 'var(--teal-secondary)' }}>{ex.weight}kg</span></span>}
+                {ex.duration && <span><span style={{ color: 'var(--text-secondary)' }}>Duration </span><span style={{ fontWeight: 600 }}>{ex.duration}min</span></span>}
+                {ex.distance && <span><span style={{ color: 'var(--text-secondary)' }}>Distance </span><span style={{ fontWeight: 600 }}>{ex.distance}km</span></span>}
+              </div>
+              {ex.notes && <p style={{ fontSize: '0.75rem', marginTop: '0.375rem', fontStyle: 'italic', color: 'var(--text-secondary)' }}>{ex.notes}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function MemberProfileModal({ memberId, memberName, onClose }: { memberId: string; memberName: string; onClose: () => void }) {
   const supabase = createClient()
+  const [workoutLimit, setWorkoutLimit] = useState(10)
   const [profile, setProfile] = useState<any>(null)
   const [recentWorkouts, setRecentWorkouts] = useState<any[]>([])
   const [prs, setPRs] = useState<any[]>([])
@@ -42,7 +108,7 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
     async function load() {
       const { data: p } = await supabase.from('profiles').select('*').eq('id', memberId).single()
       setProfile(p)
-      const { data: w } = await supabase.from('workouts').select('*, exercises(count)').eq('user_id', memberId).order('date', { ascending: false }).limit(10)
+      const { data: w } = await supabase.from('workouts').select('*, exercises(count)').eq('user_id', memberId).order('date', { ascending: false }).limit(workoutLimit)
       setRecentWorkouts(w || [])
       const { data: pr } = await supabase.from('personal_records').select('*').eq('user_id', memberId).order('recorded_at', { ascending: false }).limit(10)
       setPRs(pr || [])
@@ -56,7 +122,7 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
     }
     load()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [memberId])
+  }, [memberId, workoutLimit])
 
   const TYPE_BADGE_M: Record<string, { bg: string; color: string; border: string }> = {
     basketball: { bg: 'rgba(8,119,160,0.2)', color: '#34bac2', border: 'rgba(8,119,160,0.35)' },
@@ -132,21 +198,20 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
                 </div>
               )}
               {activeModalTab === 'workouts' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {recentWorkouts.length === 0 ? <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No workouts yet.</p>
-                  : recentWorkouts.map(w => (
-                    <div key={w.id} style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.875rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.25rem' }}>
-                        <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{w.title}</p>
-                        <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', ...(TYPE_BADGE_M[w.type] ?? TYPE_BADGE_M.both) }}>{w.type}</span>
-                      </div>
-                      <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
-                        <span>📅 {new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                        {w.duration && <span>⏱ {w.duration}min</span>}
-                        <span>💪 {(w.exercises as any[])?.[0]?.count ?? 0} ex</span>
-                      </div>
-                    </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {recentWorkouts.length === 0 ? (
+                    <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No workouts logged yet.</p>
+                  ) : recentWorkouts.map(w => (
+                    <WorkoutHistoryCard key={w.id} workout={w} supabase={supabase} />
                   ))}
+                  {recentWorkouts.length === workoutLimit && (
+                    <button
+                      onClick={() => setWorkoutLimit(prev => prev + 10)}
+                      style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.625rem', color: 'var(--text-secondary)', fontSize: '0.875rem', cursor: 'pointer', width: '100%', marginTop: '0.25rem' }}
+                    >
+                      Load More Workouts
+                    </button>
+                  )}
                 </div>
               )}
               {activeModalTab === 'prs' && (
@@ -197,6 +262,7 @@ export default function AdminPage() {
   // Leaderboard tab
   const [allPRs, setAllPRs] = useState<any[]>([])
   const [prFilter, setPrFilter] = useState('')
+  const [prGenderFilter, setPrGenderFilter] = useState('all')
 
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -234,7 +300,7 @@ export default function AdminPage() {
         loadProfiles(),
         loadGroups(),
         supabase.from('workouts').select('*, profiles(name)').order('created_at', { ascending: false }).then(({ data }) => setAllWorkouts(data ?? [])),
-        supabase.from('personal_records').select('*, profiles(name)').order('value', { ascending: false }).then(({ data }) => setAllPRs(data ?? [])),
+        supabase.from('personal_records').select('*, profiles(name, gender)').order('value', { ascending: false }).then(({ data }) => setAllPRs(data ?? [])),
       ])
       setLoading(false)
     }
@@ -290,7 +356,11 @@ export default function AdminPage() {
 
   const coaches = profiles.filter(p => p.role === 'coach' || p.role === 'admin')
   const members = profiles.filter(p => p.role === 'member')
-  const filteredPRs = prFilter.trim() ? allPRs.filter(r => (r.exercise_name ?? r.exercise ?? '').toLowerCase().includes(prFilter.toLowerCase())) : allPRs
+  const filteredPRs = allPRs.filter(r => {
+    const matchesSearch = !prFilter.trim() || (r.exercise_name ?? r.exercise ?? '').toLowerCase().includes(prFilter.toLowerCase())
+    const matchesGender = prGenderFilter === 'all' || (r.profiles as any)?.gender === prGenderFilter
+    return matchesSearch && matchesGender
+  })
 
   if (loading) {
     return (
@@ -524,8 +594,13 @@ export default function AdminPage() {
         {/* ── LEADERBOARD TAB ── */}
         {activeTab === 'leaderboard' && (
           <div>
-            <div style={{ marginBottom: '1rem' }}>
-              <input type="text" value={prFilter} onChange={e => setPrFilter(e.target.value)} placeholder="Filter by exercise…" style={{ ...inputBase, width: '100%', maxWidth: '300px' }} />
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem', alignItems: 'center' }}>
+              <input type="text" value={prFilter} onChange={e => setPrFilter(e.target.value)} placeholder="Filter by exercise…" style={{ ...inputBase, maxWidth: '260px' }} />
+              {[{ key: 'all', label: 'All' }, { key: 'male', label: '♂ Men' }, { key: 'female', label: '♀ Women' }].map(g => (
+                <button key={g.key} onClick={() => setPrGenderFilter(g.key)} style={{ padding: '0.4rem 0.875rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer', background: prGenderFilter === g.key ? 'var(--surface)' : 'transparent', color: prGenderFilter === g.key ? 'var(--text-primary)' : 'var(--text-secondary)', border: `1px solid ${prGenderFilter === g.key ? 'var(--teal-primary)' : 'var(--border)'}`, transition: 'all 0.15s', minHeight: 36 }}>
+                  {g.label}
+                </button>
+              ))}
             </div>
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem', overflow: 'hidden' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>

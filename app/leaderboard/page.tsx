@@ -107,19 +107,30 @@ export default function LeaderboardPage() {
     ? EXERCISE_LIST.filter(e => e.toLowerCase().includes(exercise.toLowerCase())).slice(0, 6)
     : []
 
-  const loadPublicRecords = async () => {
-    const currentMonth = new Date().toISOString().slice(0, 7)
-    let query = supabase
+  const loadLeaderboard = async () => {
+    const { data: rawData } = await supabase
       .from('personal_records')
       .select('*, profiles(id, name, gender)')
       .eq('is_public', true)
-      .eq('month_year', currentMonth)
       .order('value', { ascending: false })
-    if (featuredFilter !== 'all') query = query.eq('exercise_name', featuredFilter)
-    if (searchFilter) query = query.ilike('exercise_name', `%${searchFilter}%`)
-    const { data } = await query
-    let filtered = data ?? []
-    if (genderFilter !== 'all') filtered = filtered.filter((r: any) => r.profiles?.gender === genderFilter)
+
+    let filtered = rawData || []
+
+    if (featuredFilter !== 'all') {
+      filtered = filtered.filter((r: any) => r.exercise_name === featuredFilter)
+    }
+    if (searchFilter.trim()) {
+      filtered = filtered.filter((r: any) =>
+        r.exercise_name?.toLowerCase().includes(searchFilter.toLowerCase())
+      )
+    }
+    if (genderFilter !== 'all') {
+      filtered = filtered.filter((r: any) => {
+        const profileGender = (r.profiles as any)?.gender
+        return profileGender === genderFilter
+      })
+    }
+
     setPublicRecords(filtered)
   }
 
@@ -133,14 +144,14 @@ export default function LeaderboardPage() {
   }
 
   const loadData = async (uid: string) => {
-    await Promise.all([loadPublicRecords(), loadMyRecords(uid)])
+    await Promise.all([loadLeaderboard(), loadMyRecords(uid)])
   }
 
   useEffect(() => {
     const today = new Date()
     if (today.getDate() === 1) {
       supabase.rpc('reset_monthly_leaderboard').then(() => {
-        loadPublicRecords()
+        loadLeaderboard()
       })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -159,7 +170,7 @@ export default function LeaderboardPage() {
   }, [])
 
   useEffect(() => {
-    if (userId) loadPublicRecords()
+    if (userId) loadLeaderboard()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [featuredFilter, genderFilter, searchFilter])
 
@@ -371,6 +382,7 @@ export default function LeaderboardPage() {
               ) : (
                 publicRecords.map((r, i) => {
                   const medal = MEDALS[i]
+                  const profile = r.profiles as { id: string; name: string; gender: string } | null
                   return (
                     <div key={r.id} className="card-vel" style={{ padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: medal ? `${medal.color}08` : 'var(--surface)' }}>
                       <span style={{ fontSize: '1.1rem', width: '2rem', textAlign: 'center', flexShrink: 0 }}>
@@ -378,7 +390,9 @@ export default function LeaderboardPage() {
                       </span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {r.profiles?.name ?? '—'}{genderBadge(r.profiles?.gender)}
+                          {profile?.name ?? '—'}
+                          {profile?.gender === 'male' && <span style={{ marginLeft: '0.25rem', fontSize: '0.7rem', color: '#60a5fa' }}>♂</span>}
+                          {profile?.gender === 'female' && <span style={{ marginLeft: '0.25rem', fontSize: '0.7rem', color: '#f472b6' }}>♀</span>}
                         </p>
                         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.exercise_name ?? r.exercise}</p>
                       </div>

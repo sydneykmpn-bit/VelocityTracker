@@ -62,30 +62,8 @@ function generateRecurringDates(
   return dates
 }
 
-function ClassCard({ cls, userRole, onUpdate }: { cls: any; userRole: string; onUpdate: () => void }) {
-  const supabase = createClient()
-  const [showAttendees, setShowAttendees] = useState(false)
-  const [attendees, setAttendees] = useState<any[]>([])
-
-  const loadAttendees = async () => {
-    const { data } = await supabase.from('class_attendees').select('*, profiles(name, email)').eq('class_id', cls.id)
-    setAttendees(data ?? [])
-    setShowAttendees(true)
-  }
-
-  const markAttendance = async (attendeeId: string, status: string) => {
-    await supabase.from('class_attendees').update({ status }).eq('id', attendeeId)
-    await loadAttendees()
-  }
-
-  const deleteClass = async () => {
-    if (!confirm('Delete this class?')) return
-    await supabase.from('scheduled_classes').delete().eq('id', cls.id)
-    onUpdate()
-  }
-
+function ClassCard({ cls, userRole }: { cls: any; userRole: string }) {
   const tc = classTypeColor(cls.type)
-
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', marginBottom: '0.75rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '0.5rem' }}>
@@ -103,42 +81,199 @@ function ClassCard({ cls, userRole, onUpdate }: { cls: any; userRole: string; on
           {cls.type}
         </span>
       </div>
+      <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)', fontWeight: 600, marginTop: '0.25rem' }}>View Details →</p>
+    </div>
+  )
+}
 
-      {(userRole === 'admin' || userRole === 'coach') && (
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
-          <button onClick={loadAttendees} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: 'var(--text-secondary)', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
-            👥 Attendees
-          </button>
-          <button onClick={deleteClass} style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: '#f87171', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
-            Delete
-          </button>
-        </div>
-      )}
+function ClassDetailModal({ cls, userId, userRole, onClose, onUpdate }: { cls: any; userId: string; userRole: string; onClose: () => void; onUpdate: () => void }) {
+  const supabase = createClient()
+  const [attendees, setAttendees] = useState<any[]>([])
+  const [myAttendance, setMyAttendance] = useState<any>(null)
+  const [loadingAttendees, setLoadingAttendees] = useState(false)
+  const [rsvpLoading, setRsvpLoading] = useState(false)
 
-      {showAttendees && (
-        <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
-          {attendees.length === 0 ? (
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No attendees added yet.</p>
-          ) : attendees.map(a => (
-            <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.375rem 0' }}>
-              <p style={{ fontSize: '0.875rem' }}>{a.profiles?.name}</p>
-              {(userRole === 'admin' || userRole === 'coach') && (
-                <div style={{ display: 'flex', gap: '0.25rem' }}>
-                  {(['attended', 'absent', 'excused'] as const).map(s => (
-                    <button key={s} onClick={() => markAttendance(a.id, s)} style={{
-                      fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', border: 'none', cursor: 'pointer', minHeight: 0,
-                      background: a.status === s ? (s === 'attended' ? '#22c55e' : s === 'absent' ? '#ef4444' : '#f59e0b') : 'var(--surface-raised)',
-                      color: a.status === s ? '#fff' : 'var(--text-secondary)',
-                    }}>
-                      {s === 'attended' ? '✓' : s === 'absent' ? '✗' : 'E'}
-                    </button>
-                  ))}
-                </div>
-              )}
+  const classId = cls.is_dynamic ? cls.parent_class_id : cls.id
+
+  useEffect(() => {
+    async function load() {
+      if (!classId) return
+      setLoadingAttendees(true)
+      const { data } = await supabase.from('class_attendees').select('*, profiles(name, email, gender)').eq('class_id', classId)
+      setAttendees(data || [])
+      const mine = (data || []).find((a: any) => a.member_id === userId)
+      setMyAttendance(mine || null)
+      setLoadingAttendees(false)
+    }
+    load()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classId])
+
+  const handleRSVP = async () => {
+    setRsvpLoading(true)
+    if (myAttendance) {
+      await supabase.from('class_attendees').delete().eq('id', myAttendance.id)
+      setMyAttendance(null)
+      setAttendees(prev => prev.filter((a: any) => a.id !== myAttendance.id))
+    } else {
+      const { data } = await supabase.from('class_attendees').insert({
+        class_id: classId, member_id: userId, rsvp_status: 'attending', status: 'scheduled',
+      }).select('*, profiles(name, email, gender)').single()
+      if (data) { setMyAttendance(data); setAttendees(prev => [...prev, data]) }
+    }
+    setRsvpLoading(false)
+    onUpdate()
+  }
+
+  const handleMarkAttendance = async (attendeeId: string, status: string) => {
+    await supabase.from('class_attendees').update({ status }).eq('id', attendeeId)
+    setAttendees(prev => prev.map((a: any) => a.id === attendeeId ? { ...a, status } : a))
+  }
+
+  const handleDeleteClass = async () => {
+    if (!confirm('Delete this class? This will remove this specific class only.')) return
+    await supabase.from('scheduled_classes').delete().eq('id', cls.id)
+    onClose(); onUpdate()
+  }
+
+  const handleDeleteSeries = async () => {
+    if (!confirm('Delete ALL classes in this recurring series? This cannot be undone.')) return
+    await supabase.from('scheduled_classes').delete().eq('parent_class_id', classId)
+    await supabase.from('scheduled_classes').delete().eq('id', classId)
+    onClose(); onUpdate()
+  }
+
+  const tc = classTypeColor(cls.type || 'conditioning')
+
+  return (
+    <div
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+    >
+      <div style={{ width: '100%', maxWidth: '540px', maxHeight: '90vh', overflowY: 'auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem 1rem 0 0' }}>
+        {/* Header */}
+        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '999px', textTransform: 'uppercase', background: tc.bg, color: tc.color }}>{cls.type?.toUpperCase()}</span>
+                {cls.is_recurring && <span style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem', borderRadius: '999px', background: 'var(--surface-raised)', color: 'var(--text-secondary)' }}>🔁 Recurring {cls.recurrence_rule}</span>}
+                {cls.isPlan && <span style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem', borderRadius: '999px', background: 'rgba(8,119,160,0.2)', color: 'var(--teal-secondary)' }}>📋 Workout Plan</span>}
+              </div>
+              <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.75rem', letterSpacing: '0.03em' }}>{cls.title}</h2>
+              {cls.description && <p style={{ fontSize: '0.875rem', marginTop: '0.25rem', color: 'var(--text-secondary)' }}>{cls.description}</p>}
             </div>
-          ))}
+            <button onClick={onClose} style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.875rem', minHeight: 0 }}>✕</button>
+          </div>
         </div>
-      )}
+
+        {/* Details grid */}
+        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+          <div style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.75rem' }}>
+            <p style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Date</p>
+            <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{new Date(cls.scheduled_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })}</p>
+          </div>
+          <div style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.75rem' }}>
+            <p style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Time</p>
+            <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{cls.start_time?.slice(0, 5)}{cls.end_time ? ` – ${cls.end_time?.slice(0, 5)}` : ''}</p>
+          </div>
+          {cls.groups?.name && (
+            <div style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.75rem' }}>
+              <p style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Group</p>
+              <p style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--teal-secondary)' }}>{cls.groups?.name}</p>
+            </div>
+          )}
+          {cls.profiles?.name && (
+            <div style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.75rem' }}>
+              <p style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Coach</p>
+              <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{cls.profiles?.name}</p>
+            </div>
+          )}
+          {cls.location && (
+            <div style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.75rem', gridColumn: '1 / -1' }}>
+              <p style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Location</p>
+              <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>📍 {cls.location}</p>
+            </div>
+          )}
+          {cls.is_recurring && cls.recurrence_end_date && (
+            <div style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.75rem', gridColumn: '1 / -1' }}>
+              <p style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Recurs Until</p>
+              <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>
+                {new Date(cls.recurrence_end_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                {cls.recurrence_days?.length > 0 && (
+                  <span style={{ color: 'var(--text-secondary)' }}> · {cls.recurrence_days.map((d: string) => d.charAt(0).toUpperCase() + d.slice(1, 3)).join(', ')}</span>
+                )}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* RSVP for members */}
+        {!cls.isPlan && userRole === 'member' && (
+          <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
+            <button
+              onClick={handleRSVP}
+              disabled={rsvpLoading}
+              style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 700, fontSize: '0.9rem', cursor: rsvpLoading ? 'not-allowed' : 'pointer', background: myAttendance ? 'transparent' : 'var(--teal-primary)', color: myAttendance ? '#ef4444' : 'white', border: myAttendance ? '1px solid rgba(239,68,68,0.4)' : 'none' }}
+            >
+              {rsvpLoading ? '…' : myAttendance ? '✕ Remove Attendance' : '✓ I\'m Attending'}
+            </button>
+            {myAttendance && <p style={{ fontSize: '0.75rem', textAlign: 'center', marginTop: '0.5rem', color: '#4ade80' }}>✅ You're marked as attending this class</p>}
+          </div>
+        )}
+
+        {/* Attendees */}
+        {!cls.isPlan && (
+          <div style={{ padding: '1.25rem 1.5rem' }}>
+            <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>Attendees ({attendees.length})</p>
+            {loadingAttendees ? (
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Loading…</p>
+            ) : attendees.length === 0 ? (
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No attendees yet.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {attendees.map((a: any) => (
+                  <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.75rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--teal-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.875rem', fontWeight: 700, flexShrink: 0 }}>
+                        {a.profiles?.name?.charAt(0)?.toUpperCase() || '?'}
+                      </div>
+                      <div>
+                        <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>{a.profiles?.name}</p>
+                        {(userRole === 'coach' || userRole === 'admin') && <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{a.profiles?.email}</p>}
+                      </div>
+                    </div>
+                    {(userRole === 'coach' || userRole === 'admin') && (
+                      <div style={{ display: 'flex', gap: '0.25rem', flexShrink: 0 }}>
+                        {(['attended', 'absent', 'excused'] as const).map(s => (
+                          <button key={s} onClick={() => handleMarkAttendance(a.id, s)} style={{ width: '28px', height: '28px', borderRadius: '0.25rem', border: 'none', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 700, minHeight: 0, background: a.status === s ? (s === 'attended' ? '#22c55e' : s === 'absent' ? '#ef4444' : '#f59e0b') : 'var(--surface)', color: a.status === s ? '#fff' : 'var(--text-secondary)' }}>
+                            {s === 'attended' ? '✓' : s === 'absent' ? '✗' : 'E'}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {userRole === 'member' && a.member_id === userId && (
+                      <span style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '999px', background: a.status === 'attended' ? 'rgba(34,197,94,0.2)' : 'rgba(8,119,160,0.2)', color: a.status === 'attended' ? '#4ade80' : 'var(--teal-secondary)' }}>
+                        {a.status === 'attended' ? 'Attended' : 'Attending'}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Delete options (admin/coach only) */}
+        {(userRole === 'admin' || userRole === 'coach') && !cls.isPlan && (
+          <div style={{ padding: '0 1.5rem 1.25rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button onClick={handleDeleteClass} style={{ flex: 1, background: 'transparent', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.5rem', color: '#f87171', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0 }}>🗑️ Delete This Class</button>
+            {cls.is_recurring && (
+              <button onClick={handleDeleteSeries} style={{ flex: 1, background: 'transparent', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.5rem', color: '#f87171', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0 }}>🗑️ Delete Entire Series</button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -160,6 +295,7 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [createError, setCreateError] = useState('')
+  const [selectedClass, setSelectedClass] = useState<any>(null)
 
   const [createForm, setCreateForm] = useState({
     title: '', description: '', type: 'conditioning', group_id: '',
@@ -170,16 +306,55 @@ export default function CalendarPage() {
   })
 
   const loadClasses = async () => {
-    const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).toISOString().split('T')[0]
-    const endOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).toISOString().split('T')[0]
+    const year = currentMonth.getFullYear()
+    const month = currentMonth.getMonth()
+    const startOfMonth = new Date(year, month, 1).toISOString().split('T')[0]
+    const endOfMonth = new Date(year, month + 1, 0).toISOString().split('T')[0]
 
+    // Fetch stored class instances for this month
     const { data: classData } = await supabase
       .from('scheduled_classes')
       .select('*, groups(name), profiles!scheduled_classes_coach_id_fkey(name)')
       .gte('scheduled_date', startOfMonth)
       .lte('scheduled_date', endOfMonth)
-      .order('scheduled_date')
+      .order('start_time')
 
+    // Fetch recurring parents that may have instances in this month
+    const { data: recurringParents } = await supabase
+      .from('scheduled_classes')
+      .select('*, groups(name), profiles!scheduled_classes_coach_id_fkey(name)')
+      .eq('is_recurring', true)
+      .is('parent_class_id', null)
+      .lte('scheduled_date', endOfMonth)
+      .or(`recurrence_end_date.gte.${startOfMonth},recurrence_end_date.is.null`)
+
+    // Dynamically compute which days recurring classes fall on this month
+    const dynamicInstances: any[] = []
+    const existingDates = new Set((classData || []).map((c: any) => `${c.scheduled_date}-${c.title}`))
+
+    for (const parent of (recurringParents || [])) {
+      if (!parent.recurrence_end_date) continue
+      const recurringDates = generateRecurringDates(
+        parent.scheduled_date,
+        parent.recurrence_end_date,
+        parent.recurrence_rule || 'weekly',
+        parent.recurrence_days || []
+      )
+      for (const date of recurringDates) {
+        if (date < startOfMonth || date > endOfMonth) continue
+        const key = `${date}-${parent.title}`
+        if (existingDates.has(key)) continue
+        dynamicInstances.push({
+          ...parent,
+          id: `${parent.id}-${date}`,
+          scheduled_date: date,
+          parent_class_id: parent.id,
+          is_dynamic: true,
+        })
+      }
+    }
+
+    // Fetch assigned workout plans
     let planQuery = supabase
       .from('workout_plans')
       .select('*, profiles!workout_plans_coach_id_fkey(name), profiles!workout_plans_member_id_fkey(name)')
@@ -188,11 +363,8 @@ export default function CalendarPage() {
       .neq('status', 'completed')
       .neq('status', 'skipped')
 
-    if (userRole === 'member') {
-      planQuery = planQuery.eq('member_id', userId)
-    } else if (userRole === 'coach') {
-      planQuery = planQuery.eq('coach_id', userId)
-    }
+    if (userRole === 'member') planQuery = planQuery.eq('member_id', userId)
+    else if (userRole === 'coach') planQuery = planQuery.eq('coach_id', userId)
 
     const { data: planData } = await planQuery.order('scheduled_date')
 
@@ -203,10 +375,14 @@ export default function CalendarPage() {
       is_recurring: false,
     }))
 
-    const allData = [...(classData || []), ...normalizedPlans]
+    const allData = [
+      ...(classData || []),
+      ...dynamicInstances,
+      ...normalizedPlans,
+    ]
     setClasses(allData)
     if (selectedDate) {
-      setSelectedDateClasses(allData.filter(c => c.scheduled_date === selectedDate))
+      setSelectedDateClasses(allData.filter((c: any) => c.scheduled_date === selectedDate))
     }
   }
 
@@ -320,6 +496,7 @@ export default function CalendarPage() {
                 recurrence_rule: createForm.recurrence_rule,
                 recurrence_days: createForm.recurrence_days.length > 0 ? createForm.recurrence_days : null,
                 recurrence_end_date: createForm.recurrence_end_date,
+                parent_class_id: newClass.id,
                 created_by: userId,
               }))
             )
@@ -437,14 +614,14 @@ export default function CalendarPage() {
                     {dayClasses.slice(0, 2).map(c => {
                       if (c.isPlan) {
                         return (
-                          <div key={c.id} style={{ background: 'rgba(8,119,160,0.25)', color: '#34bac2', border: '1px dashed rgba(8,119,160,0.5)', borderRadius: '0.2rem', fontSize: '0.6rem', padding: '0.1rem 0.3rem', marginBottom: '0.15rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                          <div key={c.id} onClick={e => { e.stopPropagation(); setSelectedClass(c) }} style={{ background: 'rgba(8,119,160,0.25)', color: '#34bac2', border: '1px dashed rgba(8,119,160,0.5)', borderRadius: '0.2rem', fontSize: '0.6rem', padding: '0.1rem 0.3rem', marginBottom: '0.15rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', cursor: 'pointer' }}>
                             📋 {c.title}
                           </div>
                         )
                       }
                       const tc = classTypeColor(c.type)
                       return (
-                        <div key={c.id} style={{ ...tc, borderRadius: '0.2rem', fontSize: '0.6rem', padding: '0.1rem 0.3rem', marginBottom: '0.15rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                        <div key={c.id} onClick={e => { e.stopPropagation(); setSelectedClass(c) }} style={{ ...tc, borderRadius: '0.2rem', fontSize: '0.6rem', padding: '0.1rem 0.3rem', marginBottom: '0.15rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', cursor: 'pointer' }}>
                           {c.start_time?.slice(0, 5)} {c.title}
                         </div>
                       )
@@ -484,12 +661,13 @@ export default function CalendarPage() {
                           const coachName = (plan as any)['profiles!workout_plans_coach_id_fkey']?.name
                           const tb = plan.type === 'basketball' ? { bg: 'rgba(8,119,160,0.2)', color: '#34bac2' } : plan.type === 'both' ? { bg: 'rgba(168,85,247,0.15)', color: '#c084fc' } : { bg: 'rgba(34,197,94,0.15)', color: '#4ade80' }
                           return (
-                            <div key={plan.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderLeft: '2px dashed var(--teal-primary)', borderRadius: '0.75rem', padding: '0.875rem', marginBottom: '0.5rem' }}>
+                            <div key={plan.id} onClick={() => setSelectedClass(plan)} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderLeft: '2px dashed var(--teal-primary)', borderRadius: '0.75rem', padding: '0.875rem', marginBottom: '0.5rem', cursor: 'pointer' }}>
                               <p style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.25rem' }}>{plan.title}</p>
                               <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.375rem' }}>
                                 {userRole === 'coach' || userRole === 'admin' ? `Member: ${memberName ?? '—'}` : `Coach: ${coachName ?? '—'}`}
                               </p>
                               <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '999px', textTransform: 'uppercase', ...tb }}>{plan.type}</span>
+                              <p style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', fontWeight: 600, marginTop: '0.375rem' }}>View Details →</p>
                             </div>
                           )
                         })}
@@ -500,7 +678,9 @@ export default function CalendarPage() {
                       <div>
                         <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>🏋️ Scheduled Classes</p>
                         {selectedDateClasses.filter(c => !c.isPlan).map(cls => (
-                          <ClassCard key={cls.id} cls={cls} userRole={userRole} onUpdate={loadClasses} />
+                          <div key={cls.id} onClick={() => setSelectedClass(cls)} style={{ cursor: 'pointer' }}>
+                            <ClassCard cls={cls} userRole={userRole} />
+                          </div>
                         ))}
                       </div>
                     )}
@@ -516,6 +696,16 @@ export default function CalendarPage() {
           </div>
         </div>
       </main>
+
+      {selectedClass && (
+        <ClassDetailModal
+          cls={selectedClass}
+          userId={userId || ''}
+          userRole={userRole}
+          onClose={() => setSelectedClass(null)}
+          onUpdate={loadClasses}
+        />
+      )}
 
       {/* Create Class Modal */}
       {showCreateModal && (

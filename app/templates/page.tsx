@@ -47,10 +47,10 @@ export default function TemplatesPage() {
 
     const { data: shared } = await supabase
       .from('workout_templates')
-      .select('*, workout_template_exercises(*)')
+      .select('*, workout_template_exercises(*), profiles(name)')
       .eq('is_shared', true)
       .eq('is_default', false)
-      .order('title')
+      .order('updated_at', { ascending: false })
     setSharedTemplates(shared?.filter(t => t.created_by !== uid) || [])
 
     const { data: mine } = await supabase
@@ -244,6 +244,11 @@ export default function TemplatesPage() {
                         </div>
                         {t.description && <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{t.description}</p>}
                         <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>{t.workout_template_exercises?.length || 0} exercises</p>
+                        {activeTab === 'shared' && (
+                          <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>
+                            Shared by {(t.profiles as any)?.name || 'Coach'} · {new Date(t.updated_at || t.created_at).toLocaleDateString()}
+                          </p>
+                        )}
                       </div>
                       <div style={{ display: 'flex', gap: '0.375rem', flexShrink: 0, flexWrap: 'wrap' }}>
                         <button
@@ -280,6 +285,28 @@ export default function TemplatesPage() {
                                 <Trash2 size={12} />
                               </button>
                             )}
+                          </>
+                        )}
+                        {activeTab === 'mine' && (userRole === 'coach' || userRole === 'admin') && t.created_by === userId && (
+                          <>
+                            <button
+                              onClick={async () => {
+                                await supabase.from('workout_templates').update({ is_shared: !t.is_shared, updated_at: new Date().toISOString() }).eq('id', t.id)
+                                if (userId) loadTemplates(userId)
+                              }}
+                              style={{ background: 'none', border: `1px solid ${t.is_shared ? 'var(--teal-primary)' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: t.is_shared ? 'var(--teal-secondary)' : 'var(--text-secondary)', fontSize: '0.7rem', cursor: 'pointer', minHeight: 0 }}
+                            >
+                              {t.is_shared ? '✓ Shared w/ Coaches' : 'Share w/ Coaches'}
+                            </button>
+                            <button
+                              onClick={async () => {
+                                await supabase.from('workout_templates').update({ is_visible_to_members: !t.is_visible_to_members, updated_at: new Date().toISOString() }).eq('id', t.id)
+                                if (userId) loadTemplates(userId)
+                              }}
+                              style={{ background: 'none', border: `1px solid ${t.is_visible_to_members ? '#4ade80' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: t.is_visible_to_members ? '#4ade80' : 'var(--text-secondary)', fontSize: '0.7rem', cursor: 'pointer', minHeight: 0 }}
+                            >
+                              {t.is_visible_to_members ? '✓ Visible to Members' : 'Share w/ Members'}
+                            </button>
                           </>
                         )}
                       </div>
