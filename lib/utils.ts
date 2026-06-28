@@ -46,7 +46,19 @@ export function debounce<T extends (...args: any[]) => any>(
   }
 }
 
-// Get current month in YYYY-MM format
+// Get current month in YYYY-MM format (timezone-aware)
 export function getCurrentMonthYear(): string {
-  return new Date().toISOString().slice(0, 7)
+  return getLocalDateString().slice(0, 7)
+}
+
+// Get today's date string in YYYY-MM-DD format using local timezone (default: Asia/Manila / PST +8)
+export function getLocalDateString(timeZone = 'Asia/Manila'): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date())
+}
+
+// Get today's display date string (e.g. "Monday, June 29, 2026") using local timezone
+export function getLocalDisplayDate(timeZone = 'Asia/Manila'): string {
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone,
+  }).format(new Date())
 }

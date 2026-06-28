@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Navbar from '@/components/Navbar'
 import { ChevronDown, ChevronUp, Trash2, Pencil, Plus, Calendar } from 'lucide-react'
+import { getLocalDateString } from '@/lib/utils'
 
 type Tab = 'members' | 'groups' | 'assign' | 'calendar' | 'notes'
 
@@ -136,7 +137,7 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
       setRecentWorkouts(w || [])
       const { data: pr } = await supabase.from('personal_records').select('*').eq('user_id', memberId).order('recorded_at', { ascending: false }).limit(10)
       setPRs(pr || [])
-      const thisMonth = new Date().toISOString().slice(0, 7)
+      const thisMonth = getLocalDateString().slice(0, 7)
       setStats({
         total: w?.length || 0,
         thisMonth: w?.filter((wk: any) => wk.date?.startsWith(thisMonth)).length || 0,
@@ -281,7 +282,14 @@ export default function CoachPage() {
   const supabase = createClient()
   const [userId, setUserId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('members')
+  const [tabLoading, setTabLoading] = useState(false)
   const [loading, setLoading] = useState(true)
+
+  const switchTab = (tab: Tab) => {
+    setTabLoading(true)
+    setActiveTab(tab)
+    setTimeout(() => setTabLoading(false), 50)
+  }
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
@@ -303,7 +311,7 @@ export default function CoachPage() {
   // Assign Workout Plan
   const [assignForm, setAssignForm] = useState({
     member_id: '', title: '', description: '', type: 'conditioning',
-    scheduled_date: new Date().toISOString().split('T')[0],
+    scheduled_date: getLocalDateString(),
   })
   const [planExercises, setPlanExercises] = useState<PlanExercise[]>([blankEx()])
   const [planSaving, setPlanSaving] = useState(false)
@@ -327,7 +335,7 @@ export default function CoachPage() {
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<{id: string; name: string} | null>(null)
 
   // Workout Calendar
-  const [calendarDate, setCalendarDate] = useState(new Date().toISOString().split('T')[0])
+  const [calendarDate, setCalendarDate] = useState(getLocalDateString())
   const [calendarWorkouts, setCalendarWorkouts] = useState<any[]>([])
   const [expandedCalWorkout, setExpandedCalWorkout] = useState<string | null>(null)
   const [memberFilter, setMemberFilter] = useState('all')
@@ -496,7 +504,7 @@ export default function CoachPage() {
       )
     }
     setSuccess('Plan assigned!')
-    setAssignForm({ member_id: '', title: '', description: '', type: 'conditioning', scheduled_date: new Date().toISOString().split('T')[0] })
+    setAssignForm({ member_id: '', title: '', description: '', type: 'conditioning', scheduled_date: getLocalDateString() })
     setPlanExercises([blankEx()])
     await loadAssignedPlans(userId)
     setPlanSaving(false)
@@ -636,7 +644,7 @@ export default function CoachPage() {
         {/* Tab Bar — scrollable */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '1.5rem', overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
           {tabs.map(t => (
-            <button key={t.value} onClick={() => { setActiveTab(t.value); setError(''); setSuccess('') }} style={{
+            <button key={t.value} onClick={() => { switchTab(t.value); setError(''); setSuccess('') }} style={{
               background: 'none', border: 'none', flexShrink: 0,
               borderBottom: activeTab === t.value ? '2px solid var(--teal-primary)' : '2px solid transparent',
               color: activeTab === t.value ? 'var(--teal-secondary)' : 'var(--text-secondary)',
@@ -647,6 +655,8 @@ export default function CoachPage() {
             </button>
           ))}
         </div>
+
+        {tabLoading ? null : (<>
 
         {/* ── MY MEMBERS TAB ── */}
         {activeTab === 'members' && (
@@ -675,7 +685,7 @@ export default function CoachPage() {
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                           <button
-                            onClick={e => { e.stopPropagation(); setMemberFilter(m.id); setActiveTab('calendar') }}
+                            onClick={e => { e.stopPropagation(); setMemberFilter(m.id); switchTab('calendar') }}
                             style={{ background: 'rgba(8,119,160,0.15)', border: '1px solid rgba(8,119,160,0.35)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: 'var(--teal-secondary)', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', minHeight: 0 }}
                           >
                             <Calendar size={12} /> View Day
@@ -1311,6 +1321,8 @@ export default function CoachPage() {
             </div>
           </div>
         )}
+
+        </>)} {/* end tabLoading guard */}
       </main>
 
       {selectedMemberProfile && (

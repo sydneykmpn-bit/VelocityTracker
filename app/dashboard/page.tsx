@@ -7,6 +7,8 @@ import { Plus, Dumbbell, Trophy } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import Navbar from '@/components/Navbar'
 import { WorkoutCardSkeleton, StatCardSkeleton } from '@/components/Skeleton'
+import ClassDetailModal from '@/components/ClassDetailModal'
+import { getLocalDateString, getLocalDisplayDate } from '@/lib/utils'
 
 function typeBadge(type: string) {
   const map: Record<string, { bg: string; color: string; border: string; icon: string }> = {
@@ -239,8 +241,9 @@ export default function DashboardPage() {
   const [todayClasses, setTodayClasses] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
+  const [selectedClass, setSelectedClass] = useState<any>(null)
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = getLocalDateString()
 
   const loadAll = async (uid: string) => {
     const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
@@ -325,7 +328,7 @@ export default function DashboardPage() {
               HEY, {firstName.toUpperCase()} 👋
             </h1>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '0.25rem' }}>
-              {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              {getLocalDisplayDate()}
             </p>
           </div>
           <Link href="/workouts/new" style={{
@@ -367,7 +370,14 @@ export default function DashboardPage() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               {todayClasses.map(cls => (
-                <div key={cls.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <div
+                  key={cls.id}
+                  onClick={() => setSelectedClass(cls)}
+                  role="button"
+                  style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', cursor: 'pointer', transition: 'border-color 0.15s' }}
+                  onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--teal-primary)'}
+                  onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'}
+                >
                   <div>
                     <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{cls.title}</p>
                     <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -376,7 +386,10 @@ export default function DashboardPage() {
                       {cls.groups ? ` · 👥 ${cls.groups.name}` : ''}
                     </p>
                   </div>
-                  {cls.profiles && <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)' }}>Coach: {cls.profiles.name}</p>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {cls.profiles && <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)' }}>Coach: {cls.profiles.name}</p>}
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Tap →</span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -556,6 +569,17 @@ export default function DashboardPage() {
           </div>
         </div>
       </main>
+
+      {/* Class detail modal */}
+      {selectedClass && (
+        <ClassDetailModal
+          cls={selectedClass}
+          userId={userId || ''}
+          userRole={profile?.role || 'member'}
+          onClose={() => setSelectedClass(null)}
+          onUpdate={() => { setSelectedClass(null); if (userId) loadAll(userId) }}
+        />
+      )}
 
       {/* Mobile FAB */}
       <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 50 }}>

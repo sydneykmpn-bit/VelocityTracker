@@ -30,6 +30,7 @@ export interface Exercise {
   weight?: number
   duration?: number
   distance?: number
+  speed?: number
   notes?: string
 }
 

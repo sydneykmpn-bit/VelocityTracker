@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Navbar from '@/components/Navbar'
 import { Trash2 } from 'lucide-react'
-import { debounce } from '@/lib/utils'
+import { debounce, getLocalDateString } from '@/lib/utils'
 
 type LeaderTab = 'public' | 'mine'
 const UNITS = ['kg', 'lbs', 'reps', 'seconds', 'minutes', 'km/h', 'mph'] as const
@@ -24,9 +24,15 @@ const FEATURED_EXERCISES = [
   { key: 'all', label: 'All', icon: '🏆' },
   { key: 'Back Squat', label: 'Squat', icon: '🏋️' },
   { key: 'Deadlift', label: 'Deadlift', icon: '💀' },
-  { key: 'Bench Press', label: 'Bench', icon: '🛋️' },
   { key: 'Overhead Press', label: 'OHP', icon: '☝️' },
   { key: 'Sprint 40m', label: 'Sprint', icon: '💨' },
+]
+
+const PUBLIC_PR_EXERCISES = [
+  { name: 'Back Squat', icon: '🏋️', unit: 'kg' },
+  { name: 'Deadlift', icon: '💀', unit: 'kg' },
+  { name: 'Overhead Press', icon: '☝️', unit: 'kg' },
+  { name: 'Sprint 40m', icon: '💨', unit: 'seconds' },
 ]
 
 const GENDER_FILTERS = [
@@ -99,7 +105,7 @@ export default function LeaderboardPage() {
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [value, setValue] = useState('')
   const [unit, setUnit] = useState<Unit>('kg')
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(getLocalDateString())
   const [isPublic, setIsPublic] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [updating, setUpdating] = useState<string | null>(null)
@@ -189,14 +195,14 @@ export default function LeaderboardPage() {
       unit, date,
       recorded_at: new Date(date).toISOString(),
       is_public: isPublic,
-      month_year: new Date().toISOString().slice(0, 7),
+      month_year: getLocalDateString().slice(0, 7),
     })
     if (err) {
       setError(err.message)
     } else {
       setSuccess('PR submitted!')
       setExercise(''); setValue(''); setUnit('kg')
-      setDate(new Date().toISOString().split('T')[0]); setIsPublic(true)
+      setDate(getLocalDateString()); setIsPublic(true)
       setShowForm(false)
       await loadData(userId)
     }
@@ -259,27 +265,61 @@ export default function LeaderboardPage() {
             <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>SUBMIT YOUR PR</h2>
             {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{error}</div>}
             {success && <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#4ade80', fontSize: '0.875rem' }}>{success}</div>}
+            {/* Info banner */}
+            <div style={{ background: 'rgba(8,119,160,0.1)', border: '1px solid rgba(8,119,160,0.2)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--teal-secondary)' }}>
+              {activeTab === 'public'
+                ? '🏆 Public leaderboard tracks 4 main lifts + sprint. Selecting an exercise auto-sets the unit.'
+                : '💪 Personal PRs are visible only to you and can be any exercise.'}
+            </div>
+
             <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              {/* Exercise name with suggestions */}
-              <div style={{ gridColumn: '1 / -1', position: 'relative' }}>
-                <label style={labelBase}>Exercise Name *</label>
-                <input
-                  type="text" value={exercise} autoComplete="off"
-                  onChange={e => { setExercise(e.target.value); setShowSuggestions(e.target.value.length > 0) }}
-                  onFocus={() => exercise.length > 0 && setShowSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-                  required style={{ ...inputBase, width: '100%' }} placeholder="e.g. Back Squat"
-                />
-                {showSuggestions && filteredExerciseSuggestions.length > 0 && (
-                  <div style={{ position: 'absolute', top: 'calc(100% - 1px)', left: 0, right: 0, zIndex: 20, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0 0 0.5rem 0.5rem', maxHeight: '180px', overflowY: 'auto' }}>
-                    {filteredExerciseSuggestions.map(s => (
-                      <button key={s} type="button"
-                        onMouseDown={() => { setExercise(s); setShowSuggestions(false) }}
-                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.5rem 0.875rem', background: 'none', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.04)', color: '#F2F2F2', fontSize: '0.875rem', cursor: 'pointer', minHeight: 36 }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(8,119,160,0.15)' }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none' }}
-                      >{s}</button>
+              {/* Exercise input — tab-aware */}
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={labelBase}>Exercise *</label>
+                {activeTab === 'public' ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                    {PUBLIC_PR_EXERCISES.map(ex => (
+                      <button
+                        key={ex.name}
+                        type="button"
+                        onClick={() => { setExercise(ex.name); setUnit(ex.unit as any) }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '0.625rem',
+                          padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', cursor: 'pointer',
+                          background: exercise === ex.name ? 'rgba(8,119,160,0.25)' : '#0d1a1e',
+                          border: `1px solid ${exercise === ex.name ? 'var(--teal-primary)' : '#1a2e34'}`,
+                          color: '#F2F2F2',
+                        }}
+                      >
+                        <span style={{ fontSize: '1.25rem' }}>{ex.icon}</span>
+                        <div>
+                          <p style={{ fontWeight: 600, fontSize: '0.8rem', color: exercise === ex.name ? 'var(--teal-secondary)' : '#F2F2F2' }}>{ex.name}</p>
+                          <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{ex.unit}</p>
+                        </div>
+                      </button>
                     ))}
+                  </div>
+                ) : (
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text" value={exercise} autoComplete="off"
+                      onChange={e => { setExercise(e.target.value); setShowSuggestions(e.target.value.length > 0) }}
+                      onFocus={() => exercise.length > 0 && setShowSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                      required style={{ ...inputBase, width: '100%' }} placeholder="Any exercise…"
+                    />
+                    {showSuggestions && filteredExerciseSuggestions.length > 0 && (
+                      <div style={{ position: 'absolute', top: 'calc(100% - 1px)', left: 0, right: 0, zIndex: 20, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0 0 0.5rem 0.5rem', maxHeight: '180px', overflowY: 'auto' }}>
+                        {filteredExerciseSuggestions.map(s => (
+                          <button key={s} type="button"
+                            onMouseDown={() => { setExercise(s); setShowSuggestions(false) }}
+                            style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.5rem 0.875rem', background: 'none', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.04)', color: '#F2F2F2', fontSize: '0.875rem', cursor: 'pointer', minHeight: 36 }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(8,119,160,0.15)' }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none' }}
+                          >{s}</button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -297,10 +337,12 @@ export default function LeaderboardPage() {
                 <label style={labelBase}>Date</label>
                 <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inputBase, width: '100%' }} />
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <Toggle on={isPublic} onToggle={() => setIsPublic(!isPublic)} />
-                <span style={{ fontSize: '0.8rem', color: isPublic ? '#F2F2F2' : 'var(--text-secondary)' }}>Show on public leaderboard</span>
-              </div>
+              {activeTab === 'mine' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <Toggle on={isPublic} onToggle={() => setIsPublic(!isPublic)} />
+                  <span style={{ fontSize: '0.8rem', color: isPublic ? '#F2F2F2' : 'var(--text-secondary)' }}>Show on public leaderboard</span>
+                </div>
+              )}
               <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end' }}>
                 <button type="submit" disabled={submitting} style={{
                   background: submitting ? '#0d1a1e' : 'var(--teal-primary)', color: 'white',
@@ -317,7 +359,7 @@ export default function LeaderboardPage() {
         {/* Tab Bar */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '1.5rem' }}>
           {tabs.map(t => (
-            <button key={t.value} onClick={() => setActiveTab(t.value)} style={{
+            <button key={t.value} onClick={() => { setActiveTab(t.value); setExercise(''); setShowForm(false); if (t.value === 'public') setIsPublic(true) }} style={{
               background: 'none', border: 'none', width: '50%',
               borderBottom: activeTab === t.value ? '2px solid var(--teal-primary)' : '2px solid transparent',
               color: activeTab === t.value ? 'var(--teal-secondary)' : 'var(--text-secondary)',

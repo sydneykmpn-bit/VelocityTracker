@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { getLocalDateString } from '@/lib/utils'
 
 type WorkoutType = 'conditioning' | 'basketball' | 'both'
 
@@ -13,10 +14,52 @@ interface Exercise {
   reps: string
   weight: string
   duration: string
+  distance: string
+  speed: string
+  isRunning: boolean
   notes: string
 }
 
-const blank = (): Exercise => ({ name: '', sets: '', reps: '', weight: '', duration: '', notes: '' })
+const blank = (): Exercise => ({ name: '', sets: '', reps: '', weight: '', duration: '', distance: '', speed: '', isRunning: false, notes: '' })
+
+const FEATURED_EXERCISES_BY_TYPE: Record<string, { name: string; icon: string }[]> = {
+  conditioning: [
+    { name: 'Back Squat', icon: '🏋️' },
+    { name: 'Bench Press', icon: '🛋️' },
+    { name: 'Deadlift', icon: '💀' },
+    { name: 'Overhead Press', icon: '☝️' },
+    { name: 'Barbell Row', icon: '🔄' },
+    { name: 'Pull Up', icon: '⬆️' },
+  ],
+  basketball: [
+    { name: 'Free Throw %', icon: '🎯' },
+    { name: 'Sprint 20m', icon: '💨' },
+    { name: 'Sprint 40m', icon: '💨' },
+    { name: 'Vertical Jump', icon: '⬆️' },
+    { name: '3-Point %', icon: '🏀' },
+    { name: 'Agility T-Test', icon: '⚡' },
+  ],
+  both: [
+    { name: 'Back Squat', icon: '🏋️' },
+    { name: 'Sprint 40m', icon: '💨' },
+    { name: 'Deadlift', icon: '💀' },
+    { name: 'Vertical Jump', icon: '⬆️' },
+  ],
+}
+
+const RUNNING_EXERCISES: { name: string; icon: string }[] = [
+  { name: 'Treadmill Sprint', icon: '🏃' },
+  { name: 'Treadmill Endurance', icon: '🏃' },
+  { name: '400m Run', icon: '🏃' },
+  { name: '800m Run', icon: '🏃' },
+  { name: '1km Run', icon: '🏃' },
+  { name: '5km Run', icon: '🏃' },
+]
+
+function isRunningExercise(name: string): boolean {
+  const keywords = ['run', 'sprint', 'treadmill', 'rowing', 'bike', 'assault', 'jump rope']
+  return keywords.some(k => name.toLowerCase().includes(k))
+}
 
 const inputBase: React.CSSProperties = {
   width: '100%',
@@ -72,7 +115,7 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
   const router = useRouter()
   const [workoutType, setWorkoutType] = useState<WorkoutType>((defaultType as WorkoutType) ?? 'conditioning')
   const [title, setTitle] = useState('')
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(getLocalDateString())
   const [duration, setDuration] = useState('')
   const [notes, setNotes] = useState('')
   const [exercises, setExercises] = useState<Exercise[]>([blank()])
@@ -205,6 +248,8 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
           reps: ex.reps ? parseInt(ex.reps) : null,
           weight: ex.weight ? parseFloat(ex.weight) : null,
           duration: ex.duration ? parseInt(ex.duration) : null,
+          distance: ex.distance ? parseFloat(ex.distance) : null,
+          speed: ex.speed ? parseFloat(ex.speed) : null,
           notes: ex.notes.trim() || null,
         }))
       )
@@ -220,9 +265,6 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
     { value: 'basketball', emoji: '🏀', label: 'Basketball', sub: 'Drills & skill work' },
     { value: 'both', emoji: '💪', label: 'Both', sub: 'Combined session' },
   ]
-
-  const showStrength = workoutType !== 'basketball'
-  const showBall = workoutType !== 'conditioning'
 
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -311,9 +353,49 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
       {/* Exercises */}
       <div>
         <label style={{ ...labelBase, marginBottom: '0.75rem' }}>Exercises</label>
+
+        {/* Quick Add row */}
+        <div style={{ marginBottom: '1rem' }}>
+          <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Quick Add</p>
+          <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', paddingBottom: '4px' }}>
+            {[...(FEATURED_EXERCISES_BY_TYPE[workoutType] || []), ...RUNNING_EXERCISES].map(ex => {
+              const running = isRunningExercise(ex.name)
+              return (
+                <button
+                  key={ex.name}
+                  type="button"
+                  onClick={() => setExercises(prev => [...prev, {
+                    name: ex.name,
+                    sets: running ? '' : '3',
+                    reps: running ? '' : '10',
+                    weight: '',
+                    duration: running ? '30' : '',
+                    distance: running ? '1' : '',
+                    speed: '',
+                    isRunning: running,
+                    notes: '',
+                  }])}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '0.375rem',
+                    padding: '0.4rem 0.75rem', borderRadius: '0.5rem', fontSize: '0.75rem',
+                    fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, cursor: 'pointer',
+                    background: '#0d1a1e', color: 'var(--text-secondary)',
+                    border: '1px solid #1a2e34', transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal-primary)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--teal-secondary)' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1a2e34'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)' }}
+                >
+                  {ex.icon} {ex.name}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {exercises.map((ex, idx) => {
             const suggestions = getSuggestions(ex.name, workoutType)
+            const running = isRunningExercise(ex.name) || ex.isRunning
             return (
               <div key={idx} style={{ background: '#0a1518', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
@@ -365,7 +447,22 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
                   )}
                 </div>
 
-                {showStrength && (
+                {running ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <div>
+                      <label style={labelBase}>Duration (min)</label>
+                      <input type="number" value={ex.duration} onChange={(e) => update(idx, 'duration', e.target.value)} style={inputBase} placeholder="30" min="0" />
+                    </div>
+                    <div>
+                      <label style={labelBase}>Distance (km)</label>
+                      <input type="number" value={ex.distance} onChange={(e) => update(idx, 'distance', e.target.value)} style={inputBase} placeholder="5" min="0" step="0.1" />
+                    </div>
+                    <div>
+                      <label style={labelBase}>Speed (km/h)</label>
+                      <input type="number" value={ex.speed} onChange={(e) => update(idx, 'speed', e.target.value)} style={inputBase} placeholder="10" min="0" step="0.1" />
+                    </div>
+                  </div>
+                ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: '0.5rem' }}>
                     {(['sets', 'reps', 'weight'] as const).map((f) => (
                       <div key={f}>
@@ -375,18 +472,10 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
                     ))}
                   </div>
                 )}
-                {showBall && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                    <div>
-                      <label style={labelBase}>Duration (min)</label>
-                      <input type="number" value={ex.duration} onChange={(e) => update(idx, 'duration', e.target.value)} style={inputBase} placeholder="15" min="0" />
-                    </div>
-                    <div>
-                      <label style={labelBase}>Notes</label>
-                      <input type="text" value={ex.notes} onChange={(e) => update(idx, 'notes', e.target.value)} style={inputBase} placeholder="e.g. Focus on form" />
-                    </div>
-                  </div>
-                )}
+                <div style={{ marginTop: '0.5rem' }}>
+                  <label style={labelBase}>Notes</label>
+                  <input type="text" value={ex.notes} onChange={(e) => update(idx, 'notes', e.target.value)} style={inputBase} placeholder="Optional notes" />
+                </div>
               </div>
             )
           })}

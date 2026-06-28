@@ -133,6 +133,7 @@ export default function WorkoutDetailPage() {
                   {ex.weight && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}><strong style={{ color: '#F2F2F2' }}>{ex.weight}</strong> kg</span>}
                   {ex.duration && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}><strong style={{ color: '#F2F2F2' }}>{ex.duration}</strong> min</span>}
                   {ex.distance && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}><strong style={{ color: '#F2F2F2' }}>{ex.distance}</strong> km</span>}
+                  {(ex as any).speed && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}><strong style={{ color: '#F2F2F2' }}>{(ex as any).speed}</strong> km/h</span>}
                 </div>
                 {ex.notes && (
                   <p style={{ marginTop: '0.5rem', fontSize: '0.775rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{ex.notes}</p>
