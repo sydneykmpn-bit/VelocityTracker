@@ -491,6 +491,9 @@ export default function DashboardPage() {
             <div style={{ fontSize: '1.5rem', marginBottom: '0.375rem' }}>📅</div>
             <div style={{ fontFamily: 'var(--font-bebas)', fontSize: '2.5rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{thisMonthWorkouts}</div>
             <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', marginTop: '0.25rem' }}>This Month</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.65rem', marginTop: '0.1rem', opacity: 0.6 }}>
+              {new Date().toLocaleDateString('en-US', { month: 'long' })} sessions
+            </div>
           </div>
 
           <button onClick={openPRsModal} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer', transition: 'border-color 0.15s' }}
@@ -645,7 +648,7 @@ export default function DashboardPage() {
         )}
 
         {/* ── RECENT WORKOUTS + PRs GRID ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 280px', gap: '2rem', alignItems: 'start' }} className="workout-grid">
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '2rem', alignItems: 'start' }} className="dashboard-grid">
           {/* Workouts */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
@@ -705,24 +708,34 @@ export default function DashboardPage() {
                   <Link href="/leaderboard" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontSize: '0.8rem', minHeight: 0, display: 'inline' }}>Submit your first PR →</Link>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {prs.map(pr => (
-                    <div key={pr.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', minWidth: 0 }}>
-                          <span style={{ fontSize: '0.75rem', flexShrink: 0 }}>{pr.is_public ? '🌐' : '🔒'}</span>
-                          <span style={{ fontSize: '0.875rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.exercise_name ?? pr.exercise}</span>
+                <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {prs.map(pr => (
+                      <div key={pr.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', minWidth: 0 }}>
+                            <span style={{ fontSize: '0.75rem', flexShrink: 0 }}>{pr.is_public ? '🌐' : '🔒'}</span>
+                            <span style={{ fontSize: '0.875rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.exercise_name ?? pr.exercise}</span>
+                          </div>
+                          <span style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.1rem', color: 'var(--teal-secondary)', flexShrink: 0 }}>
+                            {pr.value} <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{pr.unit}</span>
+                          </span>
                         </div>
-                        <span style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.1rem', color: 'var(--teal-secondary)', flexShrink: 0 }}>
-                          {pr.value} <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{pr.unit}</span>
-                        </span>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                          {new Date(pr.date ?? pr.recorded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </p>
                       </div>
-                      <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-                        {new Date(pr.date ?? pr.recorded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.625rem' }}>
+                    <Link href="/leaderboard" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontSize: '0.8rem', minHeight: 0 }}>
+                      Board →
+                    </Link>
+                    <Link href="/leaderboard" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontSize: '0.8rem', minHeight: 0 }}>
+                      + Submit PR
+                    </Link>
+                  </div>
+                </>
               )}
             </div>
 
@@ -731,24 +744,6 @@ export default function DashboardPage() {
               <SkippedPlansSection plans={skippedPlans} userId={userId} supabase={supabase} onUpdate={loadData} />
             )}
 
-            {/* Quick Log */}
-            <div>
-              <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', letterSpacing: '0.03em', marginBottom: '0.75rem' }}>QUICK LOG</h2>
-              {[
-                { href: '/workouts/new?type=conditioning', icon: '🏋️', label: 'Conditioning', sub: 'Strength & cardio' },
-                { href: '/workouts/new?type=basketball', icon: '🏀', label: 'Basketball', sub: 'Ball training' },
-              ].map(item => (
-                <Link key={item.href} href={item.href} style={{ textDecoration: 'none', display: 'block', marginBottom: '0.5rem' }}>
-                  <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', cursor: 'pointer', transition: 'all 0.2s' }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--teal-primary)'; (e.currentTarget as HTMLDivElement).style.background = '#0d1f24' }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLDivElement).style.background = 'var(--surface)' }}>
-                    <div style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>{item.icon}</div>
-                    <h3 style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.15rem' }}>{item.label}</h3>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{item.sub}</p>
-                  </div>
-                </Link>
-              ))}
-            </div>
           </div>
         </div>
 
@@ -836,10 +831,12 @@ export default function DashboardPage() {
         </Link>
       </div>
       <style>{`
+        @media (min-width: 768px) {
+          .dashboard-grid { grid-template-columns: minmax(0, 1fr) 280px !important; }
+        }
         @media (max-width: 767px) {
           .mobile-fab { display: flex !important; }
           .md-show-flex { display: inline-flex !important; }
-          .workout-grid { grid-template-columns: 1fr !important; }
           .stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
         }
       `}</style>
