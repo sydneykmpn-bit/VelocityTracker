@@ -659,6 +659,16 @@ export default function CoachPage() {
     rescheduled: { label: '📅 Rescheduled', color: '#60a5fa' },
   }
 
+  const pendingPlanCount = assignedPlans.filter(p => p.status === 'pending').length
+  const completedPlanCount = assignedPlans.filter(p => p.status === 'completed').length
+  const skippedPlanCount = assignedPlans.filter(p => p.status === 'skipped').length
+  const inactiveMembers = myMembers.filter(m => {
+    if (!m.lastWorkout) return true
+    const daysSince = (Date.now() - new Date(m.lastWorkout).getTime()) / 86400000
+    return daysSince > 7
+  })
+  const recentNotes = notes.slice(0, 3)
+
   const tabs: { value: Tab; label: string }[] = [
     { value: 'members', label: 'My Students' },
     { value: 'groups', label: 'Groups' },
@@ -675,10 +685,60 @@ export default function CoachPage() {
           <div>
             <p style={{ color: 'var(--teal-secondary)', fontSize: '0.7rem', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Coach Panel</p>
             <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: 'clamp(2rem, 6vw, 3.5rem)', letterSpacing: '0.03em' }}>COACH PANEL</h1>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '0.25rem' }}>Students, groups, assignments, reviews, and coach notes.</p>
           </div>
           <Link href="/dashboard" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '0.625rem 1rem', borderRadius: '0.5rem', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 600, whiteSpace: 'nowrap', minHeight: 44, display: 'flex', alignItems: 'center' }}>
             ← My Dashboard
           </Link>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
+          {[
+            { label: 'Students', value: myMembers.length, color: 'var(--teal-secondary)' },
+            { label: 'Groups', value: myGroups.length, color: '#60a5fa' },
+            { label: 'Needs Review', value: pendingPlanCount, color: '#f59e0b' },
+            { label: 'Inactive 7d+', value: inactiveMembers.length, color: inactiveMembers.length > 0 ? '#f87171' : '#4ade80' },
+          ].map(card => (
+            <button
+              key={card.label}
+              onClick={() => {
+                if (card.label === 'Groups') switchTab('groups')
+                else if (card.label === 'Needs Review') switchTab('assign')
+                else switchTab('members')
+              }}
+              style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.1rem', textAlign: 'left', cursor: 'pointer' }}
+            >
+              <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '2.25rem', color: card.color, lineHeight: 1 }}>{card.value}</p>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', marginTop: '0.35rem' }}>{card.label}</p>
+            </button>
+          ))}
+        </div>
+
+        <div className="coach-overview" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(260px, 0.75fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
+            <p style={{ color: 'var(--teal-secondary)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.75rem' }}>Attention Queue</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem' }}>
+              <div>
+                <p style={{ fontWeight: 700 }}>{inactiveMembers.length} student{inactiveMembers.length === 1 ? '' : 's'} need check-in</p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.5, marginTop: '0.25rem' }}>No workout in the last seven days or no workout logged yet.</p>
+              </div>
+              <div>
+                <p style={{ fontWeight: 700 }}>{skippedPlanCount} skipped plans</p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.5, marginTop: '0.25rem' }}>{completedPlanCount} completed plans in your current assignment list.</p>
+              </div>
+            </div>
+          </div>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.75rem' }}>Recent Notes</p>
+            {recentNotes.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>No coach notes yet.</p>
+            ) : recentNotes.map(note => (
+              <div key={note.id} style={{ borderBottom: '1px solid var(--border)', paddingBottom: '0.6rem', marginBottom: '0.6rem' }}>
+                <p style={{ fontSize: '0.8rem', fontWeight: 700 }}>{note.member?.name ?? 'General note'}</p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', lineHeight: 1.45, marginTop: '0.2rem' }}>{note.note}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
         {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{error}</div>}
@@ -1435,6 +1495,11 @@ export default function CoachPage() {
           onClose={() => setSelectedMemberProfile(null)}
         />
       )}
+      <style>{`
+        @media (max-width: 760px) {
+          .coach-overview { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </div>
   )
 }

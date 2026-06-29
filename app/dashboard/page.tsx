@@ -341,6 +341,23 @@ export default function DashboardPage() {
   }
 
   const firstName = profile?.name?.split(' ')[0] ?? 'Athlete'
+  const dashboardCards = userRole === 'admin'
+    ? [
+        { label: 'Approval Queue', value: 'Admin', note: 'Review new users, roles, and groups.', href: '/admin' },
+        { label: 'Coach Operations', value: 'Coach', note: 'Open the coach workspace for student reviews.', href: '/coach' },
+        { label: 'Reports', value: allPRs.length || prs.length, note: 'Check leaderboard and performance records.', href: '/leaderboard' },
+      ]
+    : userRole === 'coach'
+    ? [
+        { label: 'Student Attention', value: 'Coach', note: 'Review students, assignments, and notes.', href: '/coach' },
+        { label: 'Templates', value: 'Build', note: 'Create or reuse workout templates.', href: '/templates' },
+        { label: 'Calendar', value: todayClasses.length, note: 'Check today and upcoming sessions.', href: '/calendar' },
+      ]
+    : [
+        { label: 'Next Workout', value: todayPlans.length || upcomingPlans.length, note: todayPlans.length > 0 ? 'You have work scheduled today.' : 'Upcoming assigned plans this week.', href: '/dashboard' },
+        { label: 'Student Panel', value: 'Open', note: 'See assignments, attendance, progress, and goals.', href: '/student' },
+        { label: 'Quick Log', value: '+', note: 'Record a training session.', href: '/workouts/new' },
+      ]
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
@@ -398,6 +415,18 @@ export default function DashboardPage() {
         </div>
 
         {/* ── TODAY'S PLAN ── */}
+        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '2rem' }}>
+          {dashboardCards.map(card => (
+            <Link key={card.label} href={card.href} style={{ textDecoration: 'none', display: 'block', minHeight: 0 }}>
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.1rem', height: '100%' }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>{card.label}</p>
+                <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '2rem', color: 'var(--teal-secondary)', letterSpacing: '0.03em', lineHeight: 1 }}>{card.value}</p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.45, marginTop: '0.5rem' }}>{card.note}</p>
+              </div>
+            </Link>
+          ))}
+        </section>
+
         {(todayPlans.length > 0 || completedToday.length > 0) && (
           <section style={{ marginBottom: '2rem' }}>
             <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem', color: 'var(--teal-secondary)' }}>

@@ -383,6 +383,8 @@ export default function AdminPage() {
     const matchesGender = prGenderFilter === 'all' || (r.profiles as any)?.gender === prGenderFilter
     return matchesSearch && matchesGender
   })
+  const adminCount = allUsers.filter(p => p.role === 'admin').length
+  const recentUsers = allUsers.slice(0, 4)
 
   if (loading) {
     return (
@@ -405,6 +407,55 @@ export default function AdminPage() {
         <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: '2.5rem', letterSpacing: '0.03em', marginBottom: '1.5rem' }}>
           ADMIN PANEL
         </h1>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
+          {[
+            { label: 'Pending Approvals', value: pendingUsers.length, color: pendingUsers.length > 0 ? '#f59e0b' : '#4ade80', tab: 'members' as Tab },
+            { label: 'Active Members', value: members.length, color: 'var(--teal-secondary)', tab: 'members' as Tab },
+            { label: 'Coaches', value: coaches.length, color: '#60a5fa', tab: 'groups' as Tab },
+            { label: 'Groups', value: groups.length, color: '#c084fc', tab: 'groups' as Tab },
+            { label: 'Public Records', value: allPRs.length, color: '#4ade80', tab: 'leaderboard' as Tab },
+          ].map(card => (
+            <button
+              key={card.label}
+              onClick={() => setActiveTab(card.tab)}
+              style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.1rem', textAlign: 'left', cursor: 'pointer' }}
+            >
+              <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '2.25rem', color: card.color, lineHeight: 1 }}>{card.value}</p>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', marginTop: '0.35rem' }}>{card.label}</p>
+            </button>
+          ))}
+        </div>
+
+        <div className="admin-overview" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(260px, 0.8fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
+            <p style={{ color: 'var(--teal-secondary)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.75rem' }}>Control Center</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '0.75rem' }}>
+              <div>
+                <p style={{ fontWeight: 700 }}>{pendingUsers.length} account{pendingUsers.length === 1 ? '' : 's'} awaiting action</p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.5, marginTop: '0.25rem' }}>Approve new users before they enter the training flow.</p>
+              </div>
+              <div>
+                <p style={{ fontWeight: 700 }}>{adminCount} admin{adminCount === 1 ? '' : 's'} with elevated access</p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.5, marginTop: '0.25rem' }}>Review role changes carefully from the Members tab.</p>
+              </div>
+            </div>
+          </div>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.75rem' }}>Recent Users</p>
+            {recentUsers.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>No approved users yet.</p>
+            ) : recentUsers.map(user => (
+              <div key={user.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.55rem', marginBottom: '0.55rem' }}>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ fontSize: '0.82rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</p>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', textTransform: 'capitalize' }}>{user.role}</p>
+                </div>
+                <span style={roleBadgeStyle(user.role)}>{user.role}</span>
+              </div>
+            ))}
+          </div>
+        </div>
 
         {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{error}</div>}
         {success && <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#4ade80', fontSize: '0.875rem' }}>{success}</div>}
@@ -688,6 +739,11 @@ export default function AdminPage() {
           onClose={() => setSelectedMemberProfile(null)}
         />
       )}
+      <style>{`
+        @media (max-width: 760px) {
+          .admin-overview { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </div>
   )
 }
