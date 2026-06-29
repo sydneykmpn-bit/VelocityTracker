@@ -357,7 +357,7 @@ export default function TemplatesPage() {
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '3rem', textAlign: 'center' }}>
             <p style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>📋</p>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-              {activeTab === 'mine' ? 'No personal templates yet. Copy a template to get started.' : 'No templates in this category yet.'}
+              {activeTab === 'mine' ? 'No personal templates yet. Make a template to get started.' : 'No templates in this category yet.'}
             </p>
           </div>
         ) : (
