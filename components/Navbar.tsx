@@ -1,290 +1,302 @@
 'use client'
 
-import type React from 'react'
-import { useEffect, useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import {
-  CalendarDays,
-  Dumbbell,
-  Home,
-  LayoutDashboard,
-  LineChart,
-  LogOut,
-  Menu,
-  Search,
-  Settings,
-  ShieldCheck,
-  Trophy,
-  Users,
-  X,
-} from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { Menu, X, ChevronDown } from 'lucide-react'
 import VLogo from '@/components/VLogo'
 
-type NavItem = {
-  href: string
-  label: string
-  icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>
-}
-
-function getNavItems(role: string | null, isStudent: boolean): NavItem[] {
-  if (role === 'admin') {
-    return [
-      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { href: '/admin', label: 'Admin', icon: ShieldCheck },
-      { href: '/coach', label: 'Coach', icon: Users },
-      { href: '/calendar', label: 'Calendar', icon: CalendarDays },
-      { href: '/leaderboard', label: 'Reports', icon: Trophy },
-      { href: '/profile', label: 'Settings', icon: Settings },
-    ]
-  }
-
-  if (role === 'coach') {
-    return [
-      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { href: '/coach', label: 'Students', icon: Users },
-      { href: '/templates', label: 'Templates', icon: Dumbbell },
-      { href: '/calendar', label: 'Calendar', icon: CalendarDays },
-      { href: '/leaderboard', label: 'Reviews', icon: Trophy },
-      { href: '/profile', label: 'Profile', icon: Settings },
-    ]
-  }
-
-  return [
-    { href: '/dashboard', label: 'Dashboard', icon: Home },
-    ...(isStudent ? [{ href: '/student', label: 'Student Panel', icon: LineChart }] : []),
-    { href: '/workouts', label: 'Workouts', icon: Dumbbell },
-    { href: '/calendar', label: 'Calendar', icon: CalendarDays },
-    { href: '/leaderboard', label: 'Progress', icon: Trophy },
-    { href: '/profile', label: 'Profile', icon: Settings },
-  ]
-}
-
-function NavLinks({ items, onClick, compact = false }: { items: NavItem[]; onClick?: () => void; compact?: boolean }) {
-  const pathname = usePathname()
-
-  return (
-    <>
-      {items.map(item => {
-        const Icon = item.icon
-        const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(`${item.href}/`))
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onClick}
-            style={{
-              color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-              textDecoration: 'none',
-              fontSize: compact ? '1rem' : '0.875rem',
-              fontWeight: active ? 700 : 500,
-              minHeight: compact ? 52 : 40,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.45rem',
-              padding: compact ? '0 1.25rem' : '0 0.45rem',
-              borderRadius: compact ? 0 : '0.375rem',
-              borderBottom: compact ? '1px solid rgba(255,255,255,0.05)' : 'none',
-              background: active && !compact ? 'rgba(8,119,160,0.14)' : 'transparent',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <Icon size={compact ? 17 : 15} style={{ color: active ? 'var(--teal-secondary)' : 'var(--text-secondary)', flexShrink: 0 }} />
-            {item.label}
-          </Link>
-        )
-      })}
-    </>
-  )
-}
-
 export default function Navbar() {
+  const supabase = createClient()
   const router = useRouter()
-  const [userName, setUserName] = useState('')
+  const pathname = usePathname()
   const [userRole, setUserRole] = useState<string | null>(null)
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [userName, setUserName] = useState('')
   const [isStudent, setIsStudent] = useState(false)
-  const navItems = getNavItems(userRole, isStudent)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [avatarOpen, setAvatarOpen] = useState(false)
+  const [pendingCount, setPendingCount] = useState(0)
+  const avatarRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const supabase = createClient()
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data } = await supabase.from('profiles').select('name, role').eq('id', user.id).single()
-      if (!data) return
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, name')
+        .eq('id', user.id)
+        .single()
+      if (!profile) return
+      setUserRole(profile.role)
+      setUserName(profile.name || '')
 
-      setUserName(data.name ?? '')
-      setUserRole(data.role ?? 'member')
+      await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', user.id)
 
-      const { data: membership } = await supabase
-        .from('group_members')
-        .select('id')
-        .eq('member_id', user.id)
-        .limit(1)
-      setIsStudent((membership?.length || 0) > 0)
-    })
+      if (profile.role === 'member') {
+        const { data: membership } = await supabase
+          .from('group_members').select('id').eq('member_id', user.id).limit(1)
+        setIsStudent((membership?.length || 0) > 0)
+      }
+
+      if (profile.role === 'admin') {
+        const { count } = await supabase
+          .from('profiles').select('id', { count: 'exact', head: true }).eq('approved', false)
+        setPendingCount(count || 0)
+      }
+    }
+    load()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleLogout = async () => {
-    const supabase = createClient()
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (avatarRef.current && !avatarRef.current.contains(e.target as Node)) {
+        setAvatarOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const handleSignOut = async () => {
     await supabase.auth.signOut()
-    router.push('/')
-    router.refresh()
+    router.push('/login')
   }
+
+  type NavLink = { href: string; label: string; badge?: number }
+
+  function getNavLinks(): NavLink[] {
+    if (userRole === null) return []
+    if (userRole === 'admin') return [
+      { href: '/workouts', label: 'My Workouts' },
+      { href: '/admin', label: 'Admin Panel', badge: pendingCount > 0 ? pendingCount : 0 },
+      { href: '/calendar', label: 'Calendar' },
+      { href: '/leaderboard', label: 'Leaderboard' },
+      { href: '/templates', label: 'Templates' },
+    ]
+    if (userRole === 'coach') return [
+      { href: '/workouts', label: 'My Workouts' },
+      { href: '/coach', label: 'Coach Panel' },
+      { href: '/calendar', label: 'Calendar' },
+      { href: '/leaderboard', label: 'Leaderboard' },
+      { href: '/templates', label: 'Templates' },
+    ]
+    const base: NavLink[] = [
+      { href: '/workouts', label: 'My Workouts' },
+      { href: '/calendar', label: 'Calendar' },
+      { href: '/leaderboard', label: 'Leaderboard' },
+      { href: '/templates', label: 'Templates' },
+    ]
+    if (isStudent) base.splice(1, 0, { href: '/student', label: 'Student Panel' })
+    return base
+  }
+
+  const navLinks = getNavLinks()
+  const isActive = (href: string) => pathname === href || (href !== '/dashboard' && pathname.startsWith(href + '/'))
 
   return (
     <>
       <nav style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 50,
-        background: '#000000',
+        position: 'sticky', top: 0, zIndex: 50,
+        background: 'rgba(8,14,16,0.96)',
+        backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
         borderBottom: '1px solid var(--border)',
-        padding: '0 1.25rem',
-        minHeight: '64px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '1rem',
+        padding: '0 1.25rem', minHeight: '60px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', minWidth: 0 }}>
-          <Link href="/dashboard" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', minHeight: 0, flexShrink: 0 }}>
-            <VLogo />
-          </Link>
+        {/* Logo */}
+        <Link href="/dashboard" onClick={() => setMenuOpen(false)} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', minHeight: 0, flexShrink: 0 }}>
+          <VLogo />
+        </Link>
 
-          <div style={{ display: 'none', gap: '0.35rem', alignItems: 'center' }} className="lg-flex">
-            <NavLinks items={navItems} />
-          </div>
+        {/* Desktop nav links */}
+        <div style={{ display: 'none', alignItems: 'center', gap: '0.25rem', flex: 1, justifyContent: 'center' }} className="nav-desktop">
+          {navLinks.map(link => (
+            <div key={link.href} style={{ position: 'relative' }}>
+              <Link
+                href={link.href}
+                style={{
+                  color: isActive(link.href) ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  textDecoration: 'none',
+                  fontSize: '0.875rem',
+                  fontWeight: isActive(link.href) ? 700 : 500,
+                  padding: '0.375rem 0.625rem',
+                  borderRadius: '0.375rem',
+                  background: isActive(link.href) ? 'rgba(8,119,160,0.14)' : 'transparent',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.375rem',
+                  whiteSpace: 'nowrap',
+                  minHeight: 0,
+                  borderBottom: isActive(link.href) ? '2px solid var(--teal-primary)' : '2px solid transparent',
+                  paddingBottom: '2px',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {link.label}
+              </Link>
+              {(link.badge || 0) > 0 && (
+                <span style={{
+                  position: 'absolute', top: '-6px', right: '-4px',
+                  width: '16px', height: '16px', borderRadius: '50%',
+                  background: '#f59e0b', color: '#000',
+                  fontSize: '10px', fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {link.badge}
+                </span>
+              )}
+            </div>
+          ))}
         </div>
 
+        {/* Right side */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          {(userRole === 'admin' || userRole === 'coach') && (
-            <Link
-              href={userRole === 'admin' ? '/admin' : '/coach'}
-              title="Open workspace"
-              aria-label="Open workspace"
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '0.375rem',
-                flexShrink: 0,
-                border: '1px solid var(--border)',
-                color: 'var(--text-secondary)',
-                display: 'none',
-                alignItems: 'center',
-                justifyContent: 'center',
-                textDecoration: 'none',
-              }}
-              className="md-flex"
-            >
-              <Search size={15} />
-            </Link>
-          )}
+          {/* Avatar dropdown */}
+          {userRole !== null && (
+            <div ref={avatarRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => setAvatarOpen(!avatarOpen)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '0.5rem',
+                  background: 'none', border: 'none', cursor: 'pointer', padding: 0, minHeight: 0,
+                }}
+                aria-label="Profile menu"
+              >
+                <div style={{
+                  width: '36px', height: '36px', borderRadius: '50%',
+                  background: 'var(--teal-primary)', color: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontWeight: 700, fontSize: '0.875rem', flexShrink: 0,
+                }}>
+                  {userName?.charAt(0)?.toUpperCase() || '?'}
+                </div>
+                <ChevronDown size={14} style={{ color: 'var(--text-secondary)', display: 'none' }} className="chevron-desktop" />
+              </button>
 
-          {userName && (
-            <div style={{ textAlign: 'right', display: 'none' }} className="md-block">
-              <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>{userName}</p>
-              <p style={{ fontSize: '0.65rem', color: 'var(--teal-secondary)', textTransform: 'capitalize' }}>{userRole ?? ''}</p>
+              {avatarOpen && (
+                <div style={{
+                  position: 'absolute', right: 0, top: '48px',
+                  width: '200px', borderRadius: '0.75rem', overflow: 'hidden', zIndex: 100,
+                  background: 'var(--surface)', border: '1px solid var(--border)',
+                  boxShadow: '0 16px 40px rgba(0,0,0,0.6)',
+                }}>
+                  <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--border)' }}>
+                    <p style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-primary)' }}>{userName}</p>
+                    <p style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', textTransform: 'capitalize' }}>{userRole}</p>
+                  </div>
+                  <Link href="/dashboard" onClick={() => setAvatarOpen(false)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.75rem 1rem', fontSize: '0.875rem', color: 'var(--text-secondary)', textDecoration: 'none', minHeight: 0 }}>
+                    🏠 Dashboard
+                  </Link>
+                  <Link href="/profile" onClick={() => setAvatarOpen(false)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.75rem 1rem', fontSize: '0.875rem', color: 'var(--text-secondary)', textDecoration: 'none', borderTop: '1px solid var(--border)', minHeight: 0 }}>
+                    👤 View Profile
+                  </Link>
+                  <button
+                    onClick={handleSignOut}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: '0.625rem',
+                      padding: '0.75rem 1rem', fontSize: '0.875rem', color: '#ef4444',
+                      background: 'transparent', border: 'none', borderTop: '1px solid var(--border)',
+                      cursor: 'pointer', textAlign: 'left', minHeight: 0,
+                    }}
+                  >
+                    🚪 Sign Out
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
-          <Link href="/profile" style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '50%',
-            flexShrink: 0,
-            background: 'var(--teal-primary)',
-            color: 'white',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '0.875rem',
-            fontWeight: 700,
-            textDecoration: 'none',
-          }}>
-            {userName?.charAt(0)?.toUpperCase() || '?'}
-          </Link>
-
-          <button
-            onClick={handleLogout}
-            aria-label="Sign out"
-            title="Sign out"
-            style={{
-              background: 'none',
-              border: '1px solid var(--border)',
-              borderRadius: '0.375rem',
-              padding: '0.4rem',
-              cursor: 'pointer',
-              color: 'var(--text-secondary)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              minHeight: 36,
-              width: 36,
-            }}
-          >
-            <LogOut size={15} />
-          </button>
-
+          {/* Mobile hamburger */}
           <button
             onClick={() => setMenuOpen(!menuOpen)}
             aria-label={menuOpen ? 'Close menu' : 'Open menu'}
             style={{
-              background: 'none',
-              border: '1px solid var(--border)',
-              borderRadius: '0.375rem',
-              padding: '0.4rem',
-              cursor: 'pointer',
-              color: 'var(--text-primary)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              minHeight: 36,
-              width: 36,
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: '0.375rem', padding: '0.4rem', cursor: 'pointer',
+              color: 'var(--text-primary)', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', minHeight: 36, width: 36,
             }}
-            className="lg-hide"
+            className="hamburger"
           >
             {menuOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
         </div>
       </nav>
 
+      {/* Mobile menu */}
       {menuOpen && (
-        <div style={{
-          position: 'fixed',
-          top: '64px',
-          left: 0,
-          right: 0,
-          zIndex: 49,
-          background: '#000000',
-          borderBottom: '1px solid var(--border)',
-          display: 'flex',
-          flexDirection: 'column',
-        }} className="lg-hide">
-          {userName && (
-            <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)' }}>
-              <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)' }}>{userName}</p>
-              <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)', textTransform: 'capitalize' }}>{userRole ?? ''}</p>
-            </div>
-          )}
-          <div style={{ display: 'flex', flexDirection: 'column', padding: '0.5rem 0' }}>
-            <NavLinks items={navItems} onClick={() => setMenuOpen(false)} compact />
+        <div
+          style={{
+            position: 'fixed', top: '60px', left: 0, right: 0, bottom: 0,
+            zIndex: 49, background: 'rgba(0,0,0,0.5)',
+          }}
+          onClick={() => setMenuOpen(false)}
+        >
+          <div
+            style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {userName && (
+              <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)' }}>
+                <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)' }}>{userName}</p>
+                <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)', textTransform: 'capitalize' }}>{userRole}</p>
+              </div>
+            )}
+            {navLinks.map(link => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setMenuOpen(false)}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '1rem 1.25rem', fontSize: '1rem', fontWeight: 500,
+                  color: isActive(link.href) ? 'var(--teal-secondary)' : 'var(--text-primary)',
+                  textDecoration: 'none', minHeight: 0,
+                  borderBottom: '1px solid var(--border)',
+                  background: isActive(link.href) ? 'rgba(8,119,160,0.08)' : 'transparent',
+                }}
+              >
+                {link.label}
+                {(link.badge || 0) > 0 && (
+                  <span style={{
+                    width: '20px', height: '20px', borderRadius: '50%',
+                    background: '#f59e0b', color: '#000',
+                    fontSize: '11px', fontWeight: 700,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {link.badge}
+                  </span>
+                )}
+              </Link>
+            ))}
+            <Link href="/profile" onClick={() => setMenuOpen(false)}
+              style={{ display: 'flex', alignItems: 'center', padding: '1rem 1.25rem', fontSize: '1rem', color: 'var(--text-secondary)', textDecoration: 'none', borderBottom: '1px solid var(--border)', minHeight: 0 }}>
+              👤 Profile
+            </Link>
+            <button
+              onClick={handleSignOut}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center',
+                padding: '1rem 1.25rem', fontSize: '1rem', color: '#ef4444',
+                background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', minHeight: 0,
+              }}
+            >
+              🚪 Sign Out
+            </button>
           </div>
         </div>
       )}
 
       <style>{`
-        @media (min-width: 768px) {
-          .md-flex { display: flex !important; }
-          .md-block { display: block !important; }
-        }
-        @media (min-width: 1080px) {
-          .lg-flex { display: flex !important; }
-          .lg-hide { display: none !important; }
-        }
-        @media (max-width: 1079px) {
-          .lg-flex { display: none !important; }
+        @media (min-width: 900px) {
+          .nav-desktop { display: flex !important; }
+          .hamburger { display: none !important; }
+          .chevron-desktop { display: block !important; }
         }
       `}</style>
     </>

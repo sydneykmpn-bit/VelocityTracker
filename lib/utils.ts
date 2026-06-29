@@ -81,3 +81,66 @@ export function sortRecords(records: any[]): any[] {
     return bNorm - aNorm
   })
 }
+
+// Convert a Date object to YYYY-MM-DD using Asia/Manila timezone
+export function formatLocalDate(date: Date, timeZone = 'Asia/Manila'): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone }).format(date)
+}
+
+// Workout streak calculation (weekly)
+export function calculateStreak(workoutDates: string[]): number {
+  if (!workoutDates.length) return 0
+  const weeks = new Set(
+    workoutDates.map(d => {
+      const date = new Date(d)
+      const startOfWeek = new Date(date)
+      startOfWeek.setDate(date.getDate() - date.getDay())
+      return startOfWeek.toISOString().split('T')[0]
+    })
+  )
+  const weekArr = Array.from(weeks).sort().reverse()
+  let streak = 0
+  const now = new Date()
+  const thisWeekStart = new Date(now)
+  thisWeekStart.setDate(now.getDate() - now.getDay())
+
+  for (let i = 0; i < weekArr.length; i++) {
+    const weekStart = new Date(weekArr[i])
+    const expectedWeekStart = new Date(thisWeekStart)
+    expectedWeekStart.setDate(thisWeekStart.getDate() - i * 7)
+    if (Math.abs(weekStart.getTime() - expectedWeekStart.getTime()) < 7 * 24 * 60 * 60 * 1000) {
+      streak++
+    } else break
+  }
+  return streak
+}
+
+// Week activity dots (Sun–Sat)
+export function getWeekActivity(workoutDates: string[]): boolean[] {
+  const now = new Date()
+  const startOfWeek = new Date(now)
+  startOfWeek.setDate(now.getDate() - now.getDay())
+  return Array.from({ length: 7 }, (_, i) => {
+    const day = new Date(startOfWeek)
+    day.setDate(startOfWeek.getDate() + i)
+    const dayStr = formatLocalDate(day)
+    return workoutDates.some(d => d.startsWith(dayStr))
+  })
+}
+
+// Activity status for members
+export function getActivityStatus(lastWorkoutDate: string | null): 'active' | 'warning' | 'inactive' {
+  if (!lastWorkoutDate) return 'inactive'
+  const daysSince = Math.floor(
+    (Date.now() - new Date(lastWorkoutDate).getTime()) / (1000 * 60 * 60 * 24)
+  )
+  if (daysSince <= 7) return 'active'
+  if (daysSince <= 14) return 'warning'
+  return 'inactive'
+}
+
+export const ACTIVITY_COLORS = {
+  active: '#4ade80',
+  warning: '#f59e0b',
+  inactive: '#ef4444',
+}

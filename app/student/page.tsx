@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import Navbar from '@/components/Navbar'
 import { getLocalDateString } from '@/lib/utils'
 
-type Tab = 'plans' | 'progress' | 'attendance' | 'goals'
+type Tab = 'plans' | 'prs' | 'schedule' | 'progress' | 'attendance' | 'metrics'
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--surface)',
@@ -29,6 +29,14 @@ export default function StudentPage() {
   const [coach, setCoach] = useState<any>(null)
   const [activeTab, setActiveTab] = useState<Tab>('plans')
   const [loading, setLoading] = useState(true)
+  const [allMyPRs, setAllMyPRs] = useState<any[]>([])
+  const [upcomingClasses, setUpcomingClasses] = useState<any[]>([])
+  const [bodyMetrics, setBodyMetrics] = useState<any[]>([])
+  const [metricWeight, setMetricWeight] = useState('')
+  const [metricUnit, setMetricUnit] = useState<'kg' | 'lbs'>('kg')
+  const [metricSaving, setMetricSaving] = useState(false)
+  const [userId, setUserId] = useState<string | null>(null)
+  const [groupIds, setGroupIds] = useState<string[]>([])
 
   useEffect(() => {
     async function load() {
@@ -63,10 +71,40 @@ export default function StudentPage() {
 
       const { data: attendance } = await supabase
         .from('class_attendees')
-        .select('*, scheduled_classes(title, scheduled_date, type, start_time)')
+        .select('*, scheduled_classes(title, scheduled_date, type, start_time, profiles!scheduled_classes_coach_id_fkey(name))')
         .eq('member_id', user.id)
         .order('id', { ascending: false })
       setAttendanceHistory(attendance || [])
+
+      setUserId(user.id)
+
+      // PRs
+      const { data: prs } = await supabase.from('personal_records').select('*').eq('user_id', user.id).order('recorded_at', { ascending: false })
+      setAllMyPRs(prs || [])
+
+      // Group IDs for class schedule
+      const { data: memberships } = await supabase.from('group_members').select('group_id').eq('member_id', user.id)
+      const gIds = (memberships || []).map((m: any) => m.group_id)
+      setGroupIds(gIds)
+
+      // Upcoming classes (next 14 days) for member's groups
+      if (gIds.length > 0) {
+        const today = getLocalDateString()
+        const in14 = new Date(); in14.setDate(in14.getDate() + 14)
+        const in14Str = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(in14)
+        const { data: classes } = await supabase
+          .from('scheduled_classes')
+          .select('*, groups(name), profiles!scheduled_classes_coach_id_fkey(name), class_attendees(id, member_id, status)')
+          .in('group_id', gIds)
+          .gte('scheduled_date', today)
+          .lte('scheduled_date', in14Str)
+          .order('scheduled_date').order('start_time')
+        setUpcomingClasses(classes || [])
+      }
+
+      // Body metrics
+      const { data: metrics } = await supabase.from('body_metrics').select('*').eq('user_id', user.id).order('recorded_at', { ascending: false }).limit(30)
+      setBodyMetrics(metrics || [])
 
       setLoading(false)
     }
@@ -99,9 +137,11 @@ export default function StudentPage() {
 
   const tabs: { value: Tab; label: string }[] = [
     { value: 'plans', label: 'Assigned Plans' },
+    { value: 'prs', label: 'My PRs' },
+    { value: 'schedule', label: 'Class Schedule' },
     { value: 'progress', label: 'Progress' },
     { value: 'attendance', label: 'Attendance' },
-    { value: 'goals', label: 'Goals' },
+    { value: 'metrics', label: 'Body Metrics' },
   ]
 
   return (
@@ -254,6 +294,130 @@ export default function StudentPage() {
           </div>
         )}
 
+        {activeTab === 'prs' && (
+          <div key="tab-prs">
+            {allMyPRs.length === 0 ? (
+              <div style={{ ...cardStyle, padding: '3rem', textAlign: 'center' }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>No personal records yet.</p>
+                <Link href="/leaderboard" style={{ background: 'var(--teal-primary)', color: 'white', padding: '0.5rem 1.25rem', borderRadius: '0.5rem', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 700 }}>Submit a PR</Link>
+              </div>
+            ) : (() => {
+              // Group by exercise, pick best per exercise
+              type PRGroup = { exercise: string; unit: string; best: number; bestDate: string; all: any[] }
+              const grouped = Object.values(
+                allMyPRs.reduce((acc: Record<string, PRGroup>, pr: any) => {
+                  const key = pr.exercise_name
+                  if (!acc[key]) acc[key] = { exercise: key, unit: pr.unit, best: pr.value, bestDate: pr.recorded_at || pr.date, all: [] }
+                  if (pr.value > acc[key].best) { acc[key].best = pr.value; acc[key].bestDate = pr.recorded_at || pr.date }
+                  acc[key].all.push(pr)
+                  return acc
+                }, {})
+              ) as PRGroup[]
+              grouped.sort((a, b) => b.best - a.best)
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {grouped.map(group => (
+                    <div key={group.exercise} style={{ ...cardStyle, overflow: 'hidden' }}>
+                      <div style={{ padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: group.all.length > 1 ? '1px solid var(--border)' : 'none' }}>
+                        <div>
+                          <p style={{ fontWeight: 700, fontSize: '0.95rem' }}>{group.exercise}</p>
+                          <p style={{ fontSize: '0.65rem', color: 'var(--teal-secondary)', marginTop: '0.15rem' }}>
+                            Personal Best · {new Date(group.bestDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </p>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.75rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{group.best}</p>
+                          <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{group.unit}</p>
+                        </div>
+                      </div>
+                      {group.all.length > 1 && (
+                        <div style={{ padding: '0.625rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                          {group.all.map((pr: any) => (
+                            <div key={pr.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)', padding: '0.1rem 0' }}>
+                              <span>{new Date(pr.recorded_at || pr.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                              <span style={{ color: pr.value === group.best ? 'var(--teal-secondary)' : 'var(--text-secondary)', fontWeight: pr.value === group.best ? 700 : 400 }}>{pr.value} {pr.unit}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
+          </div>
+        )}
+
+        {activeTab === 'schedule' && (
+          <div key="tab-schedule">
+            {upcomingClasses.length === 0 ? (
+              <div style={{ ...cardStyle, padding: '3rem', textAlign: 'center' }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No upcoming classes in the next 14 days.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {upcomingClasses.map(cls => {
+                  const myAttendance = (cls.class_attendees || []).find((a: any) => a.member_id === userId)
+                  return (
+                    <div key={cls.id} style={{ ...cardStyle, padding: '1.25rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontWeight: 600, fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cls.title}</p>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                          📅 {new Date(cls.scheduled_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                          {cls.start_time ? ` · 🕐 ${cls.start_time.slice(0, 5)}` : ''}
+                          {cls.location ? ` · 📍 ${cls.location}` : ''}
+                        </p>
+                        {cls.profiles?.name && (
+                          <p style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', marginTop: '0.15rem' }}>Coach {cls.profiles.name}</p>
+                        )}
+                        {cls.groups?.name && (
+                          <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>👥 {cls.groups.name}</p>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem', flexShrink: 0 }}>
+                        {myAttendance ? (
+                          <span style={{
+                            fontSize: '0.7rem', fontWeight: 700, padding: '0.25rem 0.625rem', borderRadius: '999px',
+                            background: myAttendance.status === 'attended' ? 'rgba(34,197,94,0.15)' : myAttendance.status === 'rsvp' ? 'rgba(8,119,160,0.15)' : 'rgba(239,68,68,0.1)',
+                            color: myAttendance.status === 'attended' ? '#4ade80' : myAttendance.status === 'rsvp' ? 'var(--teal-secondary)' : '#f87171',
+                            border: `1px solid ${myAttendance.status === 'attended' ? 'rgba(34,197,94,0.3)' : myAttendance.status === 'rsvp' ? 'rgba(8,119,160,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                            textTransform: 'capitalize' as const,
+                          }}>
+                            {myAttendance.status === 'rsvp' ? '✓ RSVPed' : myAttendance.status}
+                          </span>
+                        ) : (
+                          <button
+                            onClick={async () => {
+                              if (!userId) return
+                              await supabase.from('class_attendees').insert({ class_id: cls.id, member_id: userId, status: 'rsvp' })
+                              // Refresh upcoming classes
+                              if (groupIds.length > 0) {
+                                const today = getLocalDateString()
+                                const in14 = new Date(); in14.setDate(in14.getDate() + 14)
+                                const in14Str = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(in14)
+                                const { data: classes } = await supabase
+                                  .from('scheduled_classes')
+                                  .select('*, groups(name), profiles!scheduled_classes_coach_id_fkey(name), class_attendees(id, member_id, status)')
+                                  .in('group_id', groupIds).gte('scheduled_date', today).lte('scheduled_date', in14Str)
+                                  .order('scheduled_date').order('start_time')
+                                setUpcomingClasses(classes || [])
+                              }
+                            }}
+                            style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
+                          >
+                            RSVP
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === 'progress' && (
           <div>
             <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>Workout Frequency (Last 30)</p>
@@ -296,7 +460,9 @@ export default function StudentPage() {
                         <p style={{ fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.scheduled_classes?.title || 'Class'}</p>
                         <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
                           {a.scheduled_classes?.scheduled_date && formatDate(a.scheduled_classes.scheduled_date)}
-                          {a.scheduled_classes?.start_time && ` - ${a.scheduled_classes.start_time?.slice(0, 5)}`}
+                          {a.scheduled_classes?.start_time && ` · ${a.scheduled_classes.start_time?.slice(0, 5)}`}
+                          {(a.scheduled_classes as any)?.['profiles!scheduled_classes_coach_id_fkey']?.name &&
+                            ` · Coach ${(a.scheduled_classes as any)['profiles!scheduled_classes_coach_id_fkey'].name}`}
                         </p>
                       </div>
                       <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'capitalize', padding: '0.2rem 0.5rem', borderRadius: '999px', background: `${statusColor}20`, color: statusColor, flexShrink: 0 }}>{a.status}</span>
@@ -308,22 +474,131 @@ export default function StudentPage() {
           </div>
         )}
 
-        {activeTab === 'goals' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
-            {[
-              { label: 'Weekly rhythm', value: `${workoutHistory.slice(-7).length} sessions`, note: 'Keep a consistent training cadence.' },
-              { label: 'Plan discipline', value: `${planCompletionRate}%`, note: `${completedPlans.length} completed, ${pendingPlans.length} still pending.` },
-              { label: 'Class reliability', value: `${attendanceRate}%`, note: `${attendedCount} attended out of ${attendanceHistory.length || 0} records.` },
-              { label: 'Next check-in', value: coach?.name ?? 'Coach', note: skippedPlans.length > 0 ? 'Ask about skipped plans and schedule recovery.' : 'Review progress after your next logged session.' },
-            ].map(item => (
-              <div key={item.label} style={{ ...cardStyle, padding: '1.25rem' }}>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>{item.label}</p>
-                <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.75rem', letterSpacing: '0.03em', color: 'var(--teal-secondary)', lineHeight: 1 }}>{item.value}</p>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.5, marginTop: '0.75rem' }}>{item.note}</p>
+        {activeTab === 'metrics' && (
+          <div key="tab-metrics">
+            {/* Log weight form */}
+            <div style={{ ...cardStyle, padding: '1.25rem', marginBottom: '1.5rem' }}>
+              <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>LOG BODY WEIGHT</h2>
+              <form
+                onSubmit={async e => {
+                  e.preventDefault()
+                  if (!metricWeight || !userId) return
+                  setMetricSaving(true)
+                  await supabase.from('body_metrics').insert({
+                    user_id: userId,
+                    weight: parseFloat(metricWeight),
+                    unit: metricUnit,
+                    recorded_at: new Date().toISOString(),
+                  })
+                  const { data } = await supabase.from('body_metrics').select('*').eq('user_id', userId).order('recorded_at', { ascending: false }).limit(30)
+                  setBodyMetrics(data || [])
+                  setMetricWeight('')
+                  setMetricSaving(false)
+                }}
+                style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', flexWrap: 'wrap' }}
+              >
+                <div style={{ flex: 1, minWidth: '120px' }}>
+                  <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '0.375rem' }}>
+                    Weight
+                  </label>
+                  <input
+                    type="number" value={metricWeight} onChange={e => setMetricWeight(e.target.value)}
+                    required min="20" max="300" step="0.1" placeholder="e.g. 75"
+                    style={{ background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', color: 'var(--text-primary)', fontSize: '1rem', outline: 'none', width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '0.375rem' }}>
+                    Unit
+                  </label>
+                  <div style={{ display: 'flex', gap: '0.25rem' }}>
+                    {(['kg', 'lbs'] as const).map(u => (
+                      <button key={u} type="button" onClick={() => setMetricUnit(u)} style={{
+                        background: metricUnit === u ? 'rgba(8,119,160,0.2)' : '#0d1a1e',
+                        border: `1px solid ${metricUnit === u ? 'var(--teal-primary)' : '#1a2e34'}`,
+                        borderRadius: '0.375rem', padding: '0.6rem 0.875rem',
+                        color: metricUnit === u ? 'var(--teal-secondary)' : 'var(--text-secondary)',
+                        fontSize: '0.875rem', fontWeight: 700, cursor: 'pointer', minHeight: 0,
+                      }}>{u}</button>
+                    ))}
+                  </div>
+                </div>
+                <button type="submit" disabled={metricSaving} style={{ background: metricSaving ? '#0d1a1e' : 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.6rem 1.25rem', fontWeight: 700, fontSize: '0.875rem', cursor: metricSaving ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+                  {metricSaving ? 'Saving…' : 'Log Weight'}
+                </button>
+              </form>
+            </div>
+
+            {/* Weight chart */}
+            {bodyMetrics.length > 0 && (() => {
+              const reversed = [...bodyMetrics].reverse()
+              const weights = reversed.map(m => m.unit === 'lbs' ? m.weight * 0.453592 : m.weight)
+              const minW = Math.min(...weights) - 2
+              const maxW = Math.max(...weights) + 2
+              const range = maxW - minW || 1
+              const pts = weights.map((w, i) => ({
+                x: (i / Math.max(weights.length - 1, 1)) * 100,
+                y: 100 - ((w - minW) / range) * 100,
+              }))
+
+              return (
+                <div style={{ ...cardStyle, padding: '1.25rem', marginBottom: '1.5rem' }}>
+                  <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+                    Weight Over Time (kg)
+                  </p>
+                  <div style={{ position: 'relative', height: '120px', overflow: 'hidden' }}>
+                    <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
+                      {/* Grid lines */}
+                      {[25, 50, 75].map(y => (
+                        <line key={y} x1="0" y1={y} x2="100" y2={y} stroke="var(--border)" strokeWidth="0.5" />
+                      ))}
+                      {/* Line */}
+                      {pts.length > 1 && (
+                        <polyline
+                          points={pts.map(p => `${p.x},${p.y}`).join(' ')}
+                          fill="none"
+                          stroke="var(--teal-primary)"
+                          strokeWidth="1.5"
+                          strokeLinejoin="round"
+                        />
+                      )}
+                      {/* Dots */}
+                      {pts.map((p, i) => (
+                        <circle key={i} cx={p.x} cy={p.y} r="2" fill="var(--teal-secondary)" />
+                      ))}
+                    </svg>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.375rem', fontSize: '0.65rem', color: 'var(--text-secondary)' }}>
+                    <span>{new Date(reversed[0]?.recorded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                    <span>{minW.toFixed(1)} – {maxW.toFixed(1)} kg</span>
+                    <span>{new Date(reversed[reversed.length - 1]?.recorded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* Metrics history */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+              {bodyMetrics.map(m => (
+                <div key={m.id} style={{ ...cardStyle, padding: '0.75rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <p style={{ fontSize: '0.875rem' }}>
+                    {new Date(m.recorded_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                  </p>
+                  <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', color: 'var(--teal-secondary)' }}>
+                    {m.weight} <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{m.unit}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {bodyMetrics.length === 0 && (
+              <div style={{ ...cardStyle, padding: '3rem', textAlign: 'center' }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No body metrics logged yet. Log your weight above.</p>
               </div>
-            ))}
+            )}
           </div>
         )}
+
       </main>
 
       <style>{`

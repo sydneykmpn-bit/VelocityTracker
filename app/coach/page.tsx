@@ -362,6 +362,14 @@ export default function CoachPage() {
   const [planStatusFilter, setPlanStatusFilter] = useState<'all'|'pending'|'completed'|'skipped'|'rescheduled'>('all')
   const [planMemberFilter, setPlanMemberFilter] = useState('all')
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<{id: string; name: string} | null>(null)
+  const [memberSearch, setMemberSearch] = useState('')
+  const [memberSort, setMemberSort] = useState<'name' | 'most-active' | 'least-active' | 'last-workout'>('name')
+  const [memberGroupFilter, setMemberGroupFilter] = useState('all')
+  const [assignMemberId, setAssignMemberId] = useState('')
+  const [bulkAssignMode, setBulkAssignMode] = useState(false)
+  const [bulkSelected, setBulkSelected] = useState<string[]>([])
+  const [assignMemberWorkouts, setAssignMemberWorkouts] = useState<any[]>([])
+  const [visibleToMember, setVisibleToMember] = useState(false)
 
   // Workout Calendar
   const [calendarDate, setCalendarDate] = useState(getLocalDateString())
@@ -468,6 +476,12 @@ export default function CoachPage() {
     if (!loading) loadCalendarWorkouts()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calendarDate, memberFilter, calendarMonth])
+
+  useEffect(() => {
+    if (!assignForm.member_id) { setAssignMemberWorkouts([]); return }
+    supabase.from('workouts').select('id, title, type, date, duration').eq('user_id', assignForm.member_id).order('date', { ascending: false }).limit(3).then(({ data }) => setAssignMemberWorkouts(data || []))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignForm.member_id])
 
   const toggleMember = async (memberId: string) => {
     if (expandedMember === memberId) { setExpandedMember(null); return }
@@ -619,9 +633,15 @@ export default function CoachPage() {
     e.preventDefault()
     if (!noteText.trim() || !userId) return
     setNoteSaving(true); setError(''); setSuccess('')
-    const { error: err } = await supabase.from('coach_notes').insert({ coach_id: userId, member_id: notesMemberId || null, note: noteText.trim() })
+    const { error: err } = await supabase.from('coach_notes').insert({
+      coach_id: userId,
+      member_id: notesMemberId || null,
+      note: noteText.trim(),
+      visible_to_member: visibleToMember,
+      is_pinned: false,
+    })
     if (err) { setError(err.message) } else {
-      setSuccess('Note saved!'); setNoteText(''); setNotesMemberId('')
+      setSuccess('Note saved!'); setNoteText(''); setNotesMemberId(''); setVisibleToMember(false)
       await loadNotes(userId)
     }
     setNoteSaving(false)
@@ -637,6 +657,17 @@ export default function CoachPage() {
   const handleDeleteNote = async (noteId: string) => {
     if (!userId) return
     await supabase.from('coach_notes').delete().eq('id', noteId)
+    await loadNotes(userId)
+  }
+
+  const handlePinNote = async (noteId: string, currentPinned: boolean) => {
+    if (!userId) return
+    await supabase.from('coach_notes').update({ is_pinned: !currentPinned }).eq('id', noteId)
+    await loadNotes(userId)
+  }
+  const handleToggleVisibility = async (noteId: string, currentVisible: boolean) => {
+    if (!userId) return
+    await supabase.from('coach_notes').update({ visible_to_member: !currentVisible }).eq('id', noteId)
     await loadNotes(userId)
   }
 
@@ -762,73 +793,153 @@ export default function CoachPage() {
         {/* ── MY MEMBERS TAB ── */}
         {activeTab === 'members' && (
           <div key="tab-members">
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>
-              {myMembers.length} member{myMembers.length !== 1 ? 's' : ''} across your groups
-            </p>
+            {/* Search + Sort + Group filter */}
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                type="text" placeholder="Search students…" value={memberSearch}
+                onChange={e => setMemberSearch(e.target.value)}
+                style={{ flex: 1, minWidth: '160px', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none' }}
+              />
+              <select
+                value={memberGroupFilter}
+                onChange={e => setMemberGroupFilter(e.target.value)}
+                style={{ background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', cursor: 'pointer' }}
+              >
+                <option value="all">All Groups</option>
+                {myGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+              <select
+                value={memberSort}
+                onChange={e => setMemberSort(e.target.value as any)}
+                style={{ background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', cursor: 'pointer' }}
+              >
+                <option value="name">Sort: Name</option>
+                <option value="most-active">Sort: Most Active</option>
+                <option value="least-active">Sort: Least Active</option>
+                <option value="last-workout">Sort: Last Workout</option>
+              </select>
+            </div>
+
             {myMembers.length === 0 ? (
               <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '3rem', textAlign: 'center' }}>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No members in your groups yet. Add members in the Groups tab.</p>
               </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {myMembers.map(m => {
-                  const isExpanded = expandedMember === m.id
-                  const wks = memberWorkouts[m.id] ?? []
-                  return (
-                    <div key={m.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', overflow: 'hidden' }}>
-                      <button onClick={() => toggleMember(m.id)} style={{ width: '100%', background: 'none', border: 'none', padding: '1.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#F2F2F2' }}>
-                        <div style={{ textAlign: 'left' }}>
-                          <h3
-                            onClick={e => { e.stopPropagation(); setSelectedMemberProfile({ id: m.id, name: m.name }) }}
-                            style={{ fontWeight: 600, marginBottom: '0.2rem', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(52,186,194,0.4)', textUnderlineOffset: '2px' }}
-                          >{m.name}</h3>
-                          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{m.email}</p>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                          <button
-                            onClick={e => { e.stopPropagation(); setMemberFilter(m.id); switchTab('calendar') }}
-                            style={{ background: 'rgba(8,119,160,0.15)', border: '1px solid rgba(8,119,160,0.35)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: 'var(--teal-secondary)', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', minHeight: 0 }}
-                          >
-                            <Calendar size={12} /> View Day
-                          </button>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{m.workoutCount}</div>
-                            <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>workouts</div>
-                          </div>
-                          {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />}
-                        </div>
-                      </button>
-                      {isExpanded && (
-                        <div style={{ borderTop: '1px solid var(--border)', padding: '1rem 1.25rem' }}>
-                          <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>Recent Workouts</p>
-                          {wks.length === 0 ? (
-                            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No workouts logged yet.</p>
-                          ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                              {wks.map(w => (
-                                <div key={w.id} style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
-                                  <div>
-                                    <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{w.title}</p>
-                                    <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>
-                                      {new Date(w.date ?? w.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                      {w.duration ? ` · ${w.duration}min` : ''}
-                                    </p>
+            ) : (() => {
+              // Filter
+              let filtered = myMembers.filter(m => {
+                const searchMatch = !memberSearch.trim() || m.name?.toLowerCase().includes(memberSearch.toLowerCase()) || m.email?.toLowerCase().includes(memberSearch.toLowerCase())
+                return searchMatch
+              })
+              // Sort
+              filtered = [...filtered].sort((a, b) => {
+                if (memberSort === 'name') return (a.name || '').localeCompare(b.name || '')
+                if (memberSort === 'most-active') return (b.workoutCount || 0) - (a.workoutCount || 0)
+                if (memberSort === 'least-active') return (a.workoutCount || 0) - (b.workoutCount || 0)
+                if (memberSort === 'last-workout') {
+                  if (!a.lastWorkout) return 1
+                  if (!b.lastWorkout) return -1
+                  return new Date(b.lastWorkout).getTime() - new Date(a.lastWorkout).getTime()
+                }
+                return 0
+              })
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {filtered.map(m => {
+                    const isExpanded = expandedMember === m.id
+                    const wks = memberWorkouts[m.id] ?? []
+                    // Activity dot
+                    const daysSince = m.lastWorkout ? Math.floor((Date.now() - new Date(m.lastWorkout).getTime()) / 86400000) : 999
+                    const actColor = daysSince <= 7 ? '#4ade80' : daysSince <= 14 ? '#f59e0b' : '#ef4444'
+                    // Plan completion for this member
+                    const memberPlans = assignedPlans.filter(p => p.member_id === m.id)
+                    const memberCompleted = memberPlans.filter(p => p.status === 'completed').length
+                    const memberCompletionRate = memberPlans.length > 0 ? Math.round((memberCompleted / memberPlans.length) * 100) : 0
+
+                    return (
+                      <div key={m.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', overflow: 'hidden' }}>
+                        <button onClick={() => toggleMember(m.id)} style={{ width: '100%', background: 'none', border: 'none', padding: '1.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--text-primary)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem', minWidth: 0, textAlign: 'left' }}>
+                            {/* Activity dot */}
+                            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: actColor, flexShrink: 0 }} title={`Last workout: ${m.lastWorkout ? new Date(m.lastWorkout).toLocaleDateString() : 'Never'}`} />
+                            <div style={{ minWidth: 0 }}>
+                              <h3
+                                onClick={e => { e.stopPropagation(); setSelectedMemberProfile({ id: m.id, name: m.name }) }}
+                                style={{ fontWeight: 600, marginBottom: '0.1rem', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(52,186,194,0.4)', textUnderlineOffset: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                              >{m.name}</h3>
+                              <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {m.lastWorkout
+                                  ? `Last: ${new Date(m.lastWorkout).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                                  : 'No workouts yet'}
+                              </p>
+                              {/* Plan completion mini-bar */}
+                              {memberPlans.length > 0 && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginTop: '0.25rem' }}>
+                                  <div style={{ width: '60px', height: '4px', borderRadius: '999px', background: 'var(--border)', overflow: 'hidden' }}>
+                                    <div style={{ height: '100%', width: `${memberCompletionRate}%`, background: 'var(--teal-primary)', borderRadius: '999px' }} />
                                   </div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
-                                    <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', ...TYPE_BADGE[w.type] ?? TYPE_BADGE.both }}>{w.type}</span>
-                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{(w.exercises as any[])?.[0]?.count ?? 0} ex</span>
-                                  </div>
+                                  <span style={{ fontSize: '0.6rem', color: 'var(--text-secondary)' }}>{memberCompletionRate}% done</span>
                                 </div>
-                              ))}
+                              )}
                             </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                            {/* Assign Plan shortcut */}
+                            <button
+                              onClick={e => {
+                                e.stopPropagation()
+                                setAssignForm(p => ({ ...p, member_id: m.id }))
+                                switchTab('assign')
+                              }}
+                              style={{ background: 'rgba(8,119,160,0.15)', border: '1px solid rgba(8,119,160,0.35)', borderRadius: '0.375rem', padding: '0.3rem 0.5rem', color: 'var(--teal-secondary)', fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 0 }}
+                            >
+                              + Plan
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); setMemberFilter(m.id); switchTab('calendar') }}
+                              style={{ background: 'rgba(8,119,160,0.15)', border: '1px solid rgba(8,119,160,0.35)', borderRadius: '0.375rem', padding: '0.3rem 0.5rem', color: 'var(--teal-secondary)', fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', minHeight: 0 }}
+                            >
+                              <Calendar size={11} /> Calendar
+                            </button>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{m.workoutCount}</div>
+                              <div style={{ fontSize: '0.6rem', color: 'var(--text-secondary)' }}>workouts</div>
+                            </div>
+                            {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />}
+                          </div>
+                        </button>
+                        {isExpanded && (
+                          <div style={{ borderTop: '1px solid var(--border)', padding: '1rem 1.25rem' }}>
+                            <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>Recent Workouts</p>
+                            {wks.length === 0 ? (
+                              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No workouts logged yet.</p>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                                {wks.map(w => (
+                                  <div key={w.id} style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
+                                    <div>
+                                      <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{w.title}</p>
+                                      <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>
+                                        {new Date(w.date ?? w.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                        {w.duration ? ` · ${w.duration}min` : ''}
+                                      </p>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                                      <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase' as const, ...(TYPE_BADGE[w.type] ?? TYPE_BADGE.both) }}>{w.type}</span>
+                                      <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{(w.exercises as any[])?.[0]?.count ?? 0} ex</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
           </div>
         )}
 
@@ -949,6 +1060,18 @@ export default function CoachPage() {
                       <option value="">Select member…</option>
                       {allMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                     </select>
+                    {/* Last 3 workouts for selected member */}
+                    {assignForm.member_id && assignMemberWorkouts.length > 0 && (
+                      <div style={{ marginTop: '0.5rem', padding: '0.75rem', background: '#0a1518', borderRadius: '0.5rem', border: '1px solid #1a2e34' }}>
+                        <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Last 3 Workouts</p>
+                        {assignMemberWorkouts.map(w => (
+                          <div key={w.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', padding: '0.2rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>{w.title}</span>
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', flexShrink: 0 }}>{new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label style={labelBase}>Scheduled Date</label>
@@ -1429,59 +1552,120 @@ export default function CoachPage() {
 
         {/* ── NOTES TAB ── */}
         {activeTab === 'notes' && (
-          <div key="tab-notes" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
-            <div>
-              <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>NOTES ({notes.length})</h2>
-              {notes.length === 0 ? <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No notes yet.</p> : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {notes.map(n => (
-                    <div key={n.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)' }}>{n.member?.name ?? 'General note'}</p>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button onClick={() => { setEditingNote(n.id); setEditText(n.note) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', minHeight: 0 }}>
-                            <Pencil size={14} />
-                          </button>
-                          <button onClick={() => handleDeleteNote(n.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', display: 'flex', minHeight: 0 }}>
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </div>
-                      {editingNote === n.id ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                          <textarea value={editText} onChange={e => setEditText(e.target.value)} style={{ ...inputBase, width: '100%', minHeight: '60px', resize: 'vertical' }} />
-                          <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <button onClick={() => handleUpdateNote(n.id)} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.4rem 0.875rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}>Save</button>
-                            <button onClick={() => { setEditingNote(null); setEditText('') }} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.4rem 0.875rem', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer', minHeight: 0 }}>Cancel</button>
-                          </div>
-                        </div>
-                      ) : <p style={{ fontSize: '0.875rem', lineHeight: 1.6 }}>{n.note}</p>}
-                      <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-                        {new Date(n.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
+          <div key="tab-notes">
+            {/* Add Note form */}
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.5rem' }}>
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>ADD NOTE</h2>
-              <form onSubmit={handleAddNote} style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+              <form onSubmit={handleAddNote} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 <div>
-                  <label style={labelBase}>Member (optional)</label>
+                  <label style={labelBase}>For Member (optional)</label>
                   <select value={notesMemberId} onChange={e => setNotesMemberId(e.target.value)} style={{ ...inputBase, width: '100%', cursor: 'pointer' }}>
-                    <option value="">General</option>
-                    {allMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    <option value="">General / All</option>
+                    {myMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={labelBase}>Note *</label>
-                  <textarea value={noteText} onChange={e => setNoteText(e.target.value)} required style={{ ...inputBase, width: '100%', minHeight: '100px', resize: 'vertical' }} placeholder="Write a note…" />
+                  <label style={labelBase}>Note</label>
+                  <textarea value={noteText} onChange={e => setNoteText(e.target.value)} required style={{ ...inputBase, width: '100%', minHeight: '80px', resize: 'vertical' }} placeholder="Write a coaching note…" />
                 </div>
+                {/* Visible to member toggle */}
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
+                  <div
+                    onClick={() => setVisibleToMember(!visibleToMember)}
+                    style={{ width: '36px', height: '22px', borderRadius: '999px', position: 'relative', flexShrink: 0, background: visibleToMember ? 'var(--teal-primary)' : 'var(--border)', cursor: 'pointer', transition: 'background 0.2s', minHeight: 0 }}
+                  >
+                    <div style={{ position: 'absolute', top: '3px', width: '16px', height: '16px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s', left: visibleToMember ? '17px' : '3px' }} />
+                  </div>
+                  <div>
+                    <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Visible to member</p>
+                    <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', margin: 0 }}>{visibleToMember ? 'Member will see this note on their dashboard' : 'Only you can see this note'}</p>
+                  </div>
+                </label>
                 <button type="submit" disabled={noteSaving} style={{ background: noteSaving ? '#0d1a1e' : 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.7rem', fontWeight: 700, fontSize: '0.875rem', cursor: noteSaving ? 'not-allowed' : 'pointer' }}>
                   {noteSaving ? 'Saving…' : 'Save Note'}
                 </button>
               </form>
+            </div>
+
+            {/* Notes list — pinned first */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {[...notes].sort((a, b) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0)).map(note => (
+                <div key={note.id} style={{
+                  background: 'var(--surface)', borderRadius: '0.75rem', overflow: 'hidden',
+                  border: note.is_pinned ? '1px solid var(--teal-primary)' : '1px solid var(--border)',
+                }}>
+                  <div style={{ padding: '1rem 1.25rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                        {note.is_pinned && <span style={{ fontSize: '0.75rem' }}>📌</span>}
+                        <p style={{ fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {note.member?.name ?? 'General note'}
+                        </p>
+                        {note.visible_to_member && (
+                          <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '999px', background: 'rgba(8,119,160,0.2)', color: 'var(--teal-secondary)', border: '1px solid rgba(8,119,160,0.3)', flexShrink: 0 }}>
+                            Visible
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.375rem', flexShrink: 0 }}>
+                        {/* Pin button */}
+                        <button
+                          onClick={() => handlePinNote(note.id, !!note.is_pinned)}
+                          style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.25rem 0.5rem', fontSize: '0.7rem', cursor: 'pointer', color: note.is_pinned ? 'var(--teal-secondary)' : 'var(--text-secondary)', minHeight: 0 }}
+                          title={note.is_pinned ? 'Unpin' : 'Pin'}
+                        >
+                          📌
+                        </button>
+                        {/* Visibility toggle */}
+                        <button
+                          onClick={() => handleToggleVisibility(note.id, !!note.visible_to_member)}
+                          style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.25rem 0.5rem', fontSize: '0.7rem', cursor: 'pointer', color: note.visible_to_member ? 'var(--teal-secondary)' : 'var(--text-secondary)', minHeight: 0 }}
+                          title={note.visible_to_member ? 'Hide from member' : 'Show to member'}
+                        >
+                          {note.visible_to_member ? '👁' : '🙈'}
+                        </button>
+                        {/* Edit */}
+                        <button
+                          onClick={() => { setEditingNote(note.id); setEditText(note.note) }}
+                          style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.25rem 0.5rem', fontSize: '0.7rem', cursor: 'pointer', color: 'var(--text-secondary)', minHeight: 0 }}
+                        >
+                          ✏️
+                        </button>
+                        {/* Delete */}
+                        <button
+                          onClick={() => confirm('Delete this note?') && handleDeleteNote(note.id)}
+                          style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.25rem 0.5rem', fontSize: '0.7rem', cursor: 'pointer', color: '#f87171', minHeight: 0 }}
+                        >
+                          🗑
+                        </button>
+                      </div>
+                    </div>
+                    {editingNote === note.id ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        <textarea
+                          value={editText} onChange={e => setEditText(e.target.value)}
+                          style={{ ...inputBase, width: '100%', minHeight: '70px', resize: 'vertical' }}
+                        />
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button onClick={() => handleUpdateNote(note.id)} style={{ flex: 1, background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.45rem 0.75rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}>Save</button>
+                          <button onClick={() => setEditingNote(null)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.45rem 0.625rem', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--text-secondary)', minHeight: 0 }}>Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p style={{ fontSize: '0.875rem', lineHeight: 1.6, color: 'var(--text-primary)' }}>{note.note}</p>
+                    )}
+                    <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                      {new Date(note.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {note.updated_at && note.updated_at !== note.created_at && ` · edited ${new Date(note.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              {notes.length === 0 && (
+                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '3rem', textAlign: 'center' }}>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No notes yet. Add a note above.</p>
+                </div>
+              )}
             </div>
           </div>
         )}
