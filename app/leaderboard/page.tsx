@@ -17,7 +17,7 @@ const EXERCISE_LIST = [
   'Hip Thrust','Leg Press','Lunges','Clean & Jerk','Snatch','Power Clean','Push Press',
   '400m Run','800m Run','1km Run','5km Run','10km Run','Treadmill Sprint','Treadmill Endurance',
   'Rowing 500m','Rowing 2000m','Bike','Jump Rope','Box Jump','Burpees','Wall Balls','Kettlebell Swing',
-  'Free Throw %','3-Point %','Vertical Jump','Sprint 20m','Sprint','Agility T-Test',
+  'Free Throw %','3-Point %','Vertical Jump','Sprint','Agility T-Test',
 ]
 
 const FEATURED_EXERCISES = [
@@ -25,14 +25,14 @@ const FEATURED_EXERCISES = [
   { key: 'Back Squat', label: 'Squat', icon: '🏋️' },
   { key: 'Deadlift', label: 'Deadlift', icon: '💀' },
   { key: 'Overhead Press', label: 'OHP', icon: '☝️' },
-  { key: 'Sprint 40m', label: 'Sprint', icon: '💨' },
+  { key: 'Sprint', label: 'Sprint', icon: '💨' },
 ]
 
 const PUBLIC_PR_EXERCISES = [
   { name: 'Back Squat', icon: '🏋️', unit: 'kg' },
   { name: 'Deadlift', icon: '💀', unit: 'kg' },
   { name: 'Overhead Press', icon: '☝️', unit: 'kg' },
-  { name: 'Sprint 40m', icon: '💨', unit: 'seconds' },
+  { name: 'Sprint', icon: '💨', unit: 'seconds' },
 ]
 
 const GENDER_FILTERS = [
