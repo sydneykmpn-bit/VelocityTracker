@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import Navbar from '@/components/Navbar'
-import { WorkoutCardSkeleton, StatCardSkeleton } from '@/components/Skeleton'
+import { WorkoutCardSkeleton } from '@/components/Skeleton'
 import ClassDetailModal from '@/components/ClassDetailModal'
-import { getLocalDateString, getLocalDisplayDate, calculateStreak, getWeekActivity } from '@/lib/utils'
+import { getLocalDateString, getLocalDisplayDate } from '@/lib/utils'
 
 function typeBadge(type: string) {
   const map: Record<string, { bg: string; color: string; border: string; icon: string }> = {
@@ -232,10 +232,6 @@ export default function DashboardPage() {
   const [profile, setProfile] = useState<any>(null)
   const [userRole, setUserRole] = useState('')
   const [allWorkoutsList, setAllWorkoutsList] = useState<any[]>([])
-  const [totalWorkouts, setTotalWorkouts] = useState(0)
-  const [thisMonthWorkouts, setThisMonthWorkouts] = useState(0)
-  const [workoutStreak, setWorkoutStreak] = useState(0)
-  const [weekActivity, setWeekActivity] = useState<boolean[]>(Array(7).fill(false))
   const [prs, setPrs] = useState<any[]>([])
   const [coachNote, setCoachNote] = useState<any>(null)
   const [todayPlans, setTodayPlans] = useState<any[]>([])
@@ -250,10 +246,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
   const [selectedClass, setSelectedClass] = useState<any>(null)
-  const [statsModal, setStatsModal] = useState<'workouts' | 'prs' | null>(null)
-  const [allWorkouts, setAllWorkouts] = useState<any[]>([])
-  const [allPRs, setAllPRs] = useState<any[]>([])
-  const [modalLoading, setModalLoading] = useState(false)
+  const [quickActionLoading, setQuickActionLoading] = useState<string | null>(null)
 
   const today = getLocalDateString()
 
@@ -281,16 +274,9 @@ export default function DashboardPage() {
       supabase.from('scheduled_classes').select('*, groups(name), profiles!scheduled_classes_coach_id_fkey(name)').eq('scheduled_date', today).order('start_time').limit(5),
     ])
 
-    const monthCount = (workoutsData || []).filter((w: any) => w.date?.startsWith(today.slice(0, 7))).length
-    const dates = (workoutsData || []).map((w: any) => w.date || w.created_at)
-
     setProfile(prof)
     setUserRole(prof?.role || 'member')
     setAllWorkoutsList(workoutsData ?? [])
-    setTotalWorkouts(workoutsData?.length ?? 0)
-    setThisMonthWorkouts(monthCount)
-    setWorkoutStreak(calculateStreak(dates))
-    setWeekActivity(getWeekActivity(dates))
     setPrs(prData ?? [])
     setTodayPlans(todayP ?? [])
     setCompletedToday(completedP ?? [])
@@ -356,20 +342,15 @@ export default function DashboardPage() {
   }
   const loadData = () => { if (userId) loadAll(userId) }
 
-  const openWorkoutsModal = async () => {
-    if (!userId) return
-    setStatsModal('workouts'); setModalLoading(true)
-    const { data } = await supabase.from('workouts').select('id, title, type, date, created_at, duration, exercises(count)').eq('user_id', userId).order('created_at', { ascending: false })
-    setAllWorkouts(data ?? [])
-    setModalLoading(false)
-  }
-
-  const openPRsModal = async () => {
-    if (!userId) return
-    setStatsModal('prs'); setModalLoading(true)
-    const { data } = await supabase.from('personal_records').select('*').eq('user_id', userId).order('value', { ascending: false })
-    setAllPRs(data ?? [])
-    setModalLoading(false)
+  const handleQuickPlanAction = async (planId: string, action: 'completed' | 'skipped') => {
+    setQuickActionLoading(planId)
+    if (action === 'completed') {
+      await supabase.from('workout_plans').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', planId)
+    } else {
+      await supabase.from('workout_plans').update({ status: 'skipped' }).eq('id', planId)
+    }
+    setQuickActionLoading(null)
+    handlePlanUpdate()
   }
 
   if (loading) {
@@ -377,9 +358,6 @@ export default function DashboardPage() {
       <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
         <Navbar />
         <div style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem 1rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-            <StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton />
-          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             <WorkoutCardSkeleton /><WorkoutCardSkeleton /><WorkoutCardSkeleton />
           </div>
@@ -389,8 +367,6 @@ export default function DashboardPage() {
   }
 
   const firstName = profile?.name?.split(' ')[0] ?? 'Athlete'
-  const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
-  const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
@@ -477,60 +453,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── STAT CARDS ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem', marginBottom: '1.5rem' }} className="stats-grid">
-          <button onClick={openWorkoutsModal} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer', transition: 'border-color 0.15s' }}
-            onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal-primary)'}
-            onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'}>
-            <div style={{ fontSize: '1.5rem', marginBottom: '0.375rem' }}>🏋️</div>
-            <div style={{ fontFamily: 'var(--font-bebas)', fontSize: '2.5rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{totalWorkouts}</div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', marginTop: '0.25rem' }}>Total Workouts</div>
-          </button>
-
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center' }}>
-            <div style={{ fontSize: '1.5rem', marginBottom: '0.375rem' }}>📅</div>
-            <div style={{ fontFamily: 'var(--font-bebas)', fontSize: '2.5rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{thisMonthWorkouts}</div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', marginTop: '0.25rem' }}>This Month</div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.65rem', marginTop: '0.1rem', opacity: 0.6 }}>
-              {new Date().toLocaleDateString('en-US', { month: 'long' })} sessions
-            </div>
-          </div>
-
-          <button onClick={openPRsModal} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer', transition: 'border-color 0.15s' }}
-            onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal-primary)'}
-            onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'}>
-            <div style={{ fontSize: '1.5rem', marginBottom: '0.375rem' }}>🏆</div>
-            <div style={{ fontFamily: 'var(--font-bebas)', fontSize: '2.5rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{prs.length}</div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', marginTop: '0.25rem' }}>Personal Records</div>
-          </button>
-
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center' }}>
-            <div style={{ fontSize: '1.5rem', marginBottom: '0.375rem' }}>🔥</div>
-            <div style={{ fontFamily: 'var(--font-bebas)', fontSize: '2.5rem', color: workoutStreak > 0 ? '#f59e0b' : 'var(--text-secondary)', lineHeight: 1 }}>{workoutStreak}</div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', marginTop: '0.25rem' }}>Week Streak</div>
-          </div>
-        </div>
-
-        {/* ── WEEK AT A GLANCE ── */}
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
-          <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>This Week</p>
-          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'space-between' }}>
-            {DAY_NAMES.map((day, i) => (
-              <div key={day} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.375rem' }}>
-                <div style={{
-                  width: '100%', aspectRatio: '1', borderRadius: '0.5rem', maxWidth: '40px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: weekActivity[i] ? 'var(--teal-primary)' : 'var(--surface-raised)',
-                  border: `1px solid ${weekActivity[i] ? 'var(--teal-primary)' : 'var(--border)'}`,
-                }}>
-                  {weekActivity[i] && <span style={{ color: '#fff', fontSize: '11px', fontWeight: 700 }}>✓</span>}
-                </div>
-                <p style={{ fontSize: '0.6rem', color: 'var(--text-secondary)' }}>{DAY_LABELS[i]}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* ── COACH NOTE ── */}
         {coachNote && (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderLeft: '3px solid var(--teal-primary)', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
@@ -569,18 +491,35 @@ export default function DashboardPage() {
             <div style={{ display: 'flex', gap: '0.75rem', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', paddingBottom: '4px' }}>
               {upcomingPlans.map(p => {
                 const tb = typeBadge(p.type)
+                const isActing = quickActionLoading === p.id
                 return (
-                  <div key={p.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', minWidth: '160px', flexShrink: 0 }}>
+                  <div key={p.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', minWidth: '180px', flexShrink: 0 }}>
                     <p style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', fontWeight: 700, marginBottom: '0.25rem' }}>
                       {new Date(p.scheduled_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                     </p>
                     <p style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.25rem' }}>{p.title}</p>
-                    <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                    <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: '0.375rem' }}>
                       {(p.workout_plan_exercises as any[])?.[0]?.count ?? 0} exercises
                     </p>
-                    <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase' as const, background: tb.bg, color: tb.color, border: `1px solid ${tb.border}`, display: 'inline-block', marginTop: '0.375rem' }}>
+                    <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase' as const, background: tb.bg, color: tb.color, border: `1px solid ${tb.border}`, display: 'inline-block', marginBottom: '0.625rem' }}>
                       {p.type}
                     </span>
+                    <div style={{ display: 'flex', gap: '0.375rem' }}>
+                      <button
+                        onClick={() => handleQuickPlanAction(p.id, 'completed')}
+                        disabled={isActing}
+                        style={{ flex: 1, background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.375rem', padding: '0.3rem 0.25rem', fontSize: '0.65rem', fontWeight: 700, color: '#4ade80', cursor: isActing ? 'not-allowed' : 'pointer', minHeight: 0 }}
+                      >
+                        ✅ Done
+                      </button>
+                      <button
+                        onClick={() => handleQuickPlanAction(p.id, 'skipped')}
+                        disabled={isActing}
+                        style={{ flex: 1, background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.3rem 0.25rem', fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-secondary)', cursor: isActing ? 'not-allowed' : 'pointer', minHeight: 0 }}
+                      >
+                        ⏭️ Skip
+                      </button>
+                    </div>
                   </div>
                 )
               })}
@@ -749,64 +688,6 @@ export default function DashboardPage() {
 
       </main>
 
-      {/* Stats modal */}
-      {statsModal && (
-        <div onClick={e => { if (e.target === e.currentTarget) setStatsModal(null) }}
-          style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div style={{ width: '100%', maxWidth: '560px', maxHeight: '85vh', overflowY: 'auto', borderRadius: '1rem', background: 'var(--surface)', border: '1px solid var(--border)' }}>
-            <div style={{ padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)' }}>
-              <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>
-                {statsModal === 'workouts' ? 'ALL WORKOUTS' : 'PERSONAL RECORDS'}
-              </h2>
-              <button onClick={() => setStatsModal(null)} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', minHeight: 0 }}>✕</button>
-            </div>
-            <div style={{ padding: '1.25rem' }}>
-              {modalLoading ? (
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Loading…</p>
-              ) : statsModal === 'workouts' ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {allWorkouts.length === 0 ? <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No workouts yet.</p> : allWorkouts.map(w => {
-                    const badge = typeBadge(w.type)
-                    return (
-                      <Link key={w.id} href={`/workouts/${w.id}`} onClick={() => setStatsModal(null)} style={{ textDecoration: 'none' }}>
-                        <div style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '0.625rem', padding: '0.875rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}
-                          onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--teal-primary)'}
-                          onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'}>
-                          <div>
-                            <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{w.title}</p>
-                            <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
-                              {new Date(w.date ?? w.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                              {w.duration ? ` · ${w.duration}min` : ''}
-                              {(w.exercises as any[])?.[0]?.count ? ` · ${(w.exercises as any[])[0].count} exercises` : ''}
-                            </p>
-                          </div>
-                          <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase' as const, background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`, flexShrink: 0 }}>{w.type}</span>
-                        </div>
-                      </Link>
-                    )
-                  })}
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {allPRs.length === 0 ? <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No PRs yet.</p> : allPRs.map(pr => (
-                    <div key={pr.id} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '0.625rem', padding: '0.875rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{pr.exercise_name ?? pr.exercise}</p>
-                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
-                          {new Date(pr.date ?? pr.recorded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          {pr.is_public ? ' · 🌐 Public' : ' · 🔒 Private'}
-                        </p>
-                      </div>
-                      <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', color: 'var(--teal-secondary)', flexShrink: 0 }}>{pr.value} <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{pr.unit}</span></p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Class detail modal */}
       {selectedClass && (
         <ClassDetailModal
@@ -837,7 +718,6 @@ export default function DashboardPage() {
         @media (max-width: 767px) {
           .mobile-fab { display: flex !important; }
           .md-show-flex { display: inline-flex !important; }
-          .stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
         }
       `}</style>
     </div>

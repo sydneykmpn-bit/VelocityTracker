@@ -245,3 +245,35 @@ p a, span a, td a {
 .hover-lift:hover {
   transform: translateY(-2px);
 }
+
+/* Mobile portrait optimizations */
+@media (max-width: 480px) {
+  main {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+}
+
+/* Scrollable tab nav — hide scrollbar cross-browser */
+.tab-nav-scroll {
+  display: flex;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.tab-nav-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Calendar day cell minimum height */
+.cal-cell {
+  min-height: 70px;
+}
+
+/* Dashboard main grid — responsive two-column */
+@media (min-width: 768px) {
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr) 280px !important;
+  }
+}

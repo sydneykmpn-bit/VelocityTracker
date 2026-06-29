@@ -49,13 +49,35 @@ export default function RegisterForm() {
     setLoading(true)
     setError('')
     const supabase = createClient()
+
+    // Pre-check if email already exists in profiles
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('id, approved')
+      .eq('email', email.toLowerCase().trim())
+      .maybeSingle()
+
+    if (existing) {
+      if (existing.approved) {
+        setError('An account with this email already exists. Please sign in instead.')
+      } else {
+        setError('This email is already registered and pending approval. Message us on Instagram @velocityfitness.ph if you need help.')
+      }
+      setLoading(false)
+      return
+    }
+
     const { error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { name, role: 'member', gender } },
     })
     if (authError) {
-      setError(authError.message)
+      if (authError.message.toLowerCase().includes('already registered') || authError.message.toLowerCase().includes('already exists')) {
+        setError('An account with this email already exists. Please sign in or message us on Instagram @velocityfitness.ph for help.')
+      } else {
+        setError(authError.message)
+      }
       setLoading(false)
     } else {
       router.push('/pending-approval')

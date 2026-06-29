@@ -19,10 +19,13 @@ export default function ClassDetailModal({
   onUpdate: () => void
 }) {
   const supabase = createClient()
+  const today = new Date().toISOString().split('T')[0]
+  const isPastClass = !cls.isPlan && cls.scheduled_date < today
   const [attendees, setAttendees] = useState<any[]>([])
   const [myAttendance, setMyAttendance] = useState<any>(null)
   const [loadingAttendees, setLoadingAttendees] = useState(false)
   const [rsvpLoading, setRsvpLoading] = useState(false)
+  const [planActionLoading, setPlanActionLoading] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState({
     title: cls.title || '',
@@ -250,17 +253,55 @@ export default function ClassDetailModal({
           )}
         </div>
 
-        {/* RSVP for members */}
-        {!cls.isPlan && userRole === 'member' && (
+        {/* RSVP for members and admins */}
+        {!cls.isPlan && (userRole === 'member' || userRole === 'admin') && (
           <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
+            {isPastClass ? (
+              <div style={{ textAlign: 'center', padding: '0.75rem', background: 'var(--surface-raised)', borderRadius: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                🏁 Class has ended
+              </div>
+            ) : (
+              <>
+                <button
+                  onClick={handleRSVP}
+                  disabled={rsvpLoading}
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 700, fontSize: '0.9rem', cursor: rsvpLoading ? 'not-allowed' : 'pointer', background: myAttendance ? 'transparent' : 'var(--teal-primary)', color: myAttendance ? '#ef4444' : 'white', border: myAttendance ? '1px solid rgba(239,68,68,0.4)' : 'none' }}
+                >
+                  {rsvpLoading ? '…' : myAttendance ? '✕ Remove Attendance' : '✓ I\'m Attending'}
+                </button>
+                {myAttendance && <p style={{ fontSize: '0.75rem', textAlign: 'center', marginTop: '0.5rem', color: '#4ade80' }}>✅ You&apos;re marked as attending this class</p>}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Plan actions for members */}
+        {cls.isPlan && userRole === 'member' && (
+          <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             <button
-              onClick={handleRSVP}
-              disabled={rsvpLoading}
-              style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 700, fontSize: '0.9rem', cursor: rsvpLoading ? 'not-allowed' : 'pointer', background: myAttendance ? 'transparent' : 'var(--teal-primary)', color: myAttendance ? '#ef4444' : 'white', border: myAttendance ? '1px solid rgba(239,68,68,0.4)' : 'none' }}
+              onClick={async () => {
+                setPlanActionLoading(true)
+                await supabase.from('workout_plans').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', cls.id)
+                setPlanActionLoading(false)
+                onClose(); onUpdate()
+              }}
+              disabled={planActionLoading}
+              style={{ flex: 1, background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.75rem', fontWeight: 700, fontSize: '0.875rem', cursor: planActionLoading ? 'not-allowed' : 'pointer', opacity: planActionLoading ? 0.7 : 1 }}
             >
-              {rsvpLoading ? '…' : myAttendance ? '✕ Remove Attendance' : '✓ I\'m Attending'}
+              ✅ Mark Done
             </button>
-            {myAttendance && <p style={{ fontSize: '0.75rem', textAlign: 'center', marginTop: '0.5rem', color: '#4ade80' }}>✅ You&apos;re marked as attending this class</p>}
+            <button
+              onClick={async () => {
+                setPlanActionLoading(true)
+                await supabase.from('workout_plans').update({ status: 'skipped' }).eq('id', cls.id)
+                setPlanActionLoading(false)
+                onClose(); onUpdate()
+              }}
+              disabled={planActionLoading}
+              style={{ background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.75rem 1rem', fontSize: '0.875rem', cursor: 'pointer' }}
+            >
+              ⏭️ Skip
+            </button>
           </div>
         )}
 

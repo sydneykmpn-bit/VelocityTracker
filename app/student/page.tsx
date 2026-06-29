@@ -37,6 +37,40 @@ export default function StudentPage() {
   const [metricSaving, setMetricSaving] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [groupIds, setGroupIds] = useState<string[]>([])
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [reschedulingId, setReschedulingId] = useState<string | null>(null)
+  const [rescheduleDate, setRescheduleDate] = useState('')
+
+  const reloadPlans = async (uid: string) => {
+    const { data: plans } = await supabase
+      .from('workout_plans')
+      .select('*, workout_plan_exercises(*), profiles!workout_plans_coach_id_fkey(name)')
+      .eq('member_id', uid)
+      .order('scheduled_date', { ascending: false })
+    setAssignedPlans(plans || [])
+  }
+
+  const handlePlanAction = async (planId: string, action: 'completed' | 'skipped') => {
+    if (!userId) return
+    setActionLoading(planId)
+    if (action === 'completed') {
+      await supabase.from('workout_plans').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', planId)
+    } else {
+      await supabase.from('workout_plans').update({ status: 'skipped' }).eq('id', planId)
+    }
+    await reloadPlans(userId)
+    setActionLoading(null)
+  }
+
+  const handleReschedule = async (planId: string) => {
+    if (!userId || !rescheduleDate) return
+    setActionLoading(planId)
+    await supabase.from('workout_plans').update({ status: 'pending', scheduled_date: rescheduleDate, rescheduled_date: rescheduleDate }).eq('id', planId)
+    setReschedulingId(null)
+    setRescheduleDate('')
+    await reloadPlans(userId)
+    setActionLoading(null)
+  }
 
   useEffect(() => {
     async function load() {
@@ -254,31 +288,52 @@ export default function StudentPage() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 {pendingPlans.length > 0 && <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)' }}>Upcoming / Pending</p>}
-                {pendingPlans.map(plan => (
-                  <div key={plan.id} style={{ ...cardStyle, padding: '1.25rem', borderLeft: '3px solid var(--teal-primary)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-                      <div>
-                        <p style={{ fontWeight: 600, fontSize: '0.95rem' }}>{plan.title}</p>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-                          {formatDate(plan.scheduled_date)} - Coach {plan.profiles?.name ?? 'Coach'}
-                        </p>
+                {pendingPlans.map(plan => {
+                  const isActing = actionLoading === plan.id
+                  return (
+                    <div key={plan.id} style={{ ...cardStyle, padding: '1.25rem', borderLeft: '3px solid var(--teal-primary)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+                        <div>
+                          <p style={{ fontWeight: 600, fontSize: '0.95rem' }}>{plan.title}</p>
+                          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                            {formatDate(plan.scheduled_date)} · Coach {plan.profiles?.name ?? 'Coach'}
+                          </p>
+                        </div>
+                        <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '999px', textTransform: 'uppercase', background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.25)' }}>{plan.type}</span>
                       </div>
-                      <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '999px', textTransform: 'uppercase', background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.25)' }}>{plan.type}</span>
+                      {plan.workout_plan_exercises?.length > 0 && (
+                        <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                          {plan.workout_plan_exercises.sort((a: any, b: any) => a.order_index - b.order_index).map((ex: any) => (
+                            <div key={ex.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '0.375rem 0', borderBottom: '1px solid var(--border)', fontSize: '0.8rem' }}>
+                              <span style={{ fontWeight: 600 }}>{ex.name}</span>
+                              <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', textAlign: 'right' }}>
+                                {ex.sets && ex.reps ? `${ex.sets}x${ex.reps}` : ''}{ex.weight ? ` - ${ex.weight}kg` : ''}{ex.duration ? ` - ${ex.duration}min` : ''}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {reschedulingId === plan.id && (
+                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                          <input
+                            type="date"
+                            value={rescheduleDate}
+                            onChange={e => setRescheduleDate(e.target.value)}
+                            min={new Date().toISOString().split('T')[0]}
+                            style={{ flex: 1, minWidth: '130px', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.375rem', padding: '0.4rem 0.625rem', color: '#F2F2F2', fontSize: '0.875rem', outline: 'none' }}
+                          />
+                          <button onClick={() => handleReschedule(plan.id)} disabled={!rescheduleDate || isActing} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', fontSize: '0.8rem', fontWeight: 700, cursor: rescheduleDate ? 'pointer' : 'not-allowed', minHeight: 0 }}>Confirm</button>
+                          <button onClick={() => { setReschedulingId(null); setRescheduleDate('') }} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.4rem 0.625rem', color: 'var(--text-secondary)', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0 }}>Cancel</button>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.875rem', flexWrap: 'wrap' }}>
+                        <button onClick={() => handlePlanAction(plan.id, 'completed')} disabled={isActing} style={{ flex: 1, background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.6rem', fontSize: '0.8rem', fontWeight: 700, cursor: isActing ? 'not-allowed' : 'pointer', opacity: isActing ? 0.7 : 1 }}>✅ Mark Done</button>
+                        <button onClick={() => { setReschedulingId(plan.id); setRescheduleDate('') }} disabled={isActing} style={{ background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.6rem 0.75rem', fontSize: '0.8rem', cursor: 'pointer' }}>📅 Move</button>
+                        <button onClick={() => handlePlanAction(plan.id, 'skipped')} disabled={isActing} style={{ background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.6rem 0.75rem', fontSize: '0.8rem', cursor: 'pointer' }}>⏭️ Skip</button>
+                      </div>
                     </div>
-                    {plan.workout_plan_exercises?.length > 0 && (
-                      <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                        {plan.workout_plan_exercises.sort((a: any, b: any) => a.order_index - b.order_index).map((ex: any) => (
-                          <div key={ex.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '0.375rem 0', borderBottom: '1px solid var(--border)', fontSize: '0.8rem' }}>
-                            <span style={{ fontWeight: 600 }}>{ex.name}</span>
-                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', textAlign: 'right' }}>
-                              {ex.sets && ex.reps ? `${ex.sets}x${ex.reps}` : ''}{ex.weight ? ` - ${ex.weight}kg` : ''}{ex.duration ? ` - ${ex.duration}min` : ''}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
                 {completedPlans.length > 0 && <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>Completed</p>}
                 {completedPlans.slice(0, 5).map(plan => (
                   <div key={plan.id} style={{ ...cardStyle, padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', opacity: 0.78 }}>

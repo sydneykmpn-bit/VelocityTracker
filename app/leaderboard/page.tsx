@@ -21,7 +21,6 @@ const EXERCISE_LIST = [
 ]
 
 const FEATURED_EXERCISES = [
-  { key: 'all', label: 'All', icon: '🏆' },
   { key: 'Back Squat', label: 'Squat', icon: '🏋️' },
   { key: 'Deadlift', label: 'Deadlift', icon: '💀' },
   { key: 'Overhead Press', label: 'OHP', icon: '☝️' },
@@ -92,7 +91,7 @@ export default function LeaderboardPage() {
   const [loading, setLoading] = useState(true)
 
   // Filters
-  const [featuredFilter, setFeaturedFilter] = useState('all')
+  const [featuredFilter, setFeaturedFilter] = useState('Back Squat')
   const [genderFilter, setGenderFilter] = useState('all')
   const [memberSearchInput, setMemberSearchInput] = useState('')
   const [memberSearch, setMemberSearch] = useState('')
@@ -123,11 +122,7 @@ export default function LeaderboardPage() {
       .select('*, profiles(id, name, gender)')
       .eq('is_public', true)
 
-    let filtered = rawData || []
-
-    if (featuredFilter !== 'all') {
-      filtered = filtered.filter((r: any) => r.exercise_name === featuredFilter)
-    }
+    let filtered = (rawData || []).filter((r: any) => r.exercise_name === featuredFilter)
     if (memberSearch.trim()) {
       filtered = filtered.filter((r: any) =>
         (r.profiles as any)?.name?.toLowerCase().includes(memberSearch.toLowerCase())
