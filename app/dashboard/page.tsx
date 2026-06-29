@@ -231,6 +231,7 @@ export default function DashboardPage() {
   const router = useRouter()
   const supabase = createClient()
   const [profile, setProfile] = useState<any>(null)
+  const [userRole, setUserRole] = useState('')
   const [recentWorkouts, setRecentWorkouts] = useState<any[]>([])
   const [totalWorkouts, setTotalWorkouts] = useState(0)
   const [thisMonthWorkouts, setThisMonthWorkouts] = useState(0)
@@ -280,6 +281,7 @@ export default function DashboardPage() {
     const { count: monthCount } = await supabase.from('workouts').select('*', { count: 'exact', head: true }).eq('user_id', uid).gte('date', thisMonthStart)
     setThisMonthWorkouts(monthCount ?? 0)
     setProfile(prof)
+    setUserRole(prof?.role || 'member')
     setRecentWorkouts(recent ?? [])
     setTotalWorkouts(total ?? 0)
     setPrs(prData ?? [])
@@ -356,6 +358,26 @@ export default function DashboardPage() {
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            {userRole === 'admin' && (
+              <Link href="/admin" style={{
+                display: 'none', alignItems: 'center', gap: '0.5rem',
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                color: 'var(--text-secondary)', padding: '0.75rem 1.25rem', borderRadius: '0.5rem',
+                textDecoration: 'none', fontWeight: 600, fontSize: '0.875rem', whiteSpace: 'nowrap', minHeight: 44,
+              }} className="md-show-flex">
+                ⚙️ Admin Panel
+              </Link>
+            )}
+            {userRole === 'coach' && (
+              <Link href="/coach" style={{
+                display: 'none', alignItems: 'center', gap: '0.5rem',
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                color: 'var(--text-secondary)', padding: '0.75rem 1.25rem', borderRadius: '0.5rem',
+                textDecoration: 'none', fontWeight: 600, fontSize: '0.875rem', whiteSpace: 'nowrap', minHeight: 44,
+              }} className="md-show-flex">
+                👨‍💼 Coach Panel
+              </Link>
+            )}
             <Link href="/workouts" style={{
               display: 'none', alignItems: 'center', gap: '0.5rem',
               background: 'var(--surface)', border: '1px solid var(--border)',

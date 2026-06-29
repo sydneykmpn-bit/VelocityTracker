@@ -65,10 +65,7 @@ export default function LoginForm() {
         router.push('/pending-approval')
         return
       }
-      if (profile.role === 'admin') router.push('/admin')
-      else if (profile.role === 'coach') router.push('/coach')
-      else router.push('/dashboard')
-      router.refresh()
+      router.push('/dashboard')
     }
   }
 

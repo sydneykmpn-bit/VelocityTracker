@@ -62,3 +62,22 @@ export function getLocalDisplayDate(timeZone = 'Asia/Manila'): string {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone,
   }).format(new Date())
 }
+
+const LBS_TO_KG = 0.453592
+
+export const LOWER_IS_BETTER = ['Sprint 40m', 'Sprint 20m', 'Agility T-Test']
+
+export function normalizeToKg(value: number, unit: string): number {
+  if (unit === 'lbs') return value * LBS_TO_KG
+  return value
+}
+
+export function sortRecords(records: any[]): any[] {
+  return [...records].sort((a, b) => {
+    const aIsLower = LOWER_IS_BETTER.includes(a.exercise_name)
+    const aNorm = normalizeToKg(a.value, a.unit)
+    const bNorm = normalizeToKg(b.value, b.unit)
+    if (aIsLower) return aNorm - bNorm
+    return bNorm - aNorm
+  })
+}

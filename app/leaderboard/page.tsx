@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Navbar from '@/components/Navbar'
 import { Trash2 } from 'lucide-react'
-import { debounce, getLocalDateString } from '@/lib/utils'
+import { debounce, getLocalDateString, normalizeToKg, sortRecords, LOWER_IS_BETTER } from '@/lib/utils'
 
 type LeaderTab = 'public' | 'mine'
 const UNITS = ['kg', 'lbs', 'reps', 'seconds', 'minutes', 'km/h', 'mph'] as const
@@ -122,7 +122,6 @@ export default function LeaderboardPage() {
       .from('personal_records')
       .select('*, profiles(id, name, gender)')
       .eq('is_public', true)
-      .order('value', { ascending: false })
 
     let filtered = rawData || []
 
@@ -141,6 +140,7 @@ export default function LeaderboardPage() {
       })
     }
 
+    filtered = sortRecords(filtered)
     setPublicRecords(filtered)
   }
 
@@ -458,6 +458,12 @@ export default function LeaderboardPage() {
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
                         <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.2rem', color: 'var(--teal-secondary)' }}>{r.value} <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{r.unit}</span></p>
+                        {r.unit === 'lbs' && (
+                          <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>≈ {(r.value * 0.453592).toFixed(1)}kg</p>
+                        )}
+                        {LOWER_IS_BETTER.includes(r.exercise_name) && (
+                          <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>lower = better</p>
+                        )}
                         <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
                           {new Date(r.date ?? r.recorded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                         </p>

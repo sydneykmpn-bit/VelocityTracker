@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import Navbar from '@/components/Navbar'
 import { ChevronDown, ChevronUp, Trash2, Pencil, Plus, Calendar } from 'lucide-react'
@@ -359,6 +360,7 @@ export default function CoachPage() {
   const [editPlanExercises, setEditPlanExercises] = useState<PlanExercise[]>([])
   const [activePlanEditSuggestion, setActivePlanEditSuggestion] = useState<number | null>(null)
   const [planStatusFilter, setPlanStatusFilter] = useState<'all'|'pending'|'completed'|'skipped'|'rescheduled'>('all')
+  const [planMemberFilter, setPlanMemberFilter] = useState('all')
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<{id: string; name: string} | null>(null)
 
   // Workout Calendar
@@ -367,6 +369,9 @@ export default function CoachPage() {
   const [expandedCalWorkout, setExpandedCalWorkout] = useState<string | null>(null)
   const [memberFilter, setMemberFilter] = useState('all')
   const [calLoading, setCalLoading] = useState(false)
+  const [calendarMonth, setCalendarMonth] = useState(new Date())
+  const [calendarSelectedDate, setCalendarSelectedDate] = useState<string | null>(null)
+  const [showCalendarDayModal, setShowCalendarDayModal] = useState(false)
 
   // Notes
   const [notes, setNotes] = useState<any[]>([])
@@ -420,11 +425,16 @@ export default function CoachPage() {
 
   const loadCalendarWorkouts = async () => {
     setCalLoading(true)
+    const year = calendarMonth.getFullYear()
+    const month = calendarMonth.getMonth()
+    const startOfMonth = `${year}-${String(month + 1).padStart(2, '0')}-01`
+    const endOfMonth = new Date(year, month + 1, 0)
+    const endStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(endOfMonth.getDate()).padStart(2, '0')}`
     let query = supabase
       .from('workouts')
-      .select('*, profiles(name), exercises(*)')
-      .gte('date', `${calendarDate}T00:00:00`)
-      .lte('date', `${calendarDate}T23:59:59`)
+      .select('*, profiles(name), exercises(count)')
+      .gte('date', `${startOfMonth}T00:00:00`)
+      .lte('date', `${endStr}T23:59:59`)
       .order('date', { ascending: false })
     if (memberFilter !== 'all') query = query.eq('user_id', memberFilter)
     const { data } = await query
@@ -457,7 +467,7 @@ export default function CoachPage() {
   useEffect(() => {
     if (!loading) loadCalendarWorkouts()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calendarDate, memberFilter])
+  }, [calendarDate, memberFilter, calendarMonth])
 
   const toggleMember = async (memberId: string) => {
     if (expandedMember === memberId) { setExpandedMember(null); return }
@@ -650,7 +660,7 @@ export default function CoachPage() {
   }
 
   const tabs: { value: Tab; label: string }[] = [
-    { value: 'members', label: 'My Members' },
+    { value: 'members', label: 'My Students' },
     { value: 'groups', label: 'Groups' },
     { value: 'assign', label: 'Assign Plan' },
     { value: 'calendar', label: 'Workout Calendar' },
@@ -661,9 +671,15 @@ export default function CoachPage() {
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
       <Navbar />
       <main style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem 1rem' }}>
-        <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: '2.5rem', letterSpacing: '0.03em', marginBottom: '1.5rem' }}>
-          COACH DASHBOARD
-        </h1>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
+          <div>
+            <p style={{ color: 'var(--teal-secondary)', fontSize: '0.7rem', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Coach Panel</p>
+            <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: 'clamp(2rem, 6vw, 3.5rem)', letterSpacing: '0.03em' }}>COACH PANEL</h1>
+          </div>
+          <Link href="/dashboard" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '0.625rem 1rem', borderRadius: '0.5rem', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 600, whiteSpace: 'nowrap', minHeight: 44, display: 'flex', alignItems: 'center' }}>
+            ← My Dashboard
+          </Link>
+        </div>
 
         {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{error}</div>}
         {success && <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#4ade80', fontSize: '0.875rem' }}>{success}</div>}
@@ -1036,6 +1052,36 @@ export default function CoachPage() {
               </form>
             </div>
 
+            {/* Filter assigned plans by member */}
+            <div style={{ marginTop: '1.5rem' }}>
+              <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Filter by student:</p>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                <button
+                  onClick={() => setPlanMemberFilter('all')}
+                  style={{
+                    padding: '0.375rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600,
+                    background: planMemberFilter === 'all' ? 'var(--teal-primary)' : 'var(--surface)',
+                    color: planMemberFilter === 'all' ? '#fff' : 'var(--text-secondary)',
+                    border: `1px solid ${planMemberFilter === 'all' ? 'var(--teal-primary)' : 'var(--border)'}`,
+                    cursor: 'pointer', minHeight: 0,
+                  }}
+                >All Students</button>
+                {myMembers.map((m: any) => (
+                  <button
+                    key={m.id}
+                    onClick={() => setPlanMemberFilter(m.id)}
+                    style={{
+                      padding: '0.375rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600,
+                      background: planMemberFilter === m.id ? 'var(--teal-primary)' : 'var(--surface)',
+                      color: planMemberFilter === m.id ? '#fff' : 'var(--text-secondary)',
+                      border: `1px solid ${planMemberFilter === m.id ? 'var(--teal-primary)' : 'var(--border)'}`,
+                      cursor: 'pointer', minHeight: 0,
+                    }}
+                  >{m.name}</button>
+                ))}
+              </div>
+            </div>
+
             {/* Assigned Plans List */}
             <div style={{ marginBottom: '0.75rem' }}>
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '0.75rem' }}>ASSIGNED PLANS ({assignedPlans.length})</h2>
@@ -1064,7 +1110,10 @@ export default function CoachPage() {
               </div>
             </div>
             {(() => {
-              const filtered = planStatusFilter === 'all' ? assignedPlans : assignedPlans.filter(p => p.status === planStatusFilter)
+              const filteredAssignedPlans = planMemberFilter === 'all'
+                ? assignedPlans
+                : assignedPlans.filter((p: any) => p.profiles?.id === planMemberFilter || p.member_id === planMemberFilter)
+              const filtered = planStatusFilter === 'all' ? filteredAssignedPlans : filteredAssignedPlans.filter(p => p.status === planStatusFilter)
               if (filtered.length === 0) return <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No {planStatusFilter !== 'all' ? planStatusFilter : ''} plans yet.</p>
               const grouped = filtered.reduce((acc: any, plan: any) => {
                 const date = plan.scheduled_date
@@ -1216,73 +1265,103 @@ export default function CoachPage() {
         {/* ── WORKOUT CALENDAR TAB ── */}
         {activeTab === 'calendar' && (
           <div key="tab-calendar">
-            <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>WORKOUT CALENDAR</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
-              <div>
-                <label style={labelBase}>Date</label>
-                <input type="date" value={calendarDate} onChange={e => setCalendarDate(e.target.value)} style={{ ...inputBase, width: '100%' }} />
-              </div>
-              <div>
-                <label style={labelBase}>Member</label>
-                <select value={memberFilter} onChange={e => setMemberFilter(e.target.value)} style={{ ...inputBase, width: '100%', cursor: 'pointer' }}>
-                  <option value="all">All Members</option>
-                  {allMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
-              </div>
+            {/* Month navigation */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+              <button onClick={() => setCalendarMonth(prev => { const d = new Date(prev); d.setMonth(d.getMonth() - 1); return d })}
+                style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.5rem 0.875rem', color: 'var(--text-primary)', cursor: 'pointer', minHeight: 0 }}>
+                ←
+              </button>
+              <h3 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>
+                {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }).toUpperCase()}
+              </h3>
+              <button onClick={() => setCalendarMonth(prev => { const d = new Date(prev); d.setMonth(d.getMonth() + 1); return d })}
+                style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.5rem 0.875rem', color: 'var(--text-primary)', cursor: 'pointer', minHeight: 0 }}>
+                →
+              </button>
             </div>
 
-            {calLoading ? (
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Loading…</p>
-            ) : calendarWorkouts.length === 0 ? (
-              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '3rem', textAlign: 'center' }}>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No workouts logged on this date.</p>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {calendarWorkouts.map(w => {
-                  const isExpanded = expandedCalWorkout === w.id
-                  const tb = TYPE_BADGE[w.type] ?? TYPE_BADGE.both
-                  return (
-                    <div key={w.id} style={{ background: 'var(--surface)', border: `1px solid ${isExpanded ? 'var(--teal-primary)' : 'var(--border)'}`, borderRadius: '0.75rem', overflow: 'hidden', borderLeft: isExpanded ? '3px solid var(--teal-primary)' : '1px solid var(--border)' }}>
-                      <button onClick={() => setExpandedCalWorkout(isExpanded ? null : w.id)} style={{ width: '100%', background: 'none', border: 'none', padding: '1rem 1.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#F2F2F2' }}>
-                        <div style={{ textAlign: 'left' }}>
-                          <p style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', fontWeight: 700, marginBottom: '0.2rem' }}>{w.profiles?.name}</p>
-                          <h3 style={{ fontWeight: 600, fontSize: '0.95rem' }}>{w.title}</h3>
-                          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
-                            {w.duration ? `${w.duration} min · ` : ''}{(w.exercises as any[])?.length ?? 0} exercises
-                          </p>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.25rem 0.5rem', borderRadius: '999px', textTransform: 'uppercase', ...tb }}>{w.type}</span>
-                          {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />}
-                        </div>
-                      </button>
-                      {isExpanded && (
-                        <div style={{ borderTop: '1px solid var(--border)', padding: '1rem 1.25rem' }}>
-                          {(w.exercises as any[])?.length === 0 ? (
-                            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No exercises logged.</p>
-                          ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                              {(w.exercises as any[]).map((ex: any) => (
-                                <div key={ex.id} style={{ padding: '0.625rem 0.75rem', background: '#0a1518', borderRadius: '0.375rem' }}>
-                                  <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.25rem' }}>{ex.name}</p>
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.625rem' }}>
-                                    {ex.sets && ex.reps && <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{ex.sets}×{ex.reps}</span>}
-                                    {ex.weight && <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{ex.weight}kg</span>}
-                                    {ex.duration && <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{ex.duration}min</span>}
-                                    {ex.distance && <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{ex.distance}km</span>}
-                                    {ex.notes && <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>{ex.notes}</span>}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          {w.notes && <p style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>"{w.notes}"</p>}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
+            {/* Member filter pills */}
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+              <button onClick={() => setMemberFilter('all')} style={{ padding: '0.375rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, background: memberFilter === 'all' ? 'var(--teal-primary)' : 'var(--surface)', color: memberFilter === 'all' ? '#fff' : 'var(--text-secondary)', border: `1px solid ${memberFilter === 'all' ? 'var(--teal-primary)' : 'var(--border)'}`, cursor: 'pointer', minHeight: 0 }}>All Students</button>
+              {myMembers.map((m: any) => (
+                <button key={m.id} onClick={() => setMemberFilter(m.id)} style={{ padding: '0.375rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, background: memberFilter === m.id ? 'var(--teal-primary)' : 'var(--surface)', color: memberFilter === m.id ? '#fff' : 'var(--text-secondary)', border: `1px solid ${memberFilter === m.id ? 'var(--teal-primary)' : 'var(--border)'}`, cursor: 'pointer', minHeight: 0 }}>{m.name}</button>
+              ))}
+            </div>
+
+            {/* Day headers */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: '0.375rem' }}>
+              {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => (
+                <div key={d} style={{ textAlign: 'center', fontSize: '0.65rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', padding: '0.375rem 0' }}>{d}</div>
+              ))}
+            </div>
+
+            {/* Calendar grid */}
+            {(() => {
+              const year = calendarMonth.getFullYear()
+              const month = calendarMonth.getMonth()
+              const firstDay = new Date(year, month, 1).getDay()
+              const daysInMonth = new Date(year, month + 1, 0).getDate()
+              const todayStr = getLocalDateString()
+              const calCells: (number | null)[] = []
+              for (let i = 0; i < firstDay; i++) calCells.push(null)
+              for (let d = 1; d <= daysInMonth; d++) calCells.push(d)
+
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '3px' }}>
+                  {calCells.map((day, i) => {
+                    if (!day) return <div key={`e-${i}`} />
+                    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                    const dayWorkouts = calendarWorkouts.filter(w => w.date?.startsWith(dateStr))
+                    const isToday = dateStr === todayStr
+                    return (
+                      <div
+                        key={dateStr}
+                        onClick={() => { setCalendarSelectedDate(dateStr); setShowCalendarDayModal(true) }}
+                        style={{
+                          borderRadius: '0.5rem', padding: '0.375rem', minHeight: '64px', cursor: 'pointer',
+                          background: isToday ? 'rgba(8,119,160,0.1)' : 'var(--surface)',
+                          border: `1px solid ${isToday ? 'rgba(8,119,160,0.4)' : dayWorkouts.length > 0 ? 'rgba(8,119,160,0.25)' : 'var(--border)'}`,
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        <p style={{ fontSize: '0.65rem', fontWeight: 600, textAlign: 'right', color: isToday ? 'var(--teal-secondary)' : 'var(--text-secondary)', marginBottom: '0.2rem' }}>{day}</p>
+                        {dayWorkouts.slice(0, 2).map(w => (
+                          <div key={w.id} style={{ borderRadius: '0.2rem', fontSize: '0.55rem', padding: '0.1rem 0.25rem', marginBottom: '0.1rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', background: 'rgba(8,119,160,0.2)', color: 'var(--teal-secondary)' }}>
+                            {w.profiles?.name?.split(' ')[0]}: {w.title}
+                          </div>
+                        ))}
+                        {dayWorkouts.length > 2 && <p style={{ fontSize: '0.55rem', color: 'var(--text-secondary)' }}>+{dayWorkouts.length - 2}</p>}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
+
+            {/* Day detail modal */}
+            {showCalendarDayModal && calendarSelectedDate && (
+              <div
+                onClick={e => { if (e.target === e.currentTarget) setShowCalendarDayModal(false) }}
+                style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+              >
+                <div style={{ width: '100%', maxWidth: '520px', maxHeight: '80vh', overflowY: 'auto', borderRadius: '1rem', background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                  <div style={{ padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, background: 'var(--surface)' }}>
+                    <h3 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>
+                      {new Date(calendarSelectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                    </h3>
+                    <button onClick={() => setShowCalendarDayModal(false)} style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.875rem', minHeight: 0 }}>✕</button>
+                  </div>
+                  <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {calendarWorkouts.filter(w => w.date?.startsWith(calendarSelectedDate)).length === 0 ? (
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', textAlign: 'center', padding: '2rem 0' }}>No workouts logged on this date.</p>
+                    ) : calendarWorkouts
+                        .filter(w => w.date?.startsWith(calendarSelectedDate))
+                        .map(w => (
+                          <WorkoutHistoryCard key={w.id} workout={w} supabase={supabase} />
+                        ))
+                    }
+                  </div>
+                </div>
               </div>
             )}
           </div>

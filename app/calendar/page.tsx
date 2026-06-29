@@ -20,6 +20,18 @@ const labelBase: React.CSSProperties = {
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 
+function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+function formatLocalDate(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 function generateRecurringDates(
   startDate: string,
   endDate: string,
@@ -28,37 +40,35 @@ function generateRecurringDates(
 ): string[] {
   if (!endDate || !startDate) return []
   const dates: string[] = []
-  // Parse as local dates to avoid timezone shifts
-  const [sy, sm, sd] = startDate.split('-').map(Number)
-  const [ey, em, ed] = endDate.split('-').map(Number)
-  const start = new Date(sy, sm - 1, sd)
-  const end = new Date(ey, em - 1, ed)
+  const start = parseLocalDate(startDate)
+  const end = parseLocalDate(endDate)
   if (end <= start) return []
-  const current = new Date(start)
+  const current = parseLocalDate(startDate)
   current.setDate(current.getDate() + 1)
   const dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday']
-  const normalizedDays = days.map(d => d.toLowerCase())
+  const normalizedDays = days.map(d => d.toLowerCase().trim())
   while (current <= end) {
     const dayName = dayNames[current.getDay()]
-    const y = current.getFullYear()
-    const m = String(current.getMonth() + 1).padStart(2, '0')
-    const d = String(current.getDate()).padStart(2, '0')
-    const dateStr = `${y}-${m}-${d}`
-    const weeksSinceStart = Math.floor((current.getTime() - start.getTime()) / (7 * 24 * 60 * 60 * 1000))
+    const dateStr = formatLocalDate(current)
+    const msDiff = current.getTime() - start.getTime()
+    const daysDiff = Math.floor(msDiff / (24 * 60 * 60 * 1000))
+    const weeksDiff = Math.floor(daysDiff / 7)
+    let include = false
     switch (rule) {
       case 'daily':
-        dates.push(dateStr)
+        include = true
         break
       case 'weekly':
-        if (normalizedDays.length === 0 || normalizedDays.includes(dayName)) dates.push(dateStr)
+        include = normalizedDays.length === 0 || normalizedDays.includes(dayName)
         break
       case 'biweekly':
-        if (weeksSinceStart % 2 === 0 && (normalizedDays.length === 0 || normalizedDays.includes(dayName))) dates.push(dateStr)
+        include = weeksDiff % 2 === 0 && (normalizedDays.length === 0 || normalizedDays.includes(dayName))
         break
       case 'monthly':
-        if (current.getDate() === start.getDate()) dates.push(dateStr)
+        include = current.getDate() === start.getDate()
         break
     }
+    if (include) dates.push(dateStr)
     current.setDate(current.getDate() + 1)
   }
   return dates
@@ -252,83 +262,72 @@ export default function CalendarPage() {
 
     setSaving(true)
 
-    try {
-      const { data: newClass, error: insertError } = await supabase
-        .from('scheduled_classes')
-        .insert({
-          title: createForm.title,
-          description: createForm.description || null,
-          type: createForm.type,
-          group_id: createForm.group_id || null,
-          coach_id: userId,
-          scheduled_date: createForm.scheduled_date,
-          start_time: createForm.start_time,
-          end_time: createForm.end_time || null,
-          location: createForm.location || null,
-          is_recurring: createForm.is_recurring,
-          recurrence_rule: createForm.is_recurring ? createForm.recurrence_rule : null,
-          recurrence_days: createForm.is_recurring && createForm.recurrence_days.length > 0
-            ? createForm.recurrence_days : null,
-          recurrence_end_date: createForm.is_recurring ? createForm.recurrence_end_date : null,
-          created_by: userId,
-        })
-        .select()
-        .single()
+    const seriesId = createForm.is_recurring ? crypto.randomUUID() : null
 
-      if (insertError) {
-        setCreateError(`Failed to create class: ${insertError.message}`)
-        setSaving(false)
-        return
-      }
+    const baseData = {
+      title: createForm.title.trim(),
+      description: createForm.description || null,
+      type: createForm.type,
+      group_id: createForm.group_id || null,
+      coach_id: userId,
+      start_time: createForm.start_time,
+      end_time: createForm.end_time || null,
+      location: createForm.location || null,
+      is_recurring: createForm.is_recurring,
+      recurrence_rule: createForm.is_recurring ? createForm.recurrence_rule : null,
+      recurrence_days: createForm.is_recurring && createForm.recurrence_days.length > 0
+        ? createForm.recurrence_days : null,
+      recurrence_end_date: createForm.is_recurring ? createForm.recurrence_end_date : null,
+      recurrence_series_id: seriesId,
+      created_by: userId,
+    }
 
-      if (createForm.is_recurring && newClass && createForm.recurrence_end_date) {
-        const recurringDates = generateRecurringDates(
-          createForm.scheduled_date,
-          createForm.recurrence_end_date,
-          createForm.recurrence_rule,
-          createForm.recurrence_days
-        )
-        if (recurringDates.length > 0) {
-          const { error: recurringError } = await supabase
-            .from('scheduled_classes')
-            .insert(
-              recurringDates.map(date => ({
-                title: createForm.title,
-                description: createForm.description || null,
-                type: createForm.type,
-                group_id: createForm.group_id || null,
-                coach_id: userId,
-                scheduled_date: date,
-                start_time: createForm.start_time,
-                end_time: createForm.end_time || null,
-                location: createForm.location || null,
-                is_recurring: true,
-                recurrence_rule: createForm.recurrence_rule,
-                recurrence_days: createForm.recurrence_days.length > 0 ? createForm.recurrence_days : null,
-                recurrence_end_date: createForm.recurrence_end_date,
-                parent_class_id: newClass.id,
-                created_by: userId,
-              }))
-            )
-          if (recurringError) {
-            setCreateError(`Class created but some recurring instances failed: ${recurringError.message}`)
+    const { data: parent, error: parentError } = await supabase
+      .from('scheduled_classes')
+      .insert({ ...baseData, scheduled_date: createForm.scheduled_date })
+      .select()
+      .single()
+
+    if (parentError) {
+      setCreateError(`Failed to create class: ${parentError.message}`)
+      setSaving(false)
+      return
+    }
+
+    if (createForm.is_recurring && parent && createForm.recurrence_end_date) {
+      const recurringDates = generateRecurringDates(
+        createForm.scheduled_date,
+        createForm.recurrence_end_date,
+        createForm.recurrence_rule,
+        createForm.recurrence_days
+      )
+      if (recurringDates.length > 0) {
+        const batchSize = 50
+        for (let i = 0; i < recurringDates.length; i += batchSize) {
+          const batch = recurringDates.slice(i, i + batchSize)
+          const { error: batchError } = await supabase.from('scheduled_classes').insert(
+            batch.map(date => ({
+              ...baseData,
+              scheduled_date: date,
+              parent_class_id: parent.id,
+            }))
+          )
+          if (batchError) {
+            console.error('Batch insert error:', batchError)
           }
         }
       }
-
-      setShowCreateModal(false)
-      setCreateForm({
-        title: '', description: '', type: 'conditioning', group_id: '',
-        scheduled_date: selectedDate || getLocalDateString(),
-        start_time: '06:00', end_time: '07:00', location: '',
-        is_recurring: false, recurrence_rule: 'weekly',
-        recurrence_days: [], recurrence_end_date: '',
-      })
-      await loadClasses()
-    } catch (err: any) {
-      setCreateError(err.message || 'Unexpected error creating class.')
     }
 
+    setShowCreateModal(false)
+    setCreateForm({
+      title: '', description: '', type: 'conditioning', group_id: '',
+      scheduled_date: selectedDate || getLocalDateString(),
+      start_time: '06:00', end_time: '07:00', location: '',
+      is_recurring: false, recurrence_rule: 'weekly',
+      recurrence_days: [], recurrence_end_date: '',
+    })
+    await loadClasses()
     setSaving(false)
   }
 

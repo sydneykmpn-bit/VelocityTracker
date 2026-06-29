@@ -69,8 +69,7 @@ export default function RegisterForm() {
       setError(authError.message)
       setLoading(false)
     } else {
-      router.push('/dashboard')
-      router.refresh()
+      router.push('/pending-approval')
     }
   }
 

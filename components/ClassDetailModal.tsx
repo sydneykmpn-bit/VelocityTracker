@@ -23,6 +23,15 @@ export default function ClassDetailModal({
   const [myAttendance, setMyAttendance] = useState<any>(null)
   const [loadingAttendees, setLoadingAttendees] = useState(false)
   const [rsvpLoading, setRsvpLoading] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editForm, setEditForm] = useState({
+    title: cls.title || '',
+    description: cls.description || '',
+    start_time: cls.start_time || '',
+    end_time: cls.end_time || '',
+    location: cls.location || '',
+    type: cls.type || 'conditioning',
+  })
 
   const classId = cls.is_dynamic ? cls.parent_class_id : cls.id
 
@@ -76,12 +85,58 @@ export default function ClassDetailModal({
 
   const tc = classTypeColor(cls.type || 'conditioning')
 
+  const handleSaveEdit = async () => {
+    const { error } = await supabase
+      .from('scheduled_classes')
+      .update({
+        title: editForm.title,
+        description: editForm.description || null,
+        start_time: editForm.start_time,
+        end_time: editForm.end_time || null,
+        location: editForm.location || null,
+        type: editForm.type,
+      })
+      .eq('id', cls.is_dynamic ? cls.parent_class_id : cls.id)
+    if (!error) {
+      setIsEditing(false)
+      onUpdate()
+    }
+  }
+
+  const handleEditSeries = async () => {
+    const seriesId = cls.recurrence_series_id
+    if (seriesId) {
+      await supabase.from('scheduled_classes').update({
+        title: editForm.title,
+        description: editForm.description || null,
+        start_time: editForm.start_time,
+        end_time: editForm.end_time || null,
+        location: editForm.location || null,
+        type: editForm.type,
+      }).eq('recurrence_series_id', seriesId)
+    } else {
+      await handleSaveEdit()
+      return
+    }
+    setIsEditing(false)
+    onUpdate()
+  }
+
+  const inputBase: React.CSSProperties = {
+    background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem',
+    padding: '0.6rem 0.875rem', color: '#F2F2F2', fontSize: '0.875rem', outline: 'none', width: '100%',
+  }
+  const labelBase: React.CSSProperties = {
+    display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)',
+    textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '0.375rem',
+  }
+
   return (
     <div
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
-      style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+      style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
     >
-      <div style={{ width: '100%', maxWidth: '540px', maxHeight: '90vh', overflowY: 'auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem 1rem 0 0' }}>
+      <div style={{ width: '100%', maxWidth: '540px', maxHeight: '90vh', overflowY: 'auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem' }}>
         {/* Header */}
         <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
@@ -94,9 +149,65 @@ export default function ClassDetailModal({
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.75rem', letterSpacing: '0.03em' }}>{cls.title}</h2>
               {cls.description && <p style={{ fontSize: '0.875rem', marginTop: '0.25rem', color: 'var(--text-secondary)' }}>{cls.description}</p>}
             </div>
-            <button onClick={onClose} style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.875rem', minHeight: 0 }}>✕</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+              {(userRole === 'admin' || userRole === 'coach') && !cls.isPlan && !isEditing && (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  style={{ padding: '0.4rem 0.875rem', borderRadius: '0.375rem', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, minHeight: 0 }}
+                >
+                  ✏️ Edit
+                </button>
+              )}
+              <button onClick={onClose} style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.875rem', minHeight: 0 }}>✕</button>
+            </div>
           </div>
         </div>
+
+        {isEditing && (
+          <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div>
+              <label style={labelBase}>Title</label>
+              <input style={inputBase} value={editForm.title} onChange={e => setEditForm(p => ({ ...p, title: e.target.value }))} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div>
+                <label style={labelBase}>Start Time</label>
+                <input type="time" style={inputBase} value={editForm.start_time} onChange={e => setEditForm(p => ({ ...p, start_time: e.target.value }))} />
+              </div>
+              <div>
+                <label style={labelBase}>End Time</label>
+                <input type="time" style={inputBase} value={editForm.end_time} onChange={e => setEditForm(p => ({ ...p, end_time: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <label style={labelBase}>Location</label>
+              <input style={inputBase} value={editForm.location} onChange={e => setEditForm(p => ({ ...p, location: e.target.value }))} placeholder="Optional" />
+            </div>
+            <div>
+              <label style={labelBase}>Description</label>
+              <textarea style={{ ...inputBase, minHeight: '60px', resize: 'vertical' }} value={editForm.description} onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))} placeholder="Optional" />
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {cls.is_recurring ? (
+                <>
+                  <button onClick={handleSaveEdit} style={{ flex: 1, background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.65rem', fontSize: '0.875rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}>
+                    Save This Class
+                  </button>
+                  <button onClick={handleEditSeries} style={{ flex: 1, background: 'var(--surface-raised)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.65rem', fontSize: '0.875rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}>
+                    Save All in Series
+                  </button>
+                </>
+              ) : (
+                <button onClick={handleSaveEdit} style={{ flex: 1, background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.65rem', fontSize: '0.875rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}>
+                  Save Changes
+                </button>
+              )}
+              <button onClick={() => setIsEditing(false)} style={{ background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.65rem 1rem', fontSize: '0.875rem', cursor: 'pointer', minHeight: 0 }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Details grid */}
         <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
