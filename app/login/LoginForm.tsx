@@ -5,18 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Eye, EyeOff } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-
-const VLogo = () => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
-    <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-      <path d="M4 6L16 26L28 6" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M10 6L16 18L22 6" stroke="#0877a0" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-    <span style={{ fontFamily: 'var(--font-bebas)', letterSpacing: '0.05em', fontSize: '1.5rem' }}>
-      VELOCITY <span style={{ color: '#34bac2' }}>FITNESS</span>
-    </span>
-  </div>
-)
+import VLogo from '@/components/VLogo'
 
 const inputBase: React.CSSProperties = {
   width: '100%',
@@ -75,8 +64,8 @@ export default function LoginForm() {
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem',
     }}>
       <div className="fade-in-up" style={{ width: '100%', maxWidth: '400px' }}>
-        <div style={{ marginBottom: '2rem' }}>
-          <VLogo />
+        <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'center' }}>
+          <VLogo height={54} />
         </div>
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '2rem' }}>
           <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: '2rem', letterSpacing: '0.03em', marginBottom: '0.4rem' }}>

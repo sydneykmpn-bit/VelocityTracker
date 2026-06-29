@@ -2,14 +2,15 @@ import Link from 'next/link'
 
 interface VLogoProps {
   linkTo?: string
+  height?: number
 }
 
-export default function VLogo({ linkTo }: VLogoProps) {
+export default function VLogo({ linkTo, height = 36 }: VLogoProps) {
   const content = (
     <img
       src="/velocitylogo.png"
       alt="Velocity PH"
-      style={{ display: 'block', height: '36px', width: 'auto' }}
+      style={{ display: 'block', height, width: 'auto' }}
     />
   )
 

@@ -5,13 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { LogOut, Menu, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-
-const VLogo = () => (
-  <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
-    <path d="M4 6L16 26L28 6" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M10 6L16 18L22 6" stroke="#0877a0" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-)
+import VLogo from '@/components/VLogo'
 
 function NavLinks({ role, onClick, isStudent }: { role: string | null; onClick?: () => void; isStudent?: boolean }) {
   const linkStyle: React.CSSProperties = {
@@ -76,9 +70,6 @@ export default function Navbar() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
           <Link href="/dashboard" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem', minHeight: 0 }}>
             <VLogo />
-            <span style={{ fontFamily: 'var(--font-bebas)', letterSpacing: '0.05em', fontSize: '1.1rem', color: 'white' }}>
-              VELOCITY <span style={{ color: '#34bac2' }}>PH</span>
-            </span>
           </Link>
 
           {/* Desktop nav */}
