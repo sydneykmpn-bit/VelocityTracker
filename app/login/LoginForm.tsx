@@ -58,11 +58,15 @@ export default function LoginForm() {
     } else {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, approved')
         .eq('id', data.user.id)
         .single()
-      if (profile?.role === 'admin') router.push('/admin')
-      else if (profile?.role === 'coach') router.push('/coach')
+      if (!profile?.approved) {
+        router.push('/pending-approval')
+        return
+      }
+      if (profile.role === 'admin') router.push('/admin')
+      else if (profile.role === 'coach') router.push('/coach')
       else router.push('/dashboard')
       router.refresh()
     }

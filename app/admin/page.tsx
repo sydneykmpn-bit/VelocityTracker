@@ -7,7 +7,7 @@ import Navbar from '@/components/Navbar'
 import { Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import { getLocalDateString } from '@/lib/utils'
 
-type Tab = 'members' | 'groups' | 'workouts' | 'leaderboard'
+type Tab = 'members' | 'groups' | 'leaderboard'
 type Role = 'member' | 'coach' | 'admin'
 
 const inputBase: React.CSSProperties = {
@@ -273,8 +273,9 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
 
   // Members tab
-  const [profiles, setProfiles] = useState<any[]>([])
-  const [updatingRole, setUpdatingRole] = useState<string | null>(null)
+  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [pendingUsers, setPendingUsers] = useState<any[]>([])
+  const [allUsers, setAllUsers] = useState<any[]>([])
 
   // Groups tab
   const [groups, setGroups] = useState<any[]>([])
@@ -286,9 +287,6 @@ export default function AdminPage() {
   const [addMemberId, setAddMemberId] = useState<Record<string, string>>({})
   const [groupSaving, setGroupSaving] = useState(false)
 
-  // Workouts tab
-  const [allWorkouts, setAllWorkouts] = useState<any[]>([])
-
   // Leaderboard tab
   const [allPRs, setAllPRs] = useState<any[]>([])
   const [prFilter, setPrFilter] = useState('')
@@ -297,11 +295,6 @@ export default function AdminPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<{id: string; name: string} | null>(null)
-
-  const loadProfiles = async () => {
-    const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
-    setProfiles(data ?? [])
-  }
 
   const loadGroups = async () => {
     const { data } = await supabase
@@ -325,11 +318,17 @@ export default function AdminPage() {
       if (!user) { router.push('/login'); return }
       const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).single()
       if (prof?.role !== 'admin') { router.push('/dashboard'); return }
+      setCurrentUser(user)
+
+      const [pendingResult, allResult] = await Promise.all([
+        supabase.from('profiles').select('*').eq('approved', false).order('created_at', { ascending: false }),
+        supabase.from('profiles').select('*').eq('approved', true).order('created_at', { ascending: false }),
+      ])
+      setPendingUsers(pendingResult.data || [])
+      setAllUsers(allResult.data || [])
 
       await Promise.all([
-        loadProfiles(),
         loadGroups(),
-        supabase.from('workouts').select('*, profiles(name)').order('created_at', { ascending: false }).then(({ data }) => setAllWorkouts(data ?? [])),
         supabase.from('personal_records').select('*, profiles(name, gender)').order('value', { ascending: false }).then(({ data }) => setAllPRs(data ?? [])),
       ])
       setLoading(false)
@@ -337,13 +336,6 @@ export default function AdminPage() {
     init()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  const handleRoleChange = async (userId: string, newRole: Role) => {
-    setUpdatingRole(userId)
-    await supabase.from('profiles').update({ role: newRole }).eq('id', userId)
-    await loadProfiles()
-    setUpdatingRole(null)
-  }
 
   const handleCreateGroup = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -384,10 +376,10 @@ export default function AdminPage() {
     if (!groupMembers[groupId]) await loadGroupMembers(groupId)
   }
 
-  const coaches = profiles.filter(p => p.role === 'coach' || p.role === 'admin')
-  const members = profiles.filter(p => p.role === 'member')
+  const coaches = allUsers.filter(p => p.role === 'coach' || p.role === 'admin')
+  const members = allUsers.filter(p => p.role === 'member')
   const filteredPRs = allPRs.filter(r => {
-    const matchesSearch = !prFilter.trim() || (r.exercise_name ?? r.exercise ?? '').toLowerCase().includes(prFilter.toLowerCase())
+    const matchesSearch = !prFilter.trim() || (r.profiles as any)?.name?.toLowerCase().includes(prFilter.toLowerCase())
     const matchesGender = prGenderFilter === 'all' || (r.profiles as any)?.gender === prGenderFilter
     return matchesSearch && matchesGender
   })
@@ -403,7 +395,6 @@ export default function AdminPage() {
   const tabs: { value: Tab; label: string }[] = [
     { value: 'members', label: 'Members' },
     { value: 'groups', label: 'Groups / Classes' },
-    { value: 'workouts', label: 'Workouts Overview' },
     { value: 'leaderboard', label: 'Leaderboard' },
   ]
 
@@ -435,56 +426,114 @@ export default function AdminPage() {
 
         {/* ── MEMBERS TAB ── */}
         {activeTab === 'members' && (
-          <div>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>{profiles.length} users total</p>
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem', overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    {['Name', 'Email', 'Role', 'Joined'].map(h => (
-                      <th key={h} style={{ padding: '0.875rem 1rem', textAlign: 'left', fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {profiles.map(p => (
-                    <tr key={p.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td style={{ padding: '0.875rem 1rem', fontWeight: 600, fontSize: '0.875rem' }}>
-                        <span
-                          onClick={() => setSelectedMemberProfile({ id: p.id, name: p.name })}
-                          style={{ cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(52,186,194,0.4)', textUnderlineOffset: '2px' }}
-                        >{p.name}</span>
-                      </td>
-                      <td style={{ padding: '0.875rem 1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{p.email}</td>
-                      <td style={{ padding: '0.875rem 1rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span style={roleBadgeStyle(p.role)}>{p.role}</span>
-                          <select
-                            value={p.role}
-                            onChange={e => handleRoleChange(p.id, e.target.value as Role)}
-                            disabled={updatingRole === p.id}
-                            style={{ ...inputBase, padding: '0.3rem 0.5rem', fontSize: '0.75rem', cursor: 'pointer' }}
-                          >
-                            <option value="member">member</option>
-                            <option value="coach">coach</option>
-                            <option value="admin">admin</option>
-                          </select>
-                        </div>
-                      </td>
-                      <td style={{ padding: '0.875rem 1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                        {new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </td>
-                    </tr>
+          <div key="tab-members">
+            {/* Pending Approvals */}
+            {pendingUsers.length > 0 && (
+              <div style={{ marginBottom: '2rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)' }}>Pending Approval</p>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '999px', background: 'rgba(245,158,11,0.2)', color: '#f59e0b' }}>
+                    {pendingUsers.length}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {pendingUsers.map(u => (
+                    <div
+                      key={u.id}
+                      style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderLeft: '3px solid #f59e0b', borderRadius: '0.75rem', padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}
+                    >
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <p style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>{u.name}</p>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.15rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</p>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
+                          Registered {new Date(u.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </p>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, flexWrap: 'wrap' }}>
+                        <button
+                          onClick={async () => {
+                            await supabase.from('profiles').update({ approved: true, approved_at: new Date().toISOString(), approved_by: currentUser?.id }).eq('id', u.id)
+                            setPendingUsers(prev => prev.filter(p => p.id !== u.id))
+                            setAllUsers(prev => [...prev, { ...u, approved: true }])
+                          }}
+                          style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+                        >
+                          ✓ Approve
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`Reject and remove ${u.name}?`)) return
+                            await supabase.from('profiles').delete().eq('id', u.id)
+                            setPendingUsers(prev => prev.filter(p => p.id !== u.id))
+                          }}
+                          style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', color: '#ef4444' }}
+                        >
+                          ✕ Reject
+                        </button>
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+                <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '1.5rem 0' }} />
+              </div>
+            )}
+
+            {/* Active Members */}
+            <div>
+              <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+                Active Members ({allUsers.length})
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {allUsers.map(u => (
+                  <div key={u.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                    <button
+                      onClick={() => setSelectedMemberProfile({ id: u.id, name: u.name })}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0 }}
+                    >
+                      <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--teal-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.875rem', flexShrink: 0 }}>
+                        {u.name?.charAt(0)?.toUpperCase()}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>{u.name}</p>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</p>
+                      </div>
+                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                      <select
+                        value={u.role}
+                        onChange={async e => {
+                          const newRole = e.target.value
+                          await supabase.from('profiles').update({ role: newRole }).eq('id', u.id)
+                          setAllUsers(prev => prev.map(p => p.id === u.id ? { ...p, role: newRole } : p))
+                        }}
+                        style={{ ...inputBase, padding: '0.25rem 0.5rem', fontSize: '0.75rem', cursor: 'pointer',
+                          color: u.role === 'admin' ? '#c084fc' : u.role === 'coach' ? '#34bac2' : 'var(--text-secondary)' }}
+                      >
+                        <option value="member">member</option>
+                        <option value="coach">coach</option>
+                        <option value="admin">admin</option>
+                      </select>
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`Remove ${u.name} from Velocity Tracker? This cannot be undone.`)) return
+                          await supabase.from('profiles').delete().eq('id', u.id)
+                          setAllUsers(prev => prev.filter(p => p.id !== u.id))
+                        }}
+                        style={{ width: '28px', height: '28px', borderRadius: '0.375rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', flexShrink: 0 }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
         {/* ── GROUPS TAB ── */}
         {activeTab === 'groups' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '1.5rem', alignItems: 'start' }}>
+          <div key="tab-groups" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '1.5rem', alignItems: 'start' }}>
             <div>
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>
                 GROUPS ({groups.length})
@@ -587,45 +636,11 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ── WORKOUTS OVERVIEW TAB ── */}
-        {activeTab === 'workouts' && (
-          <div>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>{allWorkouts.length} workouts total (read-only)</p>
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem', overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    {['User', 'Title', 'Type', 'Date'].map(h => (
-                      <th key={h} style={{ padding: '0.875rem 1rem', textAlign: 'left', fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {allWorkouts.length === 0 ? (
-                    <tr><td colSpan={4} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No workouts yet.</td></tr>
-                  ) : (
-                    allWorkouts.map(w => (
-                      <tr key={w.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '0.875rem 1rem', fontSize: '0.875rem', fontWeight: 600 }}>{w.profiles?.name ?? '—'}</td>
-                        <td style={{ padding: '0.875rem 1rem', fontSize: '0.875rem' }}>{w.title}</td>
-                        <td style={{ padding: '0.875rem 1rem', fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>{w.type}</td>
-                        <td style={{ padding: '0.875rem 1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                          {new Date(w.date ?? w.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
         {/* ── LEADERBOARD TAB ── */}
         {activeTab === 'leaderboard' && (
-          <div>
+          <div key="tab-leaderboard">
             <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem', alignItems: 'center' }}>
-              <input type="text" value={prFilter} onChange={e => setPrFilter(e.target.value)} placeholder="Filter by exercise…" style={{ ...inputBase, maxWidth: '260px' }} />
+              <input type="text" value={prFilter} onChange={e => setPrFilter(e.target.value)} placeholder="Search by member name…" style={{ ...inputBase, maxWidth: '260px' }} />
               {[{ key: 'all', label: 'All' }, { key: 'male', label: '♂ Men' }, { key: 'female', label: '♀ Women' }].map(g => (
                 <button key={g.key} onClick={() => setPrGenderFilter(g.key)} style={{ padding: '0.4rem 0.875rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer', background: prGenderFilter === g.key ? 'var(--surface)' : 'transparent', color: prGenderFilter === g.key ? 'var(--text-primary)' : 'var(--text-secondary)', border: `1px solid ${prGenderFilter === g.key ? 'var(--teal-primary)' : 'var(--border)'}`, transition: 'all 0.15s', minHeight: 36 }}>
                   {g.label}

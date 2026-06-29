@@ -312,13 +312,10 @@ export default function CoachPage() {
   const supabase = createClient()
   const [userId, setUserId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('members')
-  const [tabLoading, setTabLoading] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const switchTab = (tab: Tab) => {
-    setTabLoading(true)
     setActiveTab(tab)
-    setTimeout(() => setTabLoading(false), 50)
   }
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -686,11 +683,9 @@ export default function CoachPage() {
           ))}
         </div>
 
-        {tabLoading ? null : (<>
-
         {/* ── MY MEMBERS TAB ── */}
         {activeTab === 'members' && (
-          <div>
+          <div key="tab-members">
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>
               {myMembers.length} member{myMembers.length !== 1 ? 's' : ''} across your groups
             </p>
@@ -763,7 +758,7 @@ export default function CoachPage() {
 
         {/* ── GROUPS TAB ── */}
         {activeTab === 'groups' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
+          <div key="tab-groups" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
             <div>
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>MY GROUPS ({myGroups.length})</h2>
               {myGroups.length === 0 ? <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No groups yet. Create one →</p> : (
@@ -833,7 +828,7 @@ export default function CoachPage() {
 
         {/* ── ASSIGN PLAN TAB ── */}
         {activeTab === 'assign' && (
-          <div>
+          <div key="tab-assign">
             {/* Load from Template */}
             {templates.length > 0 && (
               <div style={{ marginBottom: '1.5rem' }}>
@@ -1220,7 +1215,7 @@ export default function CoachPage() {
 
         {/* ── WORKOUT CALENDAR TAB ── */}
         {activeTab === 'calendar' && (
-          <div>
+          <div key="tab-calendar">
             <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>WORKOUT CALENDAR</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
               <div>
@@ -1295,7 +1290,7 @@ export default function CoachPage() {
 
         {/* ── NOTES TAB ── */}
         {activeTab === 'notes' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
+          <div key="tab-notes" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
             <div>
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>NOTES ({notes.length})</h2>
               {notes.length === 0 ? <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No notes yet.</p> : (
@@ -1352,7 +1347,6 @@ export default function CoachPage() {
           </div>
         )}
 
-        </>)} {/* end tabLoading guard */}
       </main>
 
       {selectedMemberProfile && (

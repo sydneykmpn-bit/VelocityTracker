@@ -20,27 +20,12 @@ function NavLinks({ role, onClick }: { role: string; onClick?: () => void }) {
   }
   return (
     <>
-      <Link href="/dashboard" style={linkStyle} onClick={onClick}>Dashboard</Link>
-      <Link href="/calendar" style={linkStyle} onClick={onClick}>Calendar</Link>
+      {role === 'admin' && <Link href="/admin" style={linkStyle} onClick={onClick}>Admin Panel</Link>}
+      {role === 'coach' && <Link href="/coach" style={linkStyle} onClick={onClick}>Coach Panel</Link>}
+      <Link href="/workouts" style={linkStyle} onClick={onClick}>My Workouts</Link>
       <Link href="/templates" style={linkStyle} onClick={onClick}>Templates</Link>
-      {role === 'admin' && (
-        <>
-          <Link href="/leaderboard" style={linkStyle} onClick={onClick}>Leaderboard</Link>
-          <Link href="/admin" style={linkStyle} onClick={onClick}>Admin Panel</Link>
-        </>
-      )}
-      {role === 'coach' && (
-        <>
-          <Link href="/coach" style={linkStyle} onClick={onClick}>My Members</Link>
-          <Link href="/leaderboard" style={linkStyle} onClick={onClick}>Leaderboard</Link>
-        </>
-      )}
-      {(role === 'member' || role === '') && (
-        <>
-          <Link href="/workouts" style={linkStyle} onClick={onClick}>My Workouts</Link>
-          <Link href="/leaderboard" style={linkStyle} onClick={onClick}>Leaderboard</Link>
-        </>
-      )}
+      <Link href="/calendar" style={linkStyle} onClick={onClick}>Calendar</Link>
+      <Link href="/leaderboard" style={linkStyle} onClick={onClick}>Leaderboard</Link>
     </>
   )
 }
@@ -183,27 +168,12 @@ function NavLinksVertical({ role, onClose }: { role: string; onClose: () => void
   }
   return (
     <>
-      <Link href="/dashboard" style={linkStyle} onClick={onClose}>Dashboard</Link>
-      <Link href="/calendar" style={linkStyle} onClick={onClose}>📅 Calendar</Link>
+      {role === 'admin' && <Link href="/admin" style={linkStyle} onClick={onClose}>⚙️ Admin Panel</Link>}
+      {role === 'coach' && <Link href="/coach" style={linkStyle} onClick={onClose}>👥 Coach Panel</Link>}
+      <Link href="/workouts" style={linkStyle} onClick={onClose}>💪 My Workouts</Link>
       <Link href="/templates" style={linkStyle} onClick={onClose}>📋 Templates</Link>
-      {role === 'admin' && (
-        <>
-          <Link href="/leaderboard" style={linkStyle} onClick={onClose}>🏆 Leaderboard</Link>
-          <Link href="/admin" style={linkStyle} onClick={onClose}>⚙️ Admin Panel</Link>
-        </>
-      )}
-      {role === 'coach' && (
-        <>
-          <Link href="/coach" style={linkStyle} onClick={onClose}>👥 My Members</Link>
-          <Link href="/leaderboard" style={linkStyle} onClick={onClose}>🏆 Leaderboard</Link>
-        </>
-      )}
-      {(role === 'member' || role === '') && (
-        <>
-          <Link href="/workouts" style={linkStyle} onClick={onClose}>💪 My Workouts</Link>
-          <Link href="/leaderboard" style={linkStyle} onClick={onClose}>🏆 Leaderboard</Link>
-        </>
-      )}
+      <Link href="/calendar" style={linkStyle} onClick={onClose}>📅 Calendar</Link>
+      <Link href="/leaderboard" style={linkStyle} onClick={onClose}>🏆 Leaderboard</Link>
     </>
   )
 }

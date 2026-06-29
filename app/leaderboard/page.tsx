@@ -16,8 +16,8 @@ const EXERCISE_LIST = [
   'Barbell Row','Pull Up','Chin Up','Dip','Push Up','Incline Bench Press','Sumo Deadlift',
   'Hip Thrust','Leg Press','Lunges','Clean & Jerk','Snatch','Power Clean','Push Press',
   '400m Run','800m Run','1km Run','5km Run','10km Run','Treadmill Sprint','Treadmill Endurance',
-  'Rowing 500m','Rowing 2000m','Assault Bike','Jump Rope','Box Jump','Burpees','Wall Balls','Kettlebell Swing',
-  'Free Throw %','3-Point %','Vertical Jump','Sprint 20m','Sprint 40m','Agility T-Test',
+  'Rowing 500m','Rowing 2000m','Bike','Jump Rope','Box Jump','Burpees','Wall Balls','Kettlebell Swing',
+  'Free Throw %','3-Point %','Vertical Jump','Sprint 20m','Sprint','Agility T-Test',
 ]
 
 const FEATURED_EXERCISES = [
@@ -94,10 +94,10 @@ export default function LeaderboardPage() {
   // Filters
   const [featuredFilter, setFeaturedFilter] = useState('all')
   const [genderFilter, setGenderFilter] = useState('all')
-  const [searchInput, setSearchInput] = useState('')
-  const [searchFilter, setSearchFilter] = useState('')
+  const [memberSearchInput, setMemberSearchInput] = useState('')
+  const [memberSearch, setMemberSearch] = useState('')
 
-  const debouncedSetSearch = useCallback(debounce((v: string) => setSearchFilter(v), 400), [])
+  const debouncedSetSearch = useCallback(debounce((v: string) => setMemberSearch(v), 400), [])
 
   // Form
   const [showForm, setShowForm] = useState(false)
@@ -129,9 +129,9 @@ export default function LeaderboardPage() {
     if (featuredFilter !== 'all') {
       filtered = filtered.filter((r: any) => r.exercise_name === featuredFilter)
     }
-    if (searchFilter.trim()) {
+    if (memberSearch.trim()) {
       filtered = filtered.filter((r: any) =>
-        r.exercise_name?.toLowerCase().includes(searchFilter.toLowerCase())
+        (r.profiles as any)?.name?.toLowerCase().includes(memberSearch.toLowerCase())
       )
     }
     if (genderFilter !== 'all') {
@@ -182,7 +182,7 @@ export default function LeaderboardPage() {
   useEffect(() => {
     if (userId) loadLeaderboard()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [featuredFilter, genderFilter, searchFilter])
+  }, [featuredFilter, genderFilter, memberSearch])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -268,7 +268,7 @@ export default function LeaderboardPage() {
             {/* Info banner */}
             <div style={{ background: 'rgba(8,119,160,0.1)', border: '1px solid rgba(8,119,160,0.2)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--teal-secondary)' }}>
               {activeTab === 'public'
-                ? '🏆 Public leaderboard tracks 4 main lifts + sprint. Selecting an exercise auto-sets the unit.'
+                ? '🏆 Public leaderboard tracks 3 main lifts + sprint. Selecting an exercise auto-sets the unit.'
                 : '💪 Personal PRs are visible only to you and can be any exercise.'}
             </div>
 
@@ -382,7 +382,7 @@ export default function LeaderboardPage() {
             <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', paddingBottom: '4px', marginBottom: '0.75rem' }}>
               {FEATURED_EXERCISES.map(ex => (
                 <button key={ex.key}
-                  onClick={() => { setFeaturedFilter(ex.key); setSearchFilter('') }}
+                  onClick={() => setFeaturedFilter(ex.key)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '0.375rem',
                     padding: '0.5rem 0.875rem', borderRadius: '999px', fontSize: '0.8rem',
@@ -397,6 +397,28 @@ export default function LeaderboardPage() {
               ))}
             </div>
 
+            {/* Member name search */}
+            <input
+              type="text"
+              value={memberSearchInput}
+              onChange={e => { setMemberSearchInput(e.target.value); debouncedSetSearch(e.target.value) }}
+              placeholder="🔍 Search by member name…"
+              style={{ ...inputBase, width: '100%', marginBottom: '0.5rem' }}
+              aria-label="Search leaderboard by member name"
+            />
+            {memberSearch && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                  Results for &quot;<span style={{ color: 'var(--teal-secondary)' }}>{memberSearch}</span>&quot;
+                </p>
+                <button
+                  onClick={() => { setMemberSearchInput(''); setMemberSearch('') }}
+                  style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  Clear ✕
+                </button>
+              </div>
+            )}
             {/* Gender pills */}
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
               {GENDER_FILTERS.map(g => (
@@ -409,14 +431,6 @@ export default function LeaderboardPage() {
                   transition: 'all 0.15s', minHeight: 36,
                 }}>{g.label}</button>
               ))}
-              {/* Search filter (shown when All exercise is selected) */}
-              {featuredFilter === 'all' && (
-                <input type="text" value={searchInput}
-                  onChange={e => { setSearchInput(e.target.value); debouncedSetSearch(e.target.value) }}
-                  placeholder="Search exercise…"
-                  style={{ ...inputBase, flex: '1', minWidth: '140px', padding: '0.4rem 0.875rem' }}
-                />
-              )}
             </div>
 
             {/* Mobile card layout */}

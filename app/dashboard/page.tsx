@@ -355,14 +355,24 @@ export default function DashboardPage() {
               {getLocalDisplayDate()}
             </p>
           </div>
-          <Link href="/workouts/new" style={{
-            display: 'none', alignItems: 'center', gap: '0.5rem',
-            background: 'var(--teal-primary)', color: 'white',
-            padding: '0.75rem 1.25rem', borderRadius: '0.5rem',
-            textDecoration: 'none', fontWeight: 700, fontSize: '0.875rem', whiteSpace: 'nowrap', minHeight: 44,
-          }} className="md-show-flex">
-            <Plus size={16} /> Log Workout
-          </Link>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <Link href="/workouts" style={{
+              display: 'none', alignItems: 'center', gap: '0.5rem',
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              color: 'var(--text-primary)', padding: '0.75rem 1.25rem', borderRadius: '0.5rem',
+              textDecoration: 'none', fontWeight: 600, fontSize: '0.875rem', whiteSpace: 'nowrap', minHeight: 44,
+            }} className="md-show-flex">
+              💪 My Workouts
+            </Link>
+            <Link href="/workouts/new" style={{
+              display: 'none', alignItems: 'center', gap: '0.5rem',
+              background: 'var(--teal-primary)', color: 'white',
+              padding: '0.75rem 1.25rem', borderRadius: '0.5rem',
+              textDecoration: 'none', fontWeight: 700, fontSize: '0.875rem', whiteSpace: 'nowrap', minHeight: 44,
+            }} className="md-show-flex">
+              <Plus size={16} /> Log Workout
+            </Link>
+          </div>
         </div>
 
         {/* ── TODAY'S PLAN ── */}
