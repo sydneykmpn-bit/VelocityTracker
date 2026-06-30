@@ -100,7 +100,7 @@ export default function Navbar() {
     <>
       <nav style={{
         position: 'sticky', top: 0, zIndex: 50,
-        background: 'rgba(8,14,16,0.96)',
+        background: 'var(--pure-black)',
         backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
         borderBottom: '1px solid var(--border)',
         padding: '0 1.25rem', minHeight: '60px',
@@ -238,7 +238,7 @@ export default function Navbar() {
           onClick={() => setMenuOpen(false)}
         >
           <div
-            style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}
+            style={{ background: 'var(--pure-black)', borderBottom: '1px solid var(--border)' }}
             onClick={e => e.stopPropagation()}
           >
             {userName && (

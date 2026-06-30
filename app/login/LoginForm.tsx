@@ -60,7 +60,7 @@ export default function LoginForm() {
 
   return (
     <div style={{
-      minHeight: '100vh', background: 'var(--background)',
+      minHeight: '100vh', background: 'var(--pure-black)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem',
     }}>
       <div className="fade-in-up" style={{ width: '100%', maxWidth: '400px' }}>
