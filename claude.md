@@ -160,7 +160,7 @@ Edge Function: hyper-action → resets leaderboard (cron: 0 0 1 * *)
 
 ## Public PR Leaderboard Rules
 ```
-Only 4 exercises allowed on PUBLIC leaderboard: Back Squat, Deadlift, Overhead Press, Sprint 40m
+Only 4 exercises allowed on PUBLIC leaderboard: Back Squat, Deadlift, Overhead Press, Sprint
 My PRs tab: any exercise
 Sorting: normalized to kg equivalent (1 lbs = 0.453592 kg)
 Sprint 40m: lower value = better rank

@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import Navbar from '@/components/Navbar'
 import { Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import { getLocalDateString } from '@/lib/utils'
 
@@ -421,6 +420,20 @@ export default function AdminPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const handleDeleteUser = async (userId: string): Promise<boolean> => {
+    const res = await fetch('/api/admin/delete-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId }),
+    })
+    if (!res.ok) {
+      const { error: err } = await res.json().catch(() => ({ error: 'Failed to delete user.' }))
+      setError(err || 'Failed to delete user.')
+      return false
+    }
+    return true
+  }
+
   const handleCreateGroup = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newGroupName.trim()) return
@@ -502,7 +515,6 @@ export default function AdminPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
-      <Navbar />
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '2rem 1.5rem' }}>
         <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: '2.5rem', letterSpacing: '0.03em', marginBottom: '1.5rem' }}>
           ADMIN PANEL
@@ -675,8 +687,8 @@ export default function AdminPage() {
                         <button
                           onClick={async () => {
                             if (!confirm(`Reject and remove ${u.name}?`)) return
-                            await supabase.from('profiles').delete().eq('id', u.id)
-                            setPendingUsers(prev => prev.filter(p => p.id !== u.id))
+                            const ok = await handleDeleteUser(u.id)
+                            if (ok) setPendingUsers(prev => prev.filter(p => p.id !== u.id))
                           }}
                           style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', color: '#ef4444' }}
                         >
@@ -728,8 +740,8 @@ export default function AdminPage() {
                       <button
                         onClick={async () => {
                           if (!confirm(`Remove ${u.name} from Velocity Tracker? This cannot be undone.`)) return
-                          await supabase.from('profiles').delete().eq('id', u.id)
-                          setAllUsers(prev => prev.filter(p => p.id !== u.id))
+                          const ok = await handleDeleteUser(u.id)
+                          if (ok) setAllUsers(prev => prev.filter(p => p.id !== u.id))
                         }}
                         style={{ width: '28px', height: '28px', borderRadius: '0.375rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', flexShrink: 0 }}
                       >

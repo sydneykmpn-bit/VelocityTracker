@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import Navbar from '@/components/Navbar'
 import { ChevronDown, ChevronUp, Trash2, Pencil, Plus, Calendar } from 'lucide-react'
 import { getLocalDateString } from '@/lib/utils'
 
@@ -710,7 +709,6 @@ export default function CoachPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
-      <Navbar />
       <main style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem 1rem' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
           <div>

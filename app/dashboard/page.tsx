@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import Navbar from '@/components/Navbar'
 import { WorkoutCardSkeleton } from '@/components/Skeleton'
 import ClassDetailModal from '@/components/ClassDetailModal'
 import { getLocalDateString, getLocalDisplayDate } from '@/lib/utils'
@@ -356,7 +355,6 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
-        <Navbar />
         <div style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem 1rem' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             <WorkoutCardSkeleton /><WorkoutCardSkeleton /><WorkoutCardSkeleton />
@@ -370,8 +368,6 @@ export default function DashboardPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
-      <Navbar />
-
       <main style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem 1rem 7rem' }}>
 
         {/* ── ADMIN: Pending approvals banner ── */}

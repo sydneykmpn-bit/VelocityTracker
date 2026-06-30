@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import Navbar from '@/components/Navbar'
 
 const inputBase: React.CSSProperties = {
   width: '100%', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem',
@@ -18,7 +17,6 @@ const GENDERS = [
   { value: 'male', label: '♂ Male' },
   { value: 'female', label: '♀ Female' },
   { value: 'other', label: 'Other' },
-  { value: 'prefer_not_to_say', label: 'Prefer not to say' },
 ]
 
 export default function ProfilePage() {
@@ -80,7 +78,6 @@ export default function ProfilePage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
-      <Navbar />
       <main style={{ maxWidth: '560px', margin: '0 auto', padding: '2rem 1rem' }}>
         <div style={{ marginBottom: '2rem' }}>
           <p style={{ color: 'var(--teal-secondary)', fontSize: '0.7rem', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Account</p>

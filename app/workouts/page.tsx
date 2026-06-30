@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, Dumbbell, Pencil } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import Navbar from '@/components/Navbar'
 import { WorkoutCardSkeleton } from '@/components/Skeleton'
 
 type Filter = 'all' | 'conditioning' | 'basketball' | 'both'
@@ -91,7 +90,6 @@ export default function WorkoutsPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
-      <Navbar />
       <main style={{ maxWidth: '800px', margin: '0 auto', padding: '2rem 1rem' }}>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>

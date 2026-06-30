@@ -5,7 +5,6 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Trash2, Pencil } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import Navbar from '@/components/Navbar'
 
 const TYPE_STYLE: Record<string, { color: string; bg: string; border: string; icon: string }> = {
   basketball: { color: '#34bac2', bg: 'rgba(8,119,160,0.2)', border: 'rgba(8,119,160,0.35)', icon: '🏀' },
@@ -68,7 +67,6 @@ export default function WorkoutDetailPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
-      <Navbar />
       <main style={{ maxWidth: '700px', margin: '0 auto', padding: '2rem 1rem' }}>
 
         <Link href="/workouts" style={{

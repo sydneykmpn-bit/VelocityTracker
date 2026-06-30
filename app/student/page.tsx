@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import Navbar from '@/components/Navbar'
 import { getLocalDateString } from '@/lib/utils'
 
 type Tab = 'plans' | 'prs' | 'schedule' | 'progress' | 'attendance' | 'metrics'
@@ -40,6 +39,8 @@ export default function StudentPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [reschedulingId, setReschedulingId] = useState<string | null>(null)
   const [rescheduleDate, setRescheduleDate] = useState('')
+  const [loggingPlanId, setLoggingPlanId] = useState<string | null>(null)
+  const [undoingId, setUndoingId] = useState<string | null>(null)
 
   const reloadPlans = async (uid: string) => {
     const { data: plans } = await supabase
@@ -70,6 +71,62 @@ export default function StudentPage() {
     setRescheduleDate('')
     await reloadPlans(userId)
     setActionLoading(null)
+  }
+
+  const handleLogWorkoutFromPlan = async (plan: any) => {
+    if (!userId) return
+    setLoggingPlanId(plan.id)
+
+    const { data: newWorkout } = await supabase.from('workouts').insert({
+      user_id: userId,
+      title: plan.title,
+      type: plan.type,
+      notes: `Auto-logged from assigned plan. ${plan.description || ''}`.trim(),
+      duration: null,
+      date: new Date().toISOString(),
+    }).select().single()
+
+    const exercises: any[] = plan.workout_plan_exercises ?? []
+    if (newWorkout && exercises.length > 0) {
+      await supabase.from('exercises').insert(
+        exercises
+          .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
+          .map((ex: any) => ({
+            workout_id: newWorkout.id,
+            name: ex.name, sets: ex.sets, reps: ex.reps,
+            weight: ex.weight, duration: ex.duration,
+            distance: ex.distance, notes: ex.notes,
+          }))
+      )
+    }
+
+    await supabase.from('workout_plans').update({
+      status: 'completed',
+      completed_at: new Date().toISOString(),
+      auto_logged_workout_id: newWorkout?.id ?? null,
+    }).eq('id', plan.id)
+
+    setLoggingPlanId(null)
+    if (newWorkout) router.push(`/workouts/${newWorkout.id}`)
+  }
+
+  const handleUndoCompletion = async (plan: any) => {
+    if (!userId) return
+    setUndoingId(plan.id)
+
+    if (plan.auto_logged_workout_id) {
+      await supabase.from('exercises').delete().eq('workout_id', plan.auto_logged_workout_id)
+      await supabase.from('workouts').delete().eq('id', plan.auto_logged_workout_id)
+    }
+
+    await supabase.from('workout_plans').update({
+      status: 'pending',
+      completed_at: null,
+      auto_logged_workout_id: null,
+    }).eq('id', plan.id)
+
+    await reloadPlans(userId)
+    setUndoingId(null)
   }
 
   useEffect(() => {
@@ -159,7 +216,6 @@ export default function StudentPage() {
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
-        <Navbar />
         <div style={{ maxWidth: '980px', margin: '0 auto', padding: '2rem 1rem' }}>
           <div className="skeleton" style={{ height: 140, marginBottom: '1rem' }} />
           <div className="skeleton" style={{ height: 90, marginBottom: '1rem' }} />
@@ -180,7 +236,6 @@ export default function StudentPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
-      <Navbar />
       <main style={{ maxWidth: '980px', margin: '0 auto', padding: '2rem 1rem' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
           <div>
@@ -197,7 +252,7 @@ export default function StudentPage() {
 
         <div className="student-overview" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(240px, 0.8fr)', gap: '1rem', marginBottom: '1.25rem' }}>
           <div style={{ ...cardStyle, padding: '1.25rem' }}>
-            <p style={{ color: 'var(--teal-secondary)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>Next Action</p>
+            <p style={{ color: 'var(--teal-secondary)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>Upcoming Workouts</p>
             <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.75rem', letterSpacing: '0.03em', marginBottom: '0.25rem' }}>
               {todayPlans.length > 0 ? todayPlans[0].title : nextPlan ? nextPlan.title : 'No assigned plan'}
             </h2>
@@ -209,8 +264,21 @@ export default function StudentPage() {
                 : 'You are clear right now. Log an independent workout or check back after your coach assigns a plan.'}
             </p>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <Link href="/dashboard" style={{ background: 'var(--teal-primary)', color: 'white', borderRadius: '0.5rem', padding: '0.625rem 0.875rem', fontSize: '0.875rem', fontWeight: 700, textDecoration: 'none' }}>Open Dashboard</Link>
-              <Link href="/workouts/new" style={{ background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.625rem 0.875rem', fontSize: '0.875rem', fontWeight: 700, textDecoration: 'none' }}>Log Workout</Link>
+              {(() => {
+                const actionPlan = todayPlans.length > 0 ? todayPlans[0] : nextPlan
+                const isLogging = actionPlan && loggingPlanId === actionPlan.id
+                return actionPlan ? (
+                  <button
+                    onClick={() => handleLogWorkoutFromPlan(actionPlan)}
+                    disabled={isLogging}
+                    style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.625rem 0.875rem', fontSize: '0.875rem', fontWeight: 700, cursor: isLogging ? 'not-allowed' : 'pointer', opacity: isLogging ? 0.7 : 1 }}
+                  >
+                    {isLogging ? 'Logging…' : 'Log Workout'}
+                  </button>
+                ) : (
+                  <Link href="/workouts/new" style={{ background: 'var(--teal-primary)', color: 'white', borderRadius: '0.5rem', padding: '0.625rem 0.875rem', fontSize: '0.875rem', fontWeight: 700, textDecoration: 'none' }}>Log Workout</Link>
+                )
+              })()}
             </div>
           </div>
 
@@ -336,12 +404,21 @@ export default function StudentPage() {
                 })}
                 {completedPlans.length > 0 && <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>Completed</p>}
                 {completedPlans.slice(0, 5).map(plan => (
-                  <div key={plan.id} style={{ ...cardStyle, padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', opacity: 0.78 }}>
-                    <span style={{ color: '#4ade80', fontWeight: 800 }}>Done</span>
-                    <div>
-                      <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{plan.title}</p>
-                      <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>{formatDate(plan.scheduled_date)}</p>
+                  <div key={plan.id} style={{ ...cardStyle, padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', opacity: 0.78 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <span style={{ color: '#4ade80', fontWeight: 800 }}>Done</span>
+                      <div>
+                        <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{plan.title}</p>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>{formatDate(plan.scheduled_date)}</p>
+                      </div>
                     </div>
+                    <button
+                      onClick={() => handleUndoCompletion(plan)}
+                      disabled={undoingId === plan.id}
+                      style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.35rem 0.625rem', color: 'var(--text-secondary)', fontSize: '0.7rem', fontWeight: 700, cursor: undoingId === plan.id ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                    >
+                      {undoingId === plan.id ? '…' : '↺ Undo'}
+                    </button>
                   </div>
                 ))}
               </div>

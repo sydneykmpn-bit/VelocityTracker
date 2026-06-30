@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import Navbar from '@/components/Navbar'
 import { Plus, Trash2 } from 'lucide-react'
 
 const inputBase: React.CSSProperties = {
@@ -240,7 +239,6 @@ export default function TemplatesPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
-      <Navbar />
       <main style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem 1rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
           <div>

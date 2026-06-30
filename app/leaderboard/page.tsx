@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import Navbar from '@/components/Navbar'
 import { Trash2 } from 'lucide-react'
 import { debounce, getLocalDateString, normalizeToKg, sortRecords, LOWER_IS_BETTER } from '@/lib/utils'
 
@@ -38,6 +37,7 @@ const GENDER_FILTERS = [
   { key: 'all', label: 'All' },
   { key: 'male', label: '♂ Men' },
   { key: 'female', label: '♀ Women' },
+  { key: 'other', label: 'Other' },
 ]
 
 const MEDALS: Record<number, { emoji: string; color: string }> = {
@@ -235,7 +235,6 @@ export default function LeaderboardPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
-      <Navbar />
       <main style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem 1rem' }}>
 
         {/* Header */}

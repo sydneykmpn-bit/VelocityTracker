@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import Navbar from '@/components/Navbar'
 import { Plus, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import ClassDetailModal, { classTypeColor } from '@/components/ClassDetailModal'
 import { getLocalDateString } from '@/lib/utils'
@@ -360,7 +359,6 @@ export default function CalendarPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
-      <Navbar />
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '2rem 1rem' }}>
 
         {/* Header */}

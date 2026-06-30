@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Bebas_Neue, Inter } from 'next/font/google'
+import AppShell from '@/components/AppShell'
 import './globals.css'
 
 const bebasNeue = Bebas_Neue({
@@ -37,7 +38,7 @@ export default function RootLayout({
         style={{ fontFamily: 'var(--font-inter, Inter, sans-serif)' }}
         className={`${bebasNeue.variable} ${inter.variable}`}
       >
-        {children}
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   )

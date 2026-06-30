@@ -31,7 +31,6 @@ const GENDERS = [
   { key: 'male', label: '♂ Male' },
   { key: 'female', label: '♀ Female' },
   { key: 'other', label: 'Other' },
-  { key: 'prefer_not', label: 'Prefer not to say' },
 ]
 
 export default function RegisterForm() {

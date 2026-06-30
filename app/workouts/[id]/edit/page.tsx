@@ -5,7 +5,6 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import Navbar from '@/components/Navbar'
 import { getLocalDateString } from '@/lib/utils'
 
 type WorkoutType = 'conditioning' | 'basketball' | 'both'
@@ -185,7 +184,6 @@ export default function EditWorkoutPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
-      <Navbar />
       <main style={{ maxWidth: '700px', margin: '0 auto', padding: '2rem 1rem 0' }}>
         <Link href={`/workouts/${id}`} style={{
           display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
