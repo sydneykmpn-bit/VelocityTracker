@@ -3,10 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Trash2, ChevronDown, ChevronUp } from 'lucide-react'
+import { Trash2, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
 import { getLocalDateString } from '@/lib/utils'
 
-type AdminTab = 'overview' | 'members' | 'coaches' | 'groups' | 'leaderboard' | 'reports' | 'settings'
+type AdminTab = 'overview' | 'members' | 'coaches' | 'groups' | 'settings'
 type Role = 'member' | 'coach' | 'admin'
 
 const inputBase: React.CSSProperties = {
@@ -26,8 +26,6 @@ const roleBadgeStyle = (role: string): React.CSSProperties => ({
     ? { background: 'rgba(8,119,160,0.15)', color: '#34bac2', border: '1px solid rgba(8,119,160,0.3)' }
     : { background: 'rgba(138,138,138,0.15)', color: '#8A8A8A', border: '1px solid rgba(138,138,138,0.3)' }),
 })
-
-const MEDALS: Record<number, string> = { 0: '🥇', 1: '🥈', 2: '🥉' }
 
 function WorkoutHistoryCard({ workout, supabase }: { workout: any; supabase: any }) {
   const [expanded, setExpanded] = useState(false)
@@ -382,24 +380,21 @@ export default function AdminPage() {
   const [newGroupCoach, setNewGroupCoach] = useState('')
   const [addMemberId, setAddMemberId] = useState<Record<string, string>>({})
   const [groupSaving, setGroupSaving] = useState(false)
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
+  const [editGroupName, setEditGroupName] = useState('')
+  const [editGroupDesc, setEditGroupDesc] = useState('')
+  const [editGroupCoach, setEditGroupCoach] = useState('')
+  const [editGroupSaving, setEditGroupSaving] = useState(false)
 
-  // Leaderboard tab
+  // Leaderboard (still used by Settings tab PR management)
   const [allPRs, setAllPRs] = useState<any[]>([])
-  const [prFilter, setPrFilter] = useState('')
-  const [prGenderFilter, setPrGenderFilter] = useState('all')
-  const [leaderboardMonth, setLeaderboardMonth] = useState('current')
 
-  // Overview/Reports new state
+  // Overview/Coaches state
   const [monthlyWorkoutCount, setMonthlyWorkoutCount] = useState(0)
   const [monthlyPRCount, setMonthlyPRCount] = useState(0)
-  const [todayWorkoutCount, setTodayWorkoutCount] = useState(0)
-  const [todayClassCount, setTodayClassCount] = useState(0)
-  const [inactiveMembers, setInactiveMembers] = useState<any[]>([])
-  const [planStats, setPlanStats] = useState({ completed: 0, pending: 0, skipped: 0, total: 0 })
   const [coachStats, setCoachStats] = useState<Record<string, { groups: number; students: number; plansAssigned: number }>>({})
   const [settings, setSettings] = useState({ require_approval: true, instagram_handle: '', public_pr_exercises: [] as string[] })
   const [settingsSaved, setSettingsSaved] = useState(false)
-  const [monthlyActivity, setMonthlyActivity] = useState<{ date: string; count: number }[]>([])
 
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -458,32 +453,6 @@ export default function AdminPage() {
       setMonthlyWorkoutCount(mwCount || 0)
       setMonthlyPRCount(mpCount || 0)
 
-      // Today activity
-      const todayStr = getLocalDateString()
-      const { count: twCount } = await supabase.from('workouts').select('id', { count: 'exact', head: true }).gte('date', todayStr)
-      const { count: tcCount } = await supabase.from('scheduled_classes').select('id', { count: 'exact', head: true }).eq('scheduled_date', todayStr)
-      setTodayWorkoutCount(twCount || 0)
-      setTodayClassCount(tcCount || 0)
-
-      // Last workout date per member (for inactive)
-      const { data: memberWorkouts } = await supabase.from('workouts').select('user_id, date').order('date', { ascending: false })
-      const lastWorkoutByUser: Record<string, string> = {}
-      for (const w of (memberWorkouts || [])) {
-        if (!lastWorkoutByUser[w.user_id]) lastWorkoutByUser[w.user_id] = w.date
-      }
-      const inactive = (allResult.data || []).filter(u => {
-        const last = lastWorkoutByUser[u.id]
-        if (!last) return true
-        const days = Math.floor((Date.now() - new Date(last).getTime()) / (1000 * 60 * 60 * 24))
-        return days > 14
-      }).map(u => ({ ...u, last_workout_date: lastWorkoutByUser[u.id] || null }))
-      setInactiveMembers(inactive)
-
-      // Plan stats
-      const { data: allPlans } = await supabase.from('workout_plans').select('status')
-      const ps = (allPlans || []).reduce((acc: any, p: any) => { acc[p.status] = (acc[p.status] || 0) + 1; return acc }, {} as any)
-      setPlanStats({ completed: ps.completed || 0, pending: ps.pending || 0, skipped: ps.skipped || 0, total: (allPlans || []).length })
-
       // Coach stats
       const coachUsers = (allResult.data || []).filter((u: any) => u.role === 'coach')
       const cStats: Record<string, { groups: number; students: number; plansAssigned: number }> = {}
@@ -499,15 +468,6 @@ export default function AdminPage() {
         cStats[coach.id] = { groups: gCount || 0, students: sCount || 0, plansAssigned: pCount || 0 }
       }
       setCoachStats(cStats)
-
-      // Monthly activity (last 30 days)
-      const last30 = Array.from({ length: 30 }, (_, i) => {
-        const d = new Date(); d.setDate(d.getDate() - (29 - i))
-        return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(d)
-      })
-      const { data: recentWorkouts } = await supabase.from('workouts').select('date').gte('date', last30[0])
-      const actByDay = (recentWorkouts || []).reduce((acc: any, w: any) => { const d = w.date?.slice(0, 10); if (d) acc[d] = (acc[d] || 0) + 1; return acc }, {})
-      setMonthlyActivity(last30.map(d => ({ date: d, count: actByDay[d] || 0 })))
 
       // Settings
       const { data: appSettings } = await supabase.from('app_settings').select('*').eq('id', 'global').maybeSingle()
@@ -560,7 +520,14 @@ export default function AdminPage() {
   const handleAddToGroup = async (groupId: string) => {
     const memberId = addMemberId[groupId]
     if (!memberId) return
-    await supabase.from('group_members').insert({ group_id: groupId, member_id: memberId })
+    const { data } = await supabase
+      .from('group_members')
+      .insert({ group_id: groupId, member_id: memberId })
+      .select('*, profiles(name, email, gender)')
+      .single()
+    if (data) {
+      setGroupMembers(prev => ({ ...prev, [groupId]: [...(prev[groupId] ?? []), data] }))
+    }
     await loadGroupMembers(groupId)
     setAddMemberId(prev => ({ ...prev, [groupId]: '' }))
     await loadGroups()
@@ -568,6 +535,7 @@ export default function AdminPage() {
 
   const handleRemoveFromGroup = async (groupId: string, gmId: string) => {
     await supabase.from('group_members').delete().eq('id', gmId)
+    setGroupMembers(prev => ({ ...prev, [groupId]: (prev[groupId] ?? []).filter(gm => gm.id !== gmId) }))
     await loadGroupMembers(groupId)
     await loadGroups()
   }
@@ -578,19 +546,56 @@ export default function AdminPage() {
     if (!groupMembers[groupId]) await loadGroupMembers(groupId)
   }
 
+  const handleStartEditGroup = (g: any) => {
+    setEditingGroupId(g.id)
+    setEditGroupName(g.name ?? '')
+    setEditGroupDesc(g.description ?? '')
+    setEditGroupCoach(g.coach_id ?? '')
+  }
+
+  const handleCancelEditGroup = () => {
+    setEditingGroupId(null)
+    setEditGroupName(''); setEditGroupDesc(''); setEditGroupCoach('')
+  }
+
+  const handleUpdateGroup = async (groupId: string) => {
+    if (!editGroupName.trim()) return
+    setEditGroupSaving(true)
+    setError('')
+    const { error: err } = await supabase.from('groups').update({
+      name: editGroupName.trim(),
+      description: editGroupDesc.trim() || null,
+      coach_id: editGroupCoach || null,
+    }).eq('id', groupId)
+    if (err) { setError(err.message) } else {
+      await loadGroups()
+      handleCancelEditGroup()
+    }
+    setEditGroupSaving(false)
+  }
+
+  const handleDeleteGroup = async (g: any) => {
+    if (!confirm(`Delete "${g.name}"? This removes all its members from the group and cannot be undone.`)) return
+    setError('')
+    await supabase.from('group_members').delete().eq('group_id', g.id)
+    const { error: err } = await supabase.from('groups').delete().eq('id', g.id)
+    if (err) {
+      await supabase.from('scheduled_classes').update({ group_id: null }).eq('group_id', g.id)
+      const retry = await supabase.from('groups').delete().eq('id', g.id)
+      if (retry.error) { setError(retry.error.message); return }
+    }
+    setGroupMembers(prev => {
+      const next = { ...prev }
+      delete next[g.id]
+      return next
+    })
+    if (expandedGroup === g.id) setExpandedGroup(null)
+    if (editingGroupId === g.id) handleCancelEditGroup()
+    await loadGroups()
+  }
+
   const coaches = allUsers.filter(p => p.role === 'coach' || p.role === 'admin')
   const members = allUsers.filter(p => p.role === 'member')
-  const filteredPRs = allPRs.filter(r => {
-    const matchesSearch = !prFilter.trim() || (r.profiles as any)?.name?.toLowerCase().includes(prFilter.toLowerCase())
-    const matchesGender = prGenderFilter === 'all' || (r.profiles as any)?.gender === prGenderFilter
-    const prDate = r.date || r.recorded_at
-    const matchesMonth = leaderboardMonth === 'all'
-      ? true
-      : leaderboardMonth === 'current'
-      ? prDate?.startsWith(new Date().toISOString().slice(0, 7))
-      : prDate?.startsWith(leaderboardMonth)
-    return matchesSearch && matchesGender && matchesMonth
-  })
   const adminCount = allUsers.filter(p => p.role === 'admin').length
   const recentUsers = allUsers.slice(0, 4)
 
@@ -613,8 +618,6 @@ export default function AdminPage() {
     { value: 'members', label: '👥 Members' },
     { value: 'coaches', label: '👨‍💼 Coaches' },
     { value: 'groups', label: '🏢 Groups & Classes' },
-    { value: 'leaderboard', label: '🏆 Leaderboard' },
-    { value: 'reports', label: '📈 Reports' },
     { value: 'settings', label: '⚙️ Settings' },
   ]
 
@@ -631,7 +634,6 @@ export default function AdminPage() {
             { label: 'Active Members', value: members.length, color: 'var(--teal-secondary)', tab: 'members' as AdminTab },
             { label: 'Coaches', value: coaches.length, color: '#60a5fa', tab: 'coaches' as AdminTab },
             { label: 'Groups', value: groups.length, color: '#c084fc', tab: 'groups' as AdminTab },
-            { label: 'Public Records', value: allPRs.length, color: '#4ade80', tab: 'leaderboard' as AdminTab },
           ].map(card => (
             <button
               key={card.label}
@@ -695,41 +697,6 @@ export default function AdminPage() {
               ))}
             </div>
 
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
-              <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.875rem' }}>Today&apos;s Activity</p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.25rem' }}>
-                <div>
-                  <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '2.5rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{todayWorkoutCount}</p>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Workouts logged today</p>
-                </div>
-                <div>
-                  <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '2.5rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{todayClassCount}</p>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Classes today</p>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
-              <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.875rem' }}>Recent Signups</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-                {allUsers.slice(0, 5).map(u => (
-                  <div key={u.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
-                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--teal-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.875rem', fontWeight: 700, flexShrink: 0 }}>
-                        {u.name?.charAt(0)}
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <p style={{ fontSize: '0.875rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</p>
-                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</p>
-                      </div>
-                    </div>
-                    <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', flexShrink: 0 }}>
-                      {new Date(u.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         )}
 
@@ -918,21 +885,68 @@ export default function AdminPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {groups.map(g => {
                     const isExpanded = expandedGroup === g.id
+                    const isEditing = editingGroupId === g.id
                     const gms = groupMembers[g.id] ?? []
+                    const memberCount = groupMembers[g.id] ? groupMembers[g.id].length : ((g.group_members as any[])?.[0]?.count ?? 0)
                     return (
                       <div key={g.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', overflow: 'hidden' }}>
-                        <button
-                          onClick={() => toggleGroup(g.id)}
-                          style={{ width: '100%', background: 'none', border: 'none', padding: '1rem 1.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#F2F2F2' }}
-                        >
-                          <div style={{ textAlign: 'left' }}>
+                        <div style={{ width: '100%', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#F2F2F2' }}>
+                          <button
+                            onClick={() => toggleGroup(g.id)}
+                            style={{ flex: 1, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: '#F2F2F2', padding: 0 }}
+                          >
                             <h3 style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.15rem' }}>{g.name}</h3>
                             <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                              Coach: {g.coach?.name ?? 'Unassigned'} · {(g.group_members as any[])?.[0]?.count ?? 0} members
+                              Coach: {g.coach?.name ?? 'Unassigned'} · {memberCount} members
                             </p>
+                          </button>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                            <button onClick={() => handleStartEditGroup(g)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', minHeight: 0 }} aria-label="Edit group">
+                              <Pencil size={16} />
+                            </button>
+                            <button onClick={() => handleDeleteGroup(g)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', display: 'flex', minHeight: 0 }} aria-label="Delete group">
+                              <Trash2 size={16} />
+                            </button>
+                            <button onClick={() => toggleGroup(g.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', minHeight: 0 }}>
+                              {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)' }} />}
+                            </button>
                           </div>
-                          {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)' }} />}
-                        </button>
+                        </div>
+
+                        {isEditing && (
+                          <div style={{ borderTop: '1px solid var(--border)', padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+                            <div>
+                              <label style={labelBase}>Name *</label>
+                              <input type="text" value={editGroupName} onChange={e => setEditGroupName(e.target.value)} required style={{ ...inputBase, width: '100%' }} placeholder="e.g. Morning Strength" />
+                            </div>
+                            <div>
+                              <label style={labelBase}>Description</label>
+                              <textarea value={editGroupDesc} onChange={e => setEditGroupDesc(e.target.value)} style={{ ...inputBase, width: '100%', minHeight: '60px', resize: 'vertical' }} placeholder="Optional…" />
+                            </div>
+                            <div>
+                              <label style={labelBase}>Assign Coach</label>
+                              <select value={editGroupCoach} onChange={e => setEditGroupCoach(e.target.value)} style={{ ...inputBase, width: '100%', cursor: 'pointer' }}>
+                                <option value="">No coach</option>
+                                {coaches.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                              </select>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              <button onClick={() => handleUpdateGroup(g.id)} disabled={editGroupSaving} style={{
+                                background: editGroupSaving ? '#0d1a1e' : 'var(--teal-primary)', color: 'white',
+                                border: 'none', borderRadius: '0.5rem', padding: '0.6rem 1rem', fontWeight: 700, fontSize: '0.8rem',
+                                cursor: editGroupSaving ? 'not-allowed' : 'pointer', flex: 1,
+                              }}>
+                                {editGroupSaving ? 'Saving…' : 'Save'}
+                              </button>
+                              <button onClick={handleCancelEditGroup} style={{
+                                background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.6rem 1rem',
+                                fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', color: 'var(--text-secondary)', flex: 1,
+                              }}>
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
 
                         {isExpanded && (
                           <div style={{ borderTop: '1px solid var(--border)', padding: '1rem 1.25rem' }}>
@@ -1006,158 +1020,6 @@ export default function AdminPage() {
                   {groupSaving ? 'Creating…' : 'Create Group'}
                 </button>
               </form>
-            </div>
-          </div>
-        )}
-
-        {/* ── LEADERBOARD TAB ── */}
-        {activeTab === 'leaderboard' && (
-          <div key="tab-leaderboard">
-            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem', alignItems: 'center' }}>
-              <input type="text" value={prFilter} onChange={e => setPrFilter(e.target.value)} placeholder="Search by member name…" style={{ ...inputBase, maxWidth: '260px' }} />
-              {[{ key: 'all', label: 'All' }, { key: 'male', label: '♂ Men' }, { key: 'female', label: '♀ Women' }].map(g => (
-                <button key={g.key} onClick={() => setPrGenderFilter(g.key)} style={{ padding: '0.4rem 0.875rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer', background: prGenderFilter === g.key ? 'var(--surface)' : 'transparent', color: prGenderFilter === g.key ? 'var(--text-primary)' : 'var(--text-secondary)', border: `1px solid ${prGenderFilter === g.key ? 'var(--teal-primary)' : 'var(--border)'}`, transition: 'all 0.15s', minHeight: 36 }}>
-                  {g.label}
-                </button>
-              ))}
-              {/* Month selector */}
-              <select
-                value={leaderboardMonth}
-                onChange={e => setLeaderboardMonth(e.target.value)}
-                style={{ ...inputBase, cursor: 'pointer', fontSize: '0.8rem' }}
-              >
-                <option value="current">This Month</option>
-                <option value="all">All Time</option>
-                {Array.from({ length: 12 }, (_, i) => {
-                  const d = new Date(); d.setMonth(d.getMonth() - i)
-                  const val = d.toISOString().slice(0, 7)
-                  return <option key={val} value={val}>{d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</option>
-                })}
-              </select>
-            </div>
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem', overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    {['Rank', 'Name', 'Exercise', 'Value', 'Unit', 'Date', ''].map(h => (
-                      <th key={h} style={{ padding: '0.875rem 1rem', textAlign: 'left', fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredPRs.length === 0 ? (
-                    <tr><td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No records yet.</td></tr>
-                  ) : (
-                    filteredPRs.map((r, idx) => (
-                      <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '0.875rem 1rem' }}>
-                          {MEDALS[idx] ? <span style={{ fontSize: '1.1rem' }}>{MEDALS[idx]}</span> : <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>#{idx + 1}</span>}
-                        </td>
-                        <td style={{ padding: '0.875rem 1rem', fontWeight: 600, fontSize: '0.875rem' }}>{r.profiles?.name ?? '—'}</td>
-                        <td style={{ padding: '0.875rem 1rem', fontSize: '0.875rem' }}>{r.exercise_name ?? r.exercise}</td>
-                        <td style={{ padding: '0.875rem 1rem', fontFamily: 'var(--font-bebas)', fontSize: '1.1rem', color: 'var(--teal-secondary)' }}>{r.value}</td>
-                        <td style={{ padding: '0.875rem 1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{r.unit}</td>
-                        <td style={{ padding: '0.875rem 1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                          {new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </td>
-                        <td style={{ padding: '0.5rem 0.75rem' }}>
-                          <button
-                            onClick={async () => {
-                              if (!confirm('Delete this PR record?')) return
-                              await supabase.from('personal_records').delete().eq('id', r.id)
-                              const { data } = await supabase.from('personal_records').select('*, profiles(name, gender)').order('value', { ascending: false })
-                              setAllPRs(data ?? [])
-                            }}
-                            style={{ background: 'none', border: '1px solid rgba(239,68,68,0.35)', borderRadius: '0.375rem', padding: '0.2rem 0.45rem', fontSize: '0.7rem', color: '#f87171', cursor: 'pointer', minHeight: 0 }}
-                          >✕</button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* ── REPORTS TAB ── */}
-        {activeTab === 'reports' && (
-          <div key="tab-reports" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
-              <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.875rem' }}>Inactive Members (14+ days)</p>
-              {inactiveMembers.length === 0 ? (
-                <p style={{ fontSize: '0.875rem', color: '#4ade80' }}>✅ All members have been active recently!</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {inactiveMembers.map(m => (
-                    <div key={m.id} style={{ background: 'var(--surface-raised)', borderRadius: '0.625rem', padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
-                      <button onClick={() => setSelectedMemberProfile({ id: m.id, name: m.name })}
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0 }}>
-                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#ef4444', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.875rem', fontWeight: 700, flexShrink: 0 }}>
-                          {m.name?.charAt(0)}
-                        </div>
-                        <div style={{ minWidth: 0 }}>
-                          <p style={{ fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</p>
-                          <p style={{ fontSize: '0.7rem', color: '#ef4444' }}>
-                            Last workout: {m.last_workout_date
-                              ? new Date(m.last_workout_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                              : 'Never'}
-                          </p>
-                        </div>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
-              <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.875rem' }}>Plan Completion Rates</p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', textAlign: 'center', marginBottom: '1rem' }}>
-                {[
-                  { label: 'Completed', count: planStats.completed, color: '#4ade80' },
-                  { label: 'Pending', count: planStats.pending, color: '#f59e0b' },
-                  { label: 'Skipped', count: planStats.skipped, color: '#ef4444' },
-                ].map(s => (
-                  <div key={s.label}>
-                    <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '2.25rem', color: s.color, lineHeight: 1 }}>{s.count}</p>
-                    <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>{s.label}</p>
-                  </div>
-                ))}
-              </div>
-              {planStats.total > 0 && (
-                <>
-                  <div style={{ height: '8px', borderRadius: '999px', background: 'var(--border)', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', borderRadius: '999px', background: '#4ade80', width: `${(planStats.completed / planStats.total) * 100}%`, transition: 'width 0.5s' }} />
-                  </div>
-                  <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.375rem', textAlign: 'right' }}>
-                    {Math.round((planStats.completed / planStats.total) * 100)}% completion rate
-                  </p>
-                </>
-              )}
-            </div>
-
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
-              <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '1rem' }}>Gym Activity (Last 30 Days)</p>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '80px' }}>
-                {(() => {
-                  const maxCount = Math.max(...monthlyActivity.map(d => d.count), 1)
-                  return monthlyActivity.map((day, i) => (
-                    <div key={i} style={{ flex: 1 }}>
-                      <div style={{
-                        width: '100%', borderRadius: '2px 2px 0 0',
-                        height: day.count > 0 ? `${Math.max((day.count / maxCount) * 100, 8)}%` : '4px',
-                        background: day.count > 0 ? 'var(--teal-primary)' : 'var(--border)',
-                        minHeight: '4px',
-                      }} />
-                    </div>
-                  ))
-                })()}
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.375rem' }}>
-                <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>30 days ago</p>
-                <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>Today</p>
-              </div>
             </div>
           </div>
         )}
