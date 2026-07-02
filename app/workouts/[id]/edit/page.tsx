@@ -34,14 +34,14 @@ const EXERCISES_BY_TYPE: Record<WorkoutType, string[]> = {
     'Rowing 500m','Rowing 2000m','Assault Bike','Jump Rope','Box Jump','Burpees','Wall Balls','Kettlebell Swing',
   ],
   basketball: [
-    'Free Throw %','3-Point %','Vertical Jump','Sprint 20m','Sprint 40m','Agility T-Test',
+    'Free Throw %','3-Point %','Vertical Jump','Sprint 20m','Sprint','Agility T-Test',
     '400m Run','800m Run','1km Run','Treadmill Sprint','Jump Rope','Box Jump','Burpees',
     'Back Squat','Deadlift','Overhead Press','Push Up','Pull Up',
   ],
   both: [
     'Back Squat','Front Squat','Deadlift','Romanian Deadlift','Bench Press','Overhead Press',
     'Barbell Row','Pull Up','Chin Up','Dip','Push Up',
-    'Free Throw %','3-Point %','Vertical Jump','Sprint 20m','Sprint 40m','Agility T-Test',
+    'Free Throw %','3-Point %','Vertical Jump','Sprint 20m','Sprint','Agility T-Test',
     '400m Run','800m Run','1km Run','5km Run','Treadmill Sprint','Treadmill Endurance',
     'Rowing 500m','Assault Bike','Jump Rope','Box Jump','Burpees','Kettlebell Swing',
   ],

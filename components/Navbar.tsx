@@ -11,9 +11,18 @@ export default function Navbar() {
   const supabase = createClient()
   const router = useRouter()
   const pathname = usePathname()
-  const [userRole, setUserRole] = useState<string | null>(null)
-  const [userName, setUserName] = useState('')
-  const [isStudent, setIsStudent] = useState(false)
+  const [userRole, setUserRole] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    return sessionStorage.getItem('vel_role') || null
+  })
+  const [userName, setUserName] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    return sessionStorage.getItem('vel_name') || ''
+  })
+  const [isStudent, setIsStudent] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return sessionStorage.getItem('vel_is_student') === 'true'
+  })
   const [menuOpen, setMenuOpen] = useState(false)
   const [avatarOpen, setAvatarOpen] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
@@ -23,28 +32,37 @@ export default function Navbar() {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role, name')
-        .eq('id', user.id)
-        .single()
+
+      const [profileResult, membershipResult] = await Promise.all([
+        supabase.from('profiles').select('role, name').eq('id', user.id).single(),
+        supabase.from('group_members').select('id').eq('member_id', user.id).limit(1),
+      ])
+
+      const profile = profileResult.data
+      const membership = membershipResult.data
       if (!profile) return
-      setUserRole(profile.role)
-      setUserName(profile.name || '')
 
-      await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', user.id)
+      const studentStatus = profile.role === 'member' && (membership?.length || 0) > 0
 
-      if (profile.role === 'member') {
-        const { data: membership } = await supabase
-          .from('group_members').select('id').eq('member_id', user.id).limit(1)
-        setIsStudent((membership?.length || 0) > 0)
-      }
-
+      let pending = 0
       if (profile.role === 'admin') {
         const { count } = await supabase
           .from('profiles').select('id', { count: 'exact', head: true }).eq('approved', false)
-        setPendingCount(count || 0)
+        pending = count || 0
       }
+
+      // Set ALL state at once — prevents double render / flicker
+      setUserRole(profile.role)
+      setUserName(profile.name || '')
+      setIsStudent(studentStatus)
+      setPendingCount(pending)
+
+      // Cache so next page navigation loads instantly without re-fetching
+      sessionStorage.setItem('vel_role', profile.role ?? 'member')
+      sessionStorage.setItem('vel_is_student', String(studentStatus))
+      sessionStorage.setItem('vel_name', profile.name ?? '')
+
+      await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', user.id)
     }
     load()
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -61,6 +79,9 @@ export default function Navbar() {
   }, [])
 
   const handleSignOut = async () => {
+    sessionStorage.removeItem('vel_role')
+    sessionStorage.removeItem('vel_is_student')
+    sessionStorage.removeItem('vel_name')
     await supabase.auth.signOut()
     router.push('/login')
   }
@@ -74,6 +95,7 @@ export default function Navbar() {
       { href: '/admin', label: 'Admin Panel', badge: pendingCount > 0 ? pendingCount : 0 },
       { href: '/calendar', label: 'Calendar' },
       { href: '/leaderboard', label: 'Leaderboard' },
+      { href: '/analytics', label: 'Analytics' },
       { href: '/templates', label: 'Templates' },
     ]
     if (userRole === 'coach') return [
@@ -81,12 +103,14 @@ export default function Navbar() {
       { href: '/coach', label: 'Coach Panel' },
       { href: '/calendar', label: 'Calendar' },
       { href: '/leaderboard', label: 'Leaderboard' },
+      { href: '/analytics', label: 'Analytics' },
       { href: '/templates', label: 'Templates' },
     ]
     const base: NavLink[] = [
       { href: '/workouts', label: 'My Workouts' },
       { href: '/calendar', label: 'Calendar' },
       { href: '/leaderboard', label: 'Leaderboard' },
+      { href: '/analytics', label: 'Analytics' },
       { href: '/templates', label: 'Templates' },
     ]
     if (isStudent) base.splice(1, 0, { href: '/student', label: 'Student Panel' })

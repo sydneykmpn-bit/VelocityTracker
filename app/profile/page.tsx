@@ -29,6 +29,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<any>(null)
   const [form, setForm] = useState({
     name: '', gender: '', age: '', weight_kg: '', weight_unit: 'kg',
+    city: '', contact_number: '', medical_info: '',
   })
 
   useEffect(() => {
@@ -44,6 +45,9 @@ export default function ProfilePage() {
           age: data.age?.toString() || '',
           weight_kg: data.weight_kg?.toString() || '',
           weight_unit: data.weight_unit || 'kg',
+          city: data.city || '',
+          contact_number: data.contact_number || '',
+          medical_info: data.medical_info || '',
         })
       }
       setLoading(false)
@@ -62,6 +66,9 @@ export default function ProfilePage() {
       age: form.age ? parseInt(form.age) : null,
       weight_kg: form.weight_kg ? parseFloat(form.weight_kg) : null,
       weight_unit: form.weight_unit,
+      city: form.city.trim() || null,
+      contact_number: form.contact_number.trim() || null,
+      medical_info: form.medical_info.trim() || null,
     }).eq('id', user.id)
     if (err) setError(err.message)
     else setSuccess(true)
@@ -130,6 +137,18 @@ export default function ProfilePage() {
             <input type="number" value={form.age} onChange={e => setForm({ ...form, age: e.target.value })} style={inputBase} placeholder="e.g. 22" min="10" max="100" />
           </div>
 
+          {/* City */}
+          <div>
+            <label style={labelBase}>City</label>
+            <input type="text" value={form.city} onChange={e => setForm({ ...form, city: e.target.value })} style={inputBase} placeholder="e.g. Manila" />
+          </div>
+
+          {/* Contact Number */}
+          <div>
+            <label style={labelBase}>Contact Number</label>
+            <input type="tel" value={form.contact_number} onChange={e => setForm({ ...form, contact_number: e.target.value })} style={inputBase} placeholder="e.g. 0917 123 4567" />
+          </div>
+
           {/* Weight */}
           <div>
             <label style={labelBase}>Body Weight</label>
@@ -146,6 +165,19 @@ export default function ProfilePage() {
                 ))}
               </div>
             </div>
+          </div>
+
+          {/* Medical / Injury Info */}
+          <div>
+            <label style={labelBase}>Medical / Injury Info</label>
+            <textarea
+              value={form.medical_info} onChange={e => setForm({ ...form, medical_info: e.target.value })}
+              style={{ ...inputBase, minHeight: '90px', resize: 'vertical', fontFamily: 'inherit' }}
+              placeholder="Any injuries, conditions, or medications your coach should know about"
+            />
+            <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
+              🔒 Visible to your coaches and admins only.
+            </p>
           </div>
 
           {/* Role (read-only) */}

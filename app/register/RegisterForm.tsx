@@ -31,15 +31,22 @@ const GENDERS = [
   { key: 'male', label: '♂ Male' },
   { key: 'female', label: '♀ Female' },
   { key: 'other', label: 'Other' },
+  { key: 'prefer_not_to_say', label: 'Prefer not to say' },
 ]
 
 export default function RegisterForm() {
   const router = useRouter()
   const [name, setName] = useState('')
+  const [username, setUsername] = useState('')
+  const [age, setAge] = useState('')
+  const [city, setCity] = useState('')
+  const [contactNumber, setContactNumber] = useState('')
   const [gender, setGender] = useState('')
-  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [medicalInfo, setMedicalInfo] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -49,34 +56,52 @@ export default function RegisterForm() {
     setError('')
     const supabase = createClient()
 
-    // Pre-check if email already exists in profiles
+    const cleanUsername = username.toLowerCase().trim()
+
+    if (!/^[a-z0-9_]{3,20}$/.test(cleanUsername)) {
+      setError('Username must be 3–20 characters, letters/numbers/underscores only.')
+      setLoading(false)
+      return
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.')
+      setLoading(false)
+      return
+    }
+    if (!name.trim() || !age || !city.trim() || !contactNumber.trim() || !gender) {
+      setError('Please fill in all required fields.')
+      setLoading(false)
+      return
+    }
+
     const { data: existing } = await supabase
       .from('profiles')
       .select('id, approved')
-      .eq('email', email.toLowerCase().trim())
+      .ilike('username', cleanUsername)
       .maybeSingle()
 
     if (existing) {
-      if (existing.approved) {
-        setError('An account with this email already exists. Please sign in instead.')
-      } else {
-        setError('This email is already registered and pending approval. Message us on Instagram @velocityfitness.ph if you need help.')
-      }
+      setError(existing.approved ? 'This username is already taken. Please choose another.' : 'This username is pending approval. Please wait for an admin to approve the account.')
       setLoading(false)
       return
     }
 
     const { error: authError } = await supabase.auth.signUp({
-      email,
+      email: `${cleanUsername}@velocity.local`,
       password,
-      options: { data: { name, role: 'member', gender } },
+      options: {
+        data: {
+          name: name.trim(), role: 'member', gender, username: cleanUsername,
+          age: String(age), city: city.trim(), contact_number: contactNumber.trim(),
+          medical_info: medicalInfo.trim() || null,
+        },
+      },
     })
+
     if (authError) {
-      if (authError.message.toLowerCase().includes('already registered') || authError.message.toLowerCase().includes('already exists')) {
-        setError('An account with this email already exists. Please sign in or message us on Instagram @velocityfitness.ph for help.')
-      } else {
-        setError(authError.message)
-      }
+      setError(authError.message.toLowerCase().includes('already registered')
+        ? 'This username is already taken. Please choose another.'
+        : authError.message)
       setLoading(false)
     } else {
       router.push('/pending-approval')
@@ -120,6 +145,32 @@ export default function RegisterForm() {
               <input type="text" value={name} onChange={(e) => setName(e.target.value)} required style={inputBase} placeholder="Your name" />
             </div>
 
+            <div>
+              <label style={labelBase}>Username</label>
+              <input
+                type="text" value={username} onChange={(e) => setUsername(e.target.value)}
+                required style={inputBase} placeholder="e.g. juan_dc" autoCapitalize="none" autoCorrect="off"
+              />
+              <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
+                3–20 characters, letters/numbers/underscores only.
+              </p>
+            </div>
+
+            <div>
+              <label style={labelBase}>Age</label>
+              <input type="number" value={age} onChange={(e) => setAge(e.target.value)} required style={inputBase} placeholder="e.g. 22" min="10" max="100" />
+            </div>
+
+            <div>
+              <label style={labelBase}>City</label>
+              <input type="text" value={city} onChange={(e) => setCity(e.target.value)} required style={inputBase} placeholder="e.g. Manila" />
+            </div>
+
+            <div>
+              <label style={labelBase}>Contact Number</label>
+              <input type="tel" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} required style={inputBase} placeholder="e.g. 0917 123 4567" />
+            </div>
+
             {/* Gender */}
             <div>
               <label style={labelBase}>Gender</label>
@@ -146,10 +197,6 @@ export default function RegisterForm() {
             </div>
 
             <div>
-              <label style={labelBase}>Email</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required style={inputBase} placeholder="you@example.com" />
-            </div>
-            <div>
               <label style={labelBase}>Password</label>
               <div style={{ position: 'relative' }}>
                 <input
@@ -169,6 +216,40 @@ export default function RegisterForm() {
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
+            </div>
+
+            <div>
+              <label style={labelBase}>Confirm Password</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'} value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required style={{ ...inputBase, paddingRight: '2.75rem' }}
+                  placeholder="••••••••" minLength={6}
+                />
+                <button
+                  type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={{
+                    position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', color: 'var(--text-secondary)',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', minHeight: 0,
+                  }}
+                >
+                  {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label style={labelBase}>Injuries / Medical Info</label>
+              <textarea
+                value={medicalInfo} onChange={(e) => setMedicalInfo(e.target.value)}
+                style={{ ...inputBase, minHeight: '90px', resize: 'vertical', fontFamily: 'inherit' }}
+                placeholder="Any injuries, conditions, or medications your coach should know about"
+              />
+              <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
+                🔒 Only visible to you, your coaches, and admins.
+              </p>
             </div>
 
             <button

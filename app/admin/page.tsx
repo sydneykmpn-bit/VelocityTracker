@@ -147,6 +147,8 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
                 {profile?.gender && <span>{profile.gender === 'male' ? '♂ Male' : profile.gender === 'female' ? '♀ Female' : profile.gender}</span>}
                 {profile?.age && <span>Age {profile.age}</span>}
                 {profile?.weight_kg && <span>{profile.weight_kg} {profile.weight_unit || 'kg'}</span>}
+                {profile?.city && <span>{profile.city}</span>}
+                {profile?.contact_number && <span>{profile.contact_number}</span>}
                 <span style={{ textTransform: 'capitalize' }}>{profile?.role}</span>
                 {profile?.created_at && <span>Since {new Date(profile.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>}
               </div>
@@ -195,6 +197,12 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
             <>
               {activeModalTab === 'overview' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {profile?.medical_info && (
+                    <div style={{ background: 'rgba(245,158,11,0.08)', borderLeft: '3px solid #f59e0b', borderRadius: '0.5rem', padding: '0.75rem 1rem' }}>
+                      <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#f59e0b', marginBottom: '0.35rem' }}>⚠️ Medical / Injury Info</p>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{profile.medical_info}</p>
+                    </div>
+                  )}
                   <div>
                     <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Recent Activity</p>
                     {allWorkouts.slice(0, 3).map(w => (
@@ -265,6 +273,93 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
   )
 }
 
+function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [form, setForm] = useState({ name: '', username: '', password: '', role: 'member', gender: '' })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [done, setDone] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaving(true); setError('')
+    const res = await fetch('/api/admin/create-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(form),
+    })
+    if (!res.ok) {
+      const { error: err } = await res.json().catch(() => ({ error: 'Failed to create user.' }))
+      setError(err || 'Failed to create user.')
+      setSaving(false)
+      return
+    }
+    setSaving(false)
+    setDone(true)
+    onCreated()
+  }
+
+  return (
+    <div onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+      <div style={{ width: '100%', maxWidth: '440px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '1rem', background: 'var(--surface)', border: '1px solid var(--border)', padding: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
+          <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>CREATE USER</h2>
+          <button onClick={onClose} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0, minHeight: 0 }}>✕</button>
+        </div>
+        {done ? (
+          <div style={{ textAlign: 'center', padding: '1rem 0' }}>
+            <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>✅</p>
+            <p style={{ color: 'var(--text-primary)', fontSize: '0.95rem', fontWeight: 600, marginBottom: '0.5rem' }}>User created!</p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '1.25rem' }}>Share the temporary password with the user.</p>
+            <button onClick={onClose} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.7rem 1.5rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>Done</button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+            {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', color: '#f87171', fontSize: '0.875rem' }}>{error}</div>}
+            <div>
+              <label style={labelBase}>Name</label>
+              <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required style={{ ...inputBase, width: '100%' }} placeholder="Full name" />
+            </div>
+            <div>
+              <label style={labelBase}>Username</label>
+              <input type="text" value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} required style={{ ...inputBase, width: '100%' }} placeholder="e.g. juan_dc" autoCapitalize="none" autoCorrect="off" />
+            </div>
+            <div>
+              <label style={labelBase}>Temporary Password</label>
+              <input type="text" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required minLength={6} style={{ ...inputBase, width: '100%' }} placeholder="At least 6 characters" />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div>
+                <label style={labelBase}>Role</label>
+                <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} style={{ ...inputBase, width: '100%', cursor: 'pointer' }}>
+                  <option value="member">Member</option>
+                  <option value="coach">Coach</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelBase}>Gender</label>
+                <select value={form.gender} onChange={e => setForm({ ...form, gender: e.target.value })} style={{ ...inputBase, width: '100%', cursor: 'pointer' }}>
+                  <option value="">—</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+            </div>
+            <button type="submit" disabled={saving} style={{
+              background: saving ? '#0d1a1e' : 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem',
+              padding: '0.875rem', fontWeight: 700, fontSize: '0.875rem', cursor: saving ? 'not-allowed' : 'pointer', marginTop: '0.25rem',
+            }}>
+              {saving ? 'Creating…' : 'Create User'}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function AdminPage() {
   const router = useRouter()
   const supabase = createClient()
@@ -309,6 +404,16 @@ export default function AdminPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<{id: string; name: string} | null>(null)
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false)
+
+  const refreshMembers = async () => {
+    const [pendingResult, allResult] = await Promise.all([
+      supabase.from('profiles').select('*').eq('approved', false).order('created_at', { ascending: false }),
+      supabase.from('profiles').select('*').eq('approved', true).order('created_at', { ascending: false }),
+    ])
+    setPendingUsers(pendingResult.data || [])
+    setAllUsers(allResult.data || [])
+  }
 
   const loadGroups = async () => {
     const { data } = await supabase
@@ -649,6 +754,12 @@ export default function AdminPage() {
                   {f === 'all' ? 'All' : f}
                 </button>
               ))}
+              <button onClick={() => setShowCreateUserModal(true)} style={{
+                background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem',
+                padding: '0.6rem 1rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+              }}>
+                + Create User
+              </button>
             </div>
 
             {/* Pending Approvals */}
@@ -1182,6 +1293,12 @@ export default function AdminPage() {
           memberId={selectedMemberProfile.id}
           memberName={selectedMemberProfile.name}
           onClose={() => setSelectedMemberProfile(null)}
+        />
+      )}
+      {showCreateUserModal && (
+        <CreateUserModal
+          onClose={() => setShowCreateUserModal(false)}
+          onCreated={refreshMembers}
         />
       )}
     </div>

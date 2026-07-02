@@ -1,278 +1,81 @@
-# Velocity Tracker — Claude Code Instructions
+# Velocity Tracker — CLAUDE.md
 
-## Project Identity
-- **App:** Velocity Fitness PH — gym workout tracker
-- **Live URL:** https://velocitytrackerph.vercel.app
-- **Repo branch:** `claude/velocity-fitness-workout-tracker-jgueaa`
-- **Stack:** Next.js 16 · React 19 · TypeScript · Tailwind CSS v4 · Supabase (Auth + PostgreSQL) · Lucide React
+Gym workout tracker for Velocity Fitness PH.
+Live: velocitytrackerph.vercel.app · Branch: `claude/velocity-fitness-workout-tracker-jgueaa`
+Stack: Next.js (App Router) · TypeScript · Supabase (Auth+Postgres) · lucide-react · Vercel auto-deploy on push.
+**Supabase ONLY. Never Prisma/LibSQL/Turso/src-dir.** Project ID: bgjxikbygykahgwpvlzc (ap-south-1).
 
-## File Structure
+## Structure
 ```
-app/
-  page.tsx              → redirects to /login
-  layout.tsx            → fonts: Bebas Neue (--font-bebas) + Inter
-  globals.css           → all CSS variables + utility classes
-  login/                → LoginForm.tsx + page.tsx
-  register/             → RegisterForm.tsx + page.tsx
-  pending-approval/     → waiting room for unapproved accounts
-  dashboard/            → unified dashboard (all roles)
-  workouts/             → list, [id], [id]/edit, new/
-  admin/                → admin panel (admin role only)
-  coach/                → coach panel (coach role only)
-  student/              → student panel (member in a group)
-  calendar/             → monthly training calendar
-  leaderboard/          → public PRs + My PRs
-  templates/            → workout template library
-  profile/              → user profile edit
-  forgot-password/      → contact @velocityfitness.ph
-components/
-  Navbar.tsx            → role-aware nav with avatar dropdown
-  ClassDetailModal.tsx  → class detail + RSVP + attendance
-  Skeleton.tsx          → loading skeletons
-  VLogo.tsx             → Velocity Fitness PH logo
-lib/
-  supabase/client.ts    → browser Supabase client
-  supabase/server.ts    → server Supabase client
-  types.ts              → Profile, Workout, Exercise, WorkoutPlan, etc.
-  utils.ts              → getLocalDateString(), getLocalDisplayDate(), sortRecords(), calculateStreak()
-  styles.ts             → shared style constants
-middleware.ts           → route protection (redirects unapproved to /pending-approval)
+app/ → login, register, pending-approval, dashboard, workouts (list/[id]/[id]/edit/new),
+       admin, coach, student, calendar, leaderboard, templates, profile, forgot-password,
+       api/admin/delete-user
+components/ → Navbar, ClassDetailModal, Skeleton, VLogo, PlanCards
+lib/ → supabase/client.ts (browser), supabase/server.ts, types.ts, utils.ts, styles.ts
+middleware.ts → route protection
 ```
 
-## Design System — NEVER hardcode colors
+## Design (CSS vars only — never hardcode hex)
 ```
---background: #080e10       Dark page background
---surface: #0d1a1e          Card/panel background
---surface-raised: #111f24   Elevated surface
---border: #1a2e34           Default border
---teal-primary: #0877a0     Primary CTA, active states
---teal-secondary: #34bac2   Accent text, icons, highlights
---text-primary: #F2F2F2     Main text
---text-secondary: #8A8A8A   Muted text
---vel-text-dim: #4a5a60     Very muted
---vel-success: #22c55e      Success green
+--background #080e10 · --surface #0d1a1e · --surface-raised #111f24 · --border #1a2e34
+--teal-primary #0877a0 · --teal-secondary #34bac2
+--text-primary #F2F2F2 · --text-secondary #8A8A8A · --vel-text-dim #4a5a60 · --vel-success #22c55e
 ```
+Classes: `.card-vel .card-interactive .btn-primary .btn-ghost .tag-basketball .tag-conditioning .tag-both .font-display .section-label .divider-orange .skeleton .scrollbar-hide`
+Navbar background: #000000. Fonts: Bebas Neue (`--font-bebas`, display) + Inter.
+Project uses inline styles referencing CSS vars, not Tailwind utility classes for layout.
 
-Always use CSS variables. Never use hex values directly in JSX/TSX.
+## Auth flow
+- Username-based login (NOT email). Supabase needs an email internally → synthesize `{username}@velocity.local`, never shown to user.
+- **/register collects full profile in one form:** name, username, password, gender, age, city, contact number, injuries/medical info (captioned "visible only to you, your coaches, and admins") → creates profile with role=member, approved=false → redirects to /pending-approval
+- /pending-approval: polls every 10s until admin approves → redirects to /dashboard
+- /login errors: "User not found" (username doesn't exist) · "Username/Password invalid" (wrong password)
+- All roles land on /dashboard after login, greeted "Hello, {name}". Role-specific panels are separate pages linked from navbar, not auto-redirected to.
+- Roles: admin (/admin) · coach (/coach) · member (student panel /student if in a group)
+- /profile is editable afterward — same fields as signup (name, age, city, contact number, gender, medical info) plus weight
+- Full user deletion requires an API route using SUPABASE_SERVICE_ROLE_KEY (must delete from auth.users, not just profiles row)
 
-## CSS Utility Classes (use these, don't reinvent)
-```
-.card-vel          → dark card with border + border-radius
-.btn-primary       → teal filled button
-.btn-ghost         → transparent button with border
-.tag-basketball    → blue pill badge
-.tag-conditioning  → green pill badge
-.tag-both          → purple pill badge
-.font-display      → Bebas Neue font
-.section-label     → teal uppercase tracking label
-.skeleton          → loading skeleton animation
-.scrollbar-hide    → hide scrollbar
-```
-
-## Inline Style Pattern (this project uses inline styles)
+## Auth pattern (all pages "use client", browser client only — never server-side Supabase in page components)
 ```tsx
-// Cards
-style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}
-
-// Type badges (use typeBadge() helper in dashboard, or tag-* classes)
-function typeBadge(type: string) {
-  const map = {
-    basketball: { bg: 'rgba(8,119,160,0.2)', color: '#34bac2', border: 'rgba(8,119,160,0.35)', icon: '🏀' },
-    conditioning: { bg: 'rgba(34,197,94,0.15)', color: '#4ade80', border: 'rgba(34,197,94,0.25)', icon: '🏋️' },
-    both: { bg: 'rgba(168,85,247,0.15)', color: '#c084fc', border: 'rgba(168,85,247,0.25)', icon: '💪' },
-  }
-  return map[type] ?? map.both
-}
-```
-
-## Auth & Roles
-```
-Three roles: admin · coach · member
-All pages: "use client" — use createClient() from @/lib/supabase/client
-Auth check pattern:
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) { router.push('/login'); return }
-
-Role check:
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-
-After login: ALL roles go to /dashboard
-Admin Panel: /admin (admin only)
-Coach Panel: /coach (coach only)
-Student Panel: /student (member in a group)
-
-New signups → /pending-approval (admin must approve before login works)
-profiles.approved = false → blocked from logging in
-```
-
-## Database Tables
-```
-profiles          id, name, email, role, gender, age, weight_kg, weight_unit, approved, last_seen
-workouts          id, user_id, title, type, date, duration, notes
-exercises         id, workout_id, name, sets, reps, weight, duration, distance, speed, notes
-personal_records  id, user_id, exercise_name, value, unit, date, recorded_at, is_public, month_year
-groups            id, name, description, coach_id
-group_members     id, group_id, member_id, is_student, assigned_coach_id
-scheduled_classes id, title, type, group_id, coach_id, scheduled_date, start_time, end_time,
-                  location, is_recurring, recurrence_rule, recurrence_days, recurrence_end_date,
-                  parent_class_id, recurrence_series_id, created_by
-class_attendees   id, class_id, member_id, status, rsvp_status
-workout_plans     id, coach_id, member_id, title, description, type, scheduled_date, status,
-                  rescheduled_date, completed_at, auto_logged_workout_id, template_id
-workout_plan_exercises  id, plan_id, name, sets, reps, weight, duration, distance, notes, order_index
-workout_templates id, created_by, title, description, type, is_shared, is_default, is_visible_to_members
-workout_template_exercises  id, template_id, name, sets, reps, weight, duration, distance, notes, order_index
-coach_notes       id, coach_id, member_id, note, pinned, visible_to_member, created_at, updated_at
-body_metrics      id, user_id, weight_kg, weight_unit, recorded_at, notes
-app_settings      id='global', require_approval, instagram_handle, public_pr_exercises
-personal_records_archive  archived past month PRs
-attendance_history  id, member_id, class_id, class_title, class_date, status, recorded_by
-```
-
-## Supabase Query Patterns
-```tsx
-// Always create client at component level, not inside useEffect
 const supabase = createClient()
-
-// Re-fetch after mutations using a loadData() function pattern
-const loadData = async () => { ... }
-useEffect(() => { loadData() }, [dependency])
-
-// Date: always use getLocalDateString() for Philippine timezone
-import { getLocalDateString, getLocalDisplayDate } from '@/lib/utils'
-const today = getLocalDateString() // "2026-06-29"
-
-// Never use: new Date().toISOString().split('T')[0]  ← UTC, wrong timezone
+const { data: { user } } = await supabase.auth.getUser()
+if (!user) { router.push('/login'); return }
+const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
 ```
 
-## Key RLS Functions
-```sql
-get_my_role()   → returns current user's role (used in all policies to avoid recursion)
+## Tables (key columns)
 ```
+profiles: name, email, username, role, gender, approved, age, city, contact_number, medical_info,
+  profile_completed, weight_kg, last_seen, created_at
+workouts: user_id, title, type, date, duration, notes
+exercises: workout_id, name, sets, reps, weight, duration, distance, speed, notes
+personal_records: user_id, exercise_name, value, unit, date, recorded_at, is_public, month_year
+groups (coach_id) / group_members (is_student, assigned_coach_id)
+scheduled_classes: title, type, group_id, coach_id, scheduled_date, start/end_time, location,
+  is_recurring, recurrence_rule/days/end_date, parent_class_id, recurrence_series_id, created_by
+class_attendees: class_id, member_id, status, rsvp_status
+workout_plans: coach_id, member_id, title, description, type, scheduled_date,
+  status(pending/completed/skipped/rescheduled), rescheduled_date, completed_at
+workout_plan_exercises: plan_id, name, sets, reps, weight, duration, distance, notes, order_index
+workout_templates (is_shared, is_visible_to_members) · workout_template_exercises
+coach_notes: coach_id, member_id, note, pinned, visible_to_member
+body_metrics · app_settings (id='global') · personal_records_archive · attendance_history
+```
+RLS: every policy uses `get_my_role()` (security definer function) to avoid infinite recursion.
 
-## Supabase Project
-```
-Project ID: bgjxikbygykahgwpvlzc
-URL: https://bgjxikbygykahgwpvlzc.supabase.co
-Region: ap-south-1 (Mumbai)
-Edge Function: hyper-action → resets leaderboard (cron: 0 0 1 * *)
-```
+## Critical rules
+- Dates: ALWAYS `getLocalDateString()` from @/lib/utils (Asia/Manila timezone). NEVER `new Date().toISOString().split('T')[0]`.
+- Re-fetch via a `loadData()` function after every mutation. Use `maybeSingle()` when a row may not exist.
+- Modals: always centered (`alignItems:'center'`), overlay `rgba(0,0,0,0.85)`, max-width 540px, click-outside-to-close.
+- Mobile: single column <768px, `px-4 md:px-6`, inputs font-size ≥16px (prevents iOS zoom), tap targets ≥44px, `overflow-x: hidden`, horizontal scroll rows use `scrollbarWidth: none`.
+- **Prefer targeted edits (str_replace) over full-file rewrites** — only rewrite a full file if the change touches most of it already.
+- Don't add npm packages, invent new color schemes, use `window.prompt()`, or split into new component files unless explicitly asked.
+- Leaderboard: public leaderboard = only Back Squat, Deadlift, Overhead Press, Sprint. Normalize lbs→kg (×0.453592) before sorting; Sprint is lower=better. Monthly reset via Supabase Edge Function `hyper-action` on a cron job.
+- Basketball workouts: inline drill form (category dropdown + drill-name autocomplete filtered by category + attempts/made fields). No location field. Workout type "both": per-exercise conditioning/basketball toggle.
+- If a database change is needed, always give the SQL to run in Supabase SQL Editor first, separate from the code changes.
+- Never use Prisma, LibSQL, or Turso — Supabase only.
 
-## Public PR Leaderboard Rules
-```
-Only 4 exercises allowed on PUBLIC leaderboard: Back Squat, Deadlift, Overhead Press, Sprint
-My PRs tab: any exercise
-Sorting: normalized to kg equivalent (1 lbs = 0.453592 kg)
-Sprint 40m: lower value = better rank
-Monthly reset: archives to personal_records_archive, clears active records
-```
-
-## Component Patterns
-
-### Loading state
-```tsx
-if (loading) return (
-  <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
-    <Navbar />
-    <div style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem 1rem' }}>
-      <div className="skeleton" style={{ height: 120, marginBottom: '1rem' }} />
-      <div className="skeleton" style={{ height: 80 }} />
-    </div>
-  </div>
-)
-```
-
-### Modal overlay (always centered)
-```tsx
-<div onClick={e => { if (e.target === e.currentTarget) onClose() }}
-  style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.85)',
-    backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center',
-    justifyContent: 'center', padding: '1rem' }}>
-  <div style={{ width: '100%', maxWidth: '540px', maxHeight: '85vh', overflowY: 'auto',
-    borderRadius: '1rem', background: 'var(--surface)', border: '1px solid var(--border)' }}>
-    ...
-  </div>
-</div>
-```
-
-### Page wrapper
-```tsx
-<div style={{ minHeight: '100vh', background: 'var(--background)' }}>
-  <Navbar />
-  <main style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem 1rem' }}>
-    ...
-  </main>
-</div>
-```
-
-### Tab navigation
-```tsx
-<div style={{ display: 'flex', overflowX: 'auto', WebkitOverflowScrolling: 'touch',
-  scrollbarWidth: 'none', borderBottom: '1px solid var(--border)', marginBottom: '1.5rem' }}>
-  {tabs.map(t => (
-    <button key={t.value} onClick={() => setActiveTab(t.value)} style={{
-      background: 'none', border: 'none', padding: '0.875rem 1.25rem',
-      color: activeTab === t.value ? 'var(--teal-secondary)' : 'var(--text-secondary)',
-      borderBottom: `2px solid ${activeTab === t.value ? 'var(--teal-primary)' : 'transparent'}`,
-      fontWeight: activeTab === t.value ? 700 : 400, cursor: 'pointer',
-      whiteSpace: 'nowrap', fontSize: '0.875rem', minHeight: 0,
-    }}>
-      {t.label}
-    </button>
-  ))}
-</div>
-```
-
-## Mobile Rules
-```
-- All grids: start single column, expand at md (768px)
-- Portrait mode: max-width: 100vw, overflow-x: hidden
-- Input font-size: 1rem minimum (prevents iOS zoom)
-- All buttons: min-height: 44px (touch targets)
-- Floating action button: fixed bottom-right, mobile only, hidden md+
-- Horizontal scroll sections: WebkitOverflowScrolling: touch, scrollbarWidth: none
-```
-
-## What NOT to Do
-```
-❌ Don't use Prisma or LibSQL — Supabase only
-❌ Don't hardcode hex colors — use CSS variables
-❌ Don't create new color schemes or change the dark teal theme
-❌ Don't add new npm packages without checking if one already exists
-❌ Don't use server components for data fetching — all pages are "use client"
-❌ Don't use new Date().toISOString().split('T')[0] for "today" — use getLocalDateString()
-❌ Don't use window.prompt() — use inline date pickers
-❌ Don't use onMouseEnter/Leave for critical state — use CSS transitions
-❌ Don't forget "use client" at top of every page file
-❌ Don't create separate component files unless explicitly asked
-```
-
-## After Every Change
+## After every change
 ```bash
-git add .
-git commit -m "description of what changed"
-git push origin claude/velocity-fitness-workout-tracker-jgueaa
+git add . && git commit -m "description" && git push origin claude/velocity-fitness-workout-tracker-jgueaa
 ```
-Vercel auto-deploys on every push.
-
-## Common Tasks — Shorthand
-
-**Add a new page:**
-1. Create `app/[route]/page.tsx` with `"use client"` at top
-2. Auth check + role check at top of useEffect
-3. Use standard page wrapper + Navbar
-4. Add route to middleware.ts PUBLIC_ROUTES if public
-
-**Add a new tab to existing panel:**
-1. Add to the Tab type union
-2. Add to tabs array with label
-3. Add `{activeTab === 'newtab' && <div key="newtab-tab">...</div>}` to content
-4. Fetch data in useEffect or on tab switch
-
-**Add a new database query:**
-1. Check RLS policies — coach/admin queries need get_my_role() policies
-2. Use maybeSingle() instead of single() when record might not exist
-3. Always handle null/undefined with `|| []` or `|| null`
-
-**Fix a Supabase RLS error:**
-Run in Supabase SQL Editor — check existing policies before adding new ones to avoid conflicts.

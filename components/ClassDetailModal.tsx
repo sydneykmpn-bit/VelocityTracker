@@ -35,14 +35,31 @@ export default function ClassDetailModal({
     location: cls.location || '',
     type: cls.type || 'conditioning',
   })
+  const [coaches, setCoaches] = useState<any[]>([])
+  const [editCoachId, setEditCoachId] = useState<string>(cls.coach_id || '')
 
   const classId = cls.is_dynamic ? cls.parent_class_id : cls.id
 
+  // Fetch coaches on mount
+  useEffect(() => {
+    supabase
+      .from('profiles')
+      .select('id, name')
+      .eq('role', 'coach')
+      .order('name')
+      .then(({ data }) => setCoaches(data || []))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     async function load() {
-      if (!classId) return
+      const attendanceClassId = cls.is_dynamic ? cls.parent_class_id : cls.id
+      if (!attendanceClassId) return
       setLoadingAttendees(true)
-      const { data } = await supabase.from('class_attendees').select('*, profiles(name, email, gender)').eq('class_id', classId)
+      const { data } = await supabase
+        .from('class_attendees')
+        .select('*, profiles(name, email, gender)')
+        .eq('class_id', attendanceClassId)
       setAttendees(data || [])
       const mine = (data || []).find((a: any) => a.member_id === userId)
       setMyAttendance(mine || null)
@@ -50,20 +67,62 @@ export default function ClassDetailModal({
     }
     load()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [classId])
+  }, [cls.id, cls.parent_class_id, cls.is_dynamic, userId])
 
   const handleRSVP = async () => {
     setRsvpLoading(true)
-    if (myAttendance) {
-      await supabase.from('class_attendees').delete().eq('id', myAttendance.id)
-      setMyAttendance(null)
-      setAttendees(prev => prev.filter((a: any) => a.id !== myAttendance.id))
-    } else {
-      const { data } = await supabase.from('class_attendees').insert({
-        class_id: classId, member_id: userId, rsvp_status: 'attending', status: 'scheduled',
-      }).select('*, profiles(name, email, gender)').single()
-      if (data) { setMyAttendance(data); setAttendees(prev => [...prev, data]) }
+
+    // For dynamic recurring instances, use parent_class_id
+    // For stored classes, use the actual id
+    const attendanceClassId = cls.is_dynamic ? cls.parent_class_id : cls.id
+
+    if (!attendanceClassId) {
+      setRsvpLoading(false)
+      return
     }
+
+    if (myAttendance) {
+      // Remove attendance
+      const { error } = await supabase
+        .from('class_attendees')
+        .delete()
+        .eq('id', myAttendance.id)
+
+      if (!error) {
+        setMyAttendance(null)
+        setAttendees(prev => prev.filter((a: any) => a.id !== myAttendance.id))
+      }
+    } else {
+      // Add attendance — check if already exists first to avoid duplicate
+      const { data: existing } = await supabase
+        .from('class_attendees')
+        .select('id')
+        .eq('class_id', attendanceClassId)
+        .eq('member_id', userId)
+        .maybeSingle()
+
+      if (existing) {
+        // Already exists, just update local state
+        setMyAttendance(existing)
+      } else {
+        const { data, error } = await supabase
+          .from('class_attendees')
+          .insert({
+            class_id: attendanceClassId,
+            member_id: userId,
+            rsvp_status: 'attending',
+            status: 'scheduled',
+          })
+          .select('*, profiles(name, email, gender)')
+          .single()
+
+        if (!error && data) {
+          setMyAttendance(data)
+          setAttendees(prev => [...prev, data])
+        }
+      }
+    }
+
     setRsvpLoading(false)
     onUpdate()
   }
@@ -89,16 +148,18 @@ export default function ClassDetailModal({
   const tc = classTypeColor(cls.type || 'conditioning')
 
   const handleSaveEdit = async () => {
+    const updateData = {
+      title: editForm.title,
+      description: editForm.description || null,
+      start_time: editForm.start_time,
+      end_time: editForm.end_time || null,
+      location: editForm.location || null,
+      type: editForm.type,
+      coach_id: editCoachId || null,
+    }
     const { error } = await supabase
       .from('scheduled_classes')
-      .update({
-        title: editForm.title,
-        description: editForm.description || null,
-        start_time: editForm.start_time,
-        end_time: editForm.end_time || null,
-        location: editForm.location || null,
-        type: editForm.type,
-      })
+      .update(updateData)
       .eq('id', cls.is_dynamic ? cls.parent_class_id : cls.id)
     if (!error) {
       setIsEditing(false)
@@ -109,14 +170,16 @@ export default function ClassDetailModal({
   const handleEditSeries = async () => {
     const seriesId = cls.recurrence_series_id
     if (seriesId) {
-      await supabase.from('scheduled_classes').update({
+      const updateData = {
         title: editForm.title,
         description: editForm.description || null,
         start_time: editForm.start_time,
         end_time: editForm.end_time || null,
         location: editForm.location || null,
         type: editForm.type,
-      }).eq('recurrence_series_id', seriesId)
+        coach_id: editCoachId || null,
+      }
+      await supabase.from('scheduled_classes').update(updateData).eq('recurrence_series_id', seriesId)
     } else {
       await handleSaveEdit()
       return
@@ -171,6 +234,41 @@ export default function ClassDetailModal({
             <div>
               <label style={labelBase}>Title</label>
               <input style={inputBase} value={editForm.title} onChange={e => setEditForm(p => ({ ...p, title: e.target.value }))} />
+            </div>
+            {/* Coach selector */}
+            <div>
+              <label style={labelBase}>Coach</label>
+              <select
+                value={editCoachId}
+                onChange={e => setEditCoachId(e.target.value)}
+                style={{ ...inputBase, cursor: 'pointer' }}
+              >
+                <option value="">— No coach assigned —</option>
+                {coaches.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            {/* Type */}
+            <div>
+              <label style={labelBase}>Type</label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {(['conditioning', 'basketball', 'both'] as const).map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setEditForm(p => ({ ...p, type: t }))}
+                    style={{
+                      flex: 1, padding: '0.5rem', borderRadius: '0.375rem', fontSize: '0.75rem',
+                      fontWeight: 700, cursor: 'pointer', border: 'none', textTransform: 'capitalize',
+                      background: editForm.type === t ? 'var(--teal-primary)' : 'var(--surface-raised)',
+                      color: editForm.type === t ? '#fff' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
               <div>

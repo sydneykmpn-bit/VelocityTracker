@@ -1,0 +1,20 @@
+warning: in the working copy of 'app/coach/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/dashboard/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/student/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/templates/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/workouts/[id]/edit/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/workouts/new/WorkoutForm.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/workouts/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'components/ClassDetailModal.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'components/Navbar.tsx', LF will be replaced by CRLF the next time Git touches it
+ app/coach/page.tsx               |   2 [32m+[m[31m-[m
+ app/dashboard/page.tsx           | 218 [32m+[m[31m----------[m
+ app/student/page.tsx             | 320 [32m++++++++++[m[31m------[m
+ app/templates/page.tsx           |  13 [32m+[m[31m-[m
+ app/workouts/[id]/edit/page.tsx  |   4 [32m+[m[31m-[m
+ app/workouts/new/WorkoutForm.tsx | 762 [32m+++++++++++++++++++++++++++++[m[31m----------[m
+ app/workouts/page.tsx            | 129 [32m++++[m[31m---[m
+ components/ClassDetailModal.tsx  | 138 [32m++++++[m[31m-[m
+ components/Navbar.tsx            |  57 [32m++[m[31m-[m
+ tsconfig.tsbuildinfo             |   2 [32m+[m[31m-[m
+ 10 files changed, 1033 insertions(+), 612 deletions(-)

@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { ChevronDown, ChevronUp, Trash2, Pencil, Plus, Calendar } from 'lucide-react'
-import { getLocalDateString } from '@/lib/utils'
+import { getLocalDateString, formatLocalDate } from '@/lib/utils'
 
-type Tab = 'members' | 'groups' | 'assign' | 'calendar' | 'notes'
+type Tab = 'members' | 'groups' | 'assign' | 'calendar' | 'notes' | 'programs'
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 const inputBase: React.CSSProperties = {
   background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem',
@@ -28,7 +29,7 @@ const CONDITIONING_EXERCISES = [
   'Rowing 500m','Rowing 2000m','Assault Bike','Jump Rope','Box Jump','Burpees','Wall Balls','Kettlebell Swing',
 ]
 const BASKETBALL_EXERCISES = [
-  'Free Throw %','3-Point %','Vertical Jump','Sprint 20m','Sprint 40m','Agility T-Test',
+  'Free Throw %','3-Point %','Vertical Jump','Sprint 20m','Sprint','Agility T-Test',
 ]
 const ALL_EXERCISES = [...STRENGTH_EXERCISES, ...CONDITIONING_EXERCISES, ...BASKETBALL_EXERCISES]
 
@@ -173,6 +174,8 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
                 {profile?.gender && <span>{profile.gender === 'male' ? '♂ Male' : profile.gender === 'female' ? '♀ Female' : profile.gender}</span>}
                 {profile?.age && <span>Age {profile.age}</span>}
                 {profile?.weight_kg && <span>{profile.weight_kg} {profile.weight_unit || 'kg'}</span>}
+                {profile?.city && <span>{profile.city}</span>}
+                {profile?.contact_number && <span>{profile.contact_number}</span>}
                 {profile?.created_at && <span>Since {new Date(profile.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>}
               </div>
             </div>
@@ -226,6 +229,12 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
             <>
               {activeModalTab === 'overview' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {profile?.medical_info && (
+                    <div style={{ background: 'rgba(245,158,11,0.08)', borderLeft: '3px solid #f59e0b', borderRadius: '0.5rem', padding: '0.75rem 1rem' }}>
+                      <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#f59e0b', marginBottom: '0.35rem' }}>⚠️ Medical / Injury Info</p>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{profile.medical_info}</p>
+                    </div>
+                  )}
                   <div>
                     <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Recent Activity</p>
                     {allWorkouts.slice(0, 3).map(w => (
@@ -302,6 +311,91 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
             </>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+function AssignProgramModal({ program, members, supabase, onClose }: { program: any; members: any[]; supabase: any; onClose: () => void }) {
+  const [selected, setSelected] = useState<string[]>([])
+  const [startDate, setStartDate] = useState(getLocalDateString())
+  const [saving, setSaving] = useState(false)
+  const [done, setDone] = useState(false)
+
+  const toggleMember = (id: string) => setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+
+  const handleAssign = async () => {
+    if (selected.length === 0) return
+    setSaving(true)
+    const { data: workouts } = await supabase.from('program_workouts').select('*, program_workout_exercises(*)').eq('program_id', program.id)
+    for (const memberId of selected) {
+      await supabase.from('program_assignments').insert({ program_id: program.id, member_id: memberId, start_date: startDate })
+      for (const w of workouts ?? []) {
+        const offsetDays = (w.week_number - 1) * 7 + w.day_of_week
+        const d = new Date(startDate + 'T00:00:00')
+        d.setDate(d.getDate() + offsetDays)
+        const scheduledDate = formatLocalDate(d)
+        const isDeload = !!program.deload_week && w.week_number === program.deload_week
+        const title = isDeload ? `${w.title} (Deload)` : w.title
+        const { data: plan } = await supabase.from('workout_plans').insert({
+          coach_id: program.coach_id, member_id: memberId, title, type: w.type,
+          scheduled_date: scheduledDate, status: 'pending',
+        }).select().single()
+        if (!plan) continue
+        const exs = w.program_workout_exercises ?? []
+        if (exs.length > 0) {
+          const factor = isDeload ? (program.deload_intensity_pct / 100) : 1
+          await supabase.from('workout_plan_exercises').insert(exs.map((e: any, i: number) => ({
+            plan_id: plan.id, name: e.name, sets: e.sets, reps: e.reps,
+            weight: e.weight != null ? Math.round(e.weight * factor * 2) / 2 : null,
+            duration: e.duration, distance: e.distance, notes: e.notes, order_index: i,
+          })))
+        }
+      }
+    }
+    setSaving(false)
+    setDone(true)
+  }
+
+  return (
+    <div onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+      <div style={{ width: '100%', maxWidth: '480px', maxHeight: '85vh', overflowY: 'auto', borderRadius: '1rem', background: 'var(--surface)', border: '1px solid var(--border)', padding: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+          <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>ASSIGN “{program.title}”</h2>
+          <button onClick={onClose} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0, minHeight: 0 }}>✕</button>
+        </div>
+        {done ? (
+          <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
+            <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>✅</p>
+            <p style={{ color: 'var(--text-primary)', fontSize: '0.95rem', fontWeight: 600, marginBottom: '1rem' }}>Assigned to {selected.length} member{selected.length === 1 ? '' : 's'}!</p>
+            <button onClick={onClose} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.7rem 1.5rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>Done</button>
+          </div>
+        ) : (
+          <>
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={labelBase}>Start Date</label>
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={{ ...inputBase, width: '100%' }} />
+            </div>
+            <label style={labelBase}>Members</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', maxHeight: '260px', overflowY: 'auto', marginBottom: '1.25rem' }}>
+              {members.length === 0 && <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No members in your groups yet.</p>}
+              {members.map(m => (
+                <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.5rem 0.625rem', borderRadius: '0.5rem', background: selected.includes(m.id) ? 'rgba(8,119,160,0.15)' : 'var(--surface-raised)', cursor: 'pointer', border: `1px solid ${selected.includes(m.id) ? 'var(--teal-primary)' : 'transparent'}` }}>
+                  <input type="checkbox" checked={selected.includes(m.id)} onChange={() => toggleMember(m.id)} style={{ minHeight: 0, width: 'auto' }} />
+                  <span style={{ fontSize: '0.875rem' }}>{m.name}</span>
+                </label>
+              ))}
+            </div>
+            <button onClick={handleAssign} disabled={saving || selected.length === 0} style={{
+              width: '100%', background: saving || selected.length === 0 ? '#0d1a1e' : 'var(--teal-primary)', color: 'white',
+              border: 'none', borderRadius: '0.5rem', padding: '0.875rem', fontWeight: 700, fontSize: '0.875rem',
+              cursor: saving || selected.length === 0 ? 'not-allowed' : 'pointer',
+            }}>
+              {saving ? 'Assigning…' : `Assign to ${selected.length || ''} Member${selected.length === 1 ? '' : 's'}`}
+            </button>
+          </>
+        )}
       </div>
     </div>
   )
@@ -388,6 +482,19 @@ export default function CoachPage() {
   const [editText, setEditText] = useState('')
   const [noteSaving, setNoteSaving] = useState(false)
 
+  // Programs
+  const [programs, setPrograms] = useState<any[]>([])
+  const [programView, setProgramView] = useState<'list' | 'builder'>('list')
+  const [editingProgramId, setEditingProgramId] = useState<string | null>(null)
+  const [programForm, setProgramForm] = useState({ title: '', description: '', total_weeks: '4', deload_week: '', deload_intensity_pct: '60' })
+  const [programWeek, setProgramWeek] = useState(1)
+  const [draftWorkouts, setDraftWorkouts] = useState<Array<{ week_number: number; day_of_week: number; title: string; type: string; exercises: PlanExercise[] }>>([])
+  const [openDaySlot, setOpenDaySlot] = useState<{ week: number; day: number } | null>(null)
+  const [dayDraft, setDayDraft] = useState<{ title: string; type: string; exercises: PlanExercise[] }>({ title: '', type: 'conditioning', exercises: [blankEx()] })
+  const [copyWeekSource, setCopyWeekSource] = useState('')
+  const [programSaving, setProgramSaving] = useState(false)
+  const [assigningProgram, setAssigningProgram] = useState<any | null>(null)
+
   const loadMyMembers = async (coachId: string) => {
     const { data: groupData } = await supabase.from('groups').select('id').eq('coach_id', coachId)
     if (!groupData || groupData.length === 0) { setMyMembers([]); return }
@@ -430,6 +537,15 @@ export default function CoachPage() {
     setAssignedPlans(data ?? [])
   }
 
+  const loadPrograms = async (coachId: string) => {
+    const { data } = await supabase
+      .from('programs')
+      .select('*, program_assignments(count)')
+      .eq('coach_id', coachId)
+      .order('created_at', { ascending: false })
+    setPrograms(data ?? [])
+  }
+
   const loadCalendarWorkouts = async () => {
     setCalLoading(true)
     const year = calendarMonth.getFullYear()
@@ -464,7 +580,7 @@ export default function CoachPage() {
         .or(`created_by.eq.${user.id},is_shared.eq.true`)
         .order('created_at', { ascending: false })
       setTemplates(tmpl ?? [])
-      await Promise.all([loadMyMembers(user.id), loadMyGroups(user.id), loadNotes(user.id), loadAssignedPlans(user.id)])
+      await Promise.all([loadMyMembers(user.id), loadMyGroups(user.id), loadNotes(user.id), loadAssignedPlans(user.id), loadPrograms(user.id)])
       setLoading(false)
     }
     init()
@@ -619,6 +735,157 @@ export default function CoachPage() {
     await loadAssignedPlans(userId)
   }
 
+  // ── Programs ──
+  const startNewProgram = () => {
+    setEditingProgramId(null)
+    setProgramForm({ title: '', description: '', total_weeks: '4', deload_week: '', deload_intensity_pct: '60' })
+    setDraftWorkouts([])
+    setProgramWeek(1)
+    setOpenDaySlot(null)
+    setProgramView('builder')
+  }
+
+  const startEditProgram = async (program: any) => {
+    setEditingProgramId(program.id)
+    setProgramForm({
+      title: program.title, description: program.description || '',
+      total_weeks: program.total_weeks.toString(),
+      deload_week: program.deload_week?.toString() || '',
+      deload_intensity_pct: program.deload_intensity_pct?.toString() || '60',
+    })
+    const { data: workouts } = await supabase
+      .from('program_workouts')
+      .select('*, program_workout_exercises(*)')
+      .eq('program_id', program.id)
+      .order('week_number').order('day_of_week')
+    setDraftWorkouts((workouts ?? []).map((w: any) => ({
+      week_number: w.week_number, day_of_week: w.day_of_week, title: w.title, type: w.type,
+      exercises: (w.program_workout_exercises ?? [])
+        .sort((a: any, b: any) => a.order_index - b.order_index)
+        .map((e: any) => ({
+          name: e.name, sets: e.sets?.toString() || '', reps: e.reps?.toString() || '', weight: e.weight?.toString() || '',
+          duration: e.duration?.toString() || '', distance: e.distance?.toString() || '', notes: e.notes || '',
+        })),
+    })))
+    setProgramWeek(1)
+    setOpenDaySlot(null)
+    setProgramView('builder')
+  }
+
+  const openDaySlotEditor = (week: number, day: number) => {
+    const existing = draftWorkouts.find(w => w.week_number === week && w.day_of_week === day)
+    setDayDraft(existing
+      ? { title: existing.title, type: existing.type, exercises: existing.exercises.length ? existing.exercises : [blankEx()] }
+      : { title: '', type: 'conditioning', exercises: [blankEx()] })
+    setOpenDaySlot({ week, day })
+  }
+
+  const updateDayDraftEx = (idx: number, field: keyof PlanExercise, val: string) => {
+    const next = [...dayDraft.exercises]
+    next[idx] = { ...next[idx], [field]: val }
+    setDayDraft({ ...dayDraft, exercises: next })
+  }
+
+  const saveDaySlot = () => {
+    if (!openDaySlot) return
+    if (!dayDraft.title.trim()) { setOpenDaySlot(null); return }
+    const { week, day } = openDaySlot
+    setDraftWorkouts(prev => {
+      const filtered = prev.filter(w => !(w.week_number === week && w.day_of_week === day))
+      return [...filtered, { week_number: week, day_of_week: day, title: dayDraft.title.trim(), type: dayDraft.type, exercises: dayDraft.exercises.filter(e => e.name.trim()) }]
+    })
+    setOpenDaySlot(null)
+  }
+
+  const clearDaySlot = (week: number, day: number) => {
+    setDraftWorkouts(prev => prev.filter(w => !(w.week_number === week && w.day_of_week === day)))
+  }
+
+  const handleCopyWeek = () => {
+    const src = Number(copyWeekSource)
+    if (!src || src === programWeek) return
+    const srcWorkouts = draftWorkouts.filter(w => w.week_number === src)
+    setDraftWorkouts(prev => {
+      const filtered = prev.filter(w => w.week_number !== programWeek)
+      const copied = srcWorkouts.map(w => ({ ...w, week_number: programWeek, exercises: w.exercises.map(e => ({ ...e })) }))
+      return [...filtered, ...copied]
+    })
+    setCopyWeekSource('')
+  }
+
+  const handleSaveProgram = async () => {
+    if (!programForm.title.trim() || !userId) return
+    setProgramSaving(true); setError(''); setSuccess('')
+    const payload = {
+      coach_id: userId,
+      title: programForm.title.trim(),
+      description: programForm.description.trim() || null,
+      total_weeks: Number(programForm.total_weeks),
+      deload_week: programForm.deload_week ? Number(programForm.deload_week) : null,
+      deload_intensity_pct: Number(programForm.deload_intensity_pct) || 60,
+    }
+    let programId = editingProgramId
+    if (programId) {
+      const { error: err } = await supabase.from('programs').update(payload).eq('id', programId)
+      if (err) { setError(err.message); setProgramSaving(false); return }
+      await supabase.from('program_workouts').delete().eq('program_id', programId)
+    } else {
+      const { data, error: err } = await supabase.from('programs').insert(payload).select().single()
+      if (err || !data) { setError(err?.message ?? 'Failed to create program'); setProgramSaving(false); return }
+      programId = data.id
+    }
+    for (const w of draftWorkouts) {
+      if (!w.title.trim()) continue
+      const { data: pw, error: pwErr } = await supabase.from('program_workouts').insert({
+        program_id: programId, week_number: w.week_number, day_of_week: w.day_of_week, title: w.title, type: w.type,
+      }).select().single()
+      if (pwErr || !pw) continue
+      if (w.exercises.length > 0) {
+        await supabase.from('program_workout_exercises').insert(w.exercises.map((ex, i) => ({
+          program_workout_id: pw.id, name: ex.name.trim(),
+          sets: ex.sets ? Number(ex.sets) : null, reps: ex.reps ? Number(ex.reps) : null,
+          weight: ex.weight ? Number(ex.weight) : null, duration: ex.duration ? Number(ex.duration) : null,
+          distance: ex.distance ? Number(ex.distance) : null, notes: ex.notes || null, order_index: i,
+        })))
+      }
+    }
+    setSuccess('Program saved!')
+    setProgramView('list')
+    await loadPrograms(userId)
+    setProgramSaving(false)
+  }
+
+  const handleCloneProgram = async (program: any) => {
+    if (!userId) return
+    const { data: newProg, error: err } = await supabase.from('programs').insert({
+      coach_id: userId, title: `${program.title} (Copy)`, description: program.description,
+      total_weeks: program.total_weeks, deload_week: program.deload_week, deload_intensity_pct: program.deload_intensity_pct,
+    }).select().single()
+    if (err || !newProg) return
+    const { data: workouts } = await supabase.from('program_workouts').select('*, program_workout_exercises(*)').eq('program_id', program.id)
+    for (const w of workouts ?? []) {
+      const { data: newW } = await supabase.from('program_workouts').insert({
+        program_id: newProg.id, week_number: w.week_number, day_of_week: w.day_of_week, title: w.title, type: w.type,
+      }).select().single()
+      if (!newW) continue
+      const exs = w.program_workout_exercises ?? []
+      if (exs.length > 0) {
+        await supabase.from('program_workout_exercises').insert(exs.map((e: any) => ({
+          program_workout_id: newW.id, name: e.name, sets: e.sets, reps: e.reps, weight: e.weight,
+          duration: e.duration, distance: e.distance, notes: e.notes, order_index: e.order_index,
+        })))
+      }
+    }
+    await loadPrograms(userId)
+  }
+
+  const handleDeleteProgram = async (programId: string) => {
+    if (!confirm('Delete this program? This cannot be undone.')) return
+    await supabase.from('program_workouts').delete().eq('program_id', programId)
+    await supabase.from('programs').delete().eq('id', programId)
+    if (userId) await loadPrograms(userId)
+  }
+
   const refreshTemplates = async (uid: string) => {
     const { data } = await supabase
       .from('workout_templates')
@@ -703,6 +970,7 @@ export default function CoachPage() {
     { value: 'members', label: 'My Students' },
     { value: 'groups', label: 'Groups' },
     { value: 'assign', label: 'Assign Plan' },
+    { value: 'programs', label: 'Programs' },
     { value: 'calendar', label: 'Workout Calendar' },
     { value: 'notes', label: 'Notes' },
   ]
@@ -1668,6 +1936,233 @@ export default function CoachPage() {
           </div>
         )}
 
+        {/* ── PROGRAMS TAB ── */}
+        {activeTab === 'programs' && (
+          <div key="tab-programs">
+            {programView === 'list' ? (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
+                  <button onClick={startNewProgram} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.7rem 1.25rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Plus size={16} /> New Program
+                  </button>
+                </div>
+                {programs.length === 0 ? (
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '3rem', textAlign: 'center' }}>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No programs yet. Build a multi-week training program to assign to your members.</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {programs.map(p => (
+                      <div key={p.id} className="card-vel" style={{ padding: '1.1rem 1.25rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', flexWrap: 'wrap' }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                              <p style={{ fontWeight: 700, fontSize: '1rem' }}>{p.title}</p>
+                              {p.deload_week && (
+                                <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '999px', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}>
+                                  Deload Wk {p.deload_week}
+                                </span>
+                              )}
+                            </div>
+                            {p.description && <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>{p.description}</p>}
+                            <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
+                              {p.total_weeks} week{p.total_weeks === 1 ? '' : 's'} · {p.program_assignments?.[0]?.count ?? 0} assigned
+                            </p>
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <button onClick={() => setAssigningProgram(p)} style={{ background: 'rgba(8,119,160,0.15)', border: '1px solid var(--teal-primary)', color: 'var(--teal-secondary)', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}>Assign</button>
+                            <button onClick={() => startEditProgram(p)} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text-secondary)', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>Edit</button>
+                            <button onClick={() => handleCloneProgram(p)} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text-secondary)', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>Clone</button>
+                            <button onClick={() => handleDeleteProgram(p.id)} style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>Delete</button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>{editingProgramId ? 'EDIT PROGRAM' : 'NEW PROGRAM'}</h2>
+                  <button onClick={() => setProgramView('list')} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text-secondary)', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>← Back to list</button>
+                </div>
+
+                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.875rem', marginBottom: '0.875rem' }}>
+                    <div>
+                      <label style={labelBase}>Title</label>
+                      <input type="text" value={programForm.title} onChange={e => setProgramForm({ ...programForm, title: e.target.value })} style={{ ...inputBase, width: '100%' }} placeholder="e.g. 8-Week Strength Block" />
+                    </div>
+                    <div>
+                      <label style={labelBase}>Description</label>
+                      <textarea value={programForm.description} onChange={e => setProgramForm({ ...programForm, description: e.target.value })} style={{ ...inputBase, width: '100%', minHeight: '60px', resize: 'vertical' }} placeholder="Optional" />
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
+                    <div>
+                      <label style={labelBase}>Total Weeks</label>
+                      <input type="number" min="1" max="12" value={programForm.total_weeks} onChange={e => {
+                        const weeks = Math.max(1, Math.min(12, Number(e.target.value) || 1))
+                        setProgramForm({ ...programForm, total_weeks: weeks.toString() })
+                        if (programWeek > weeks) setProgramWeek(weeks)
+                      }} style={{ ...inputBase, width: '100%' }} />
+                    </div>
+                    <div>
+                      <label style={labelBase}>Deload Week</label>
+                      <select value={programForm.deload_week} onChange={e => setProgramForm({ ...programForm, deload_week: e.target.value })} style={{ ...inputBase, width: '100%', cursor: 'pointer' }}>
+                        <option value="">None</option>
+                        {Array.from({ length: Number(programForm.total_weeks) || 1 }, (_, i) => i + 1).map(w => <option key={w} value={w}>Week {w}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={labelBase}>Deload Intensity %</label>
+                      <input type="number" min="1" max="100" value={programForm.deload_intensity_pct} onChange={e => setProgramForm({ ...programForm, deload_intensity_pct: e.target.value })} style={{ ...inputBase, width: '100%' }} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Week tabs */}
+                <div style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', marginBottom: '0.75rem' }}>
+                  {Array.from({ length: Number(programForm.total_weeks) || 1 }, (_, i) => i + 1).map(w => (
+                    <button key={w} onClick={() => { setProgramWeek(w); setOpenDaySlot(null) }} style={{
+                      flexShrink: 0, padding: '0.5rem 0.875rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                      background: programWeek === w ? 'var(--teal-primary)' : 'var(--surface)',
+                      color: programWeek === w ? '#fff' : 'var(--text-secondary)',
+                      border: `1px solid ${programWeek === w ? 'var(--teal-primary)' : 'var(--border)'}`,
+                      minHeight: 36,
+                    }}>
+                      Wk {w}{Number(programForm.deload_week) === w ? ' 🔻' : ''}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Copy week */}
+                {draftWorkouts.some(w => w.week_number !== programWeek) && (
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.875rem' }}>
+                    <select value={copyWeekSource} onChange={e => setCopyWeekSource(e.target.value)} style={{ ...inputBase, cursor: 'pointer' }}>
+                      <option value="">Copy from week…</option>
+                      {Array.from(new Set(draftWorkouts.filter(w => w.week_number !== programWeek).map(w => w.week_number))).sort((a, b) => a - b).map(w => (
+                        <option key={w} value={w}>Week {w}</option>
+                      ))}
+                    </select>
+                    <button onClick={handleCopyWeek} disabled={!copyWeekSource} style={{ background: 'none', border: '1px solid var(--border)', color: copyWeekSource ? 'var(--teal-secondary)' : 'var(--text-secondary)', borderRadius: '0.375rem', padding: '0.5rem 0.875rem', fontSize: '0.8rem', cursor: copyWeekSource ? 'pointer' : 'not-allowed', minHeight: 0 }}>
+                      Copy Week
+                    </button>
+                  </div>
+                )}
+
+                {/* 7-day grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.5rem', marginBottom: '1rem' }} className="program-day-grid">
+                  {DAY_LABELS.map((label, day) => {
+                    const workout = draftWorkouts.find(w => w.week_number === programWeek && w.day_of_week === day)
+                    return (
+                      <div key={day} style={{ background: '#0a1518', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.6rem', minHeight: '84px', display: 'flex', flexDirection: 'column' }}>
+                        <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontWeight: 700, marginBottom: '0.4rem' }}>{label}</p>
+                        {workout ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1 }}>
+                            <button onClick={() => openDaySlotEditor(programWeek, day)} style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', color: 'var(--teal-secondary)', fontSize: '0.75rem', fontWeight: 600, minHeight: 0 }}>
+                              {workout.title}
+                            </button>
+                            <span style={{ fontSize: '0.6rem', color: 'var(--text-secondary)' }}>{workout.exercises.length} exercise{workout.exercises.length === 1 ? '' : 's'}</span>
+                            <button onClick={() => clearDaySlot(programWeek, day)} style={{ background: 'none', border: 'none', color: '#f87171', fontSize: '0.65rem', cursor: 'pointer', padding: 0, textAlign: 'left', marginTop: 'auto', minHeight: 0 }}>Remove</button>
+                          </div>
+                        ) : (
+                          <button onClick={() => openDaySlotEditor(programWeek, day)} style={{ flex: 1, background: 'none', border: '1px dashed #1a2e34', borderRadius: '0.375rem', color: 'var(--text-secondary)', fontSize: '1rem', cursor: 'pointer', minHeight: 0 }}>
+                            +
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Day editor */}
+                {openDaySlot && (
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--teal-primary)', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                    <h3 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.1rem', letterSpacing: '0.03em', marginBottom: '0.875rem' }}>
+                      WEEK {openDaySlot.week} · {DAY_LABELS[openDaySlot.day]}
+                    </h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
+                      <div>
+                        <label style={labelBase}>Workout Title</label>
+                        <input type="text" value={dayDraft.title} onChange={e => setDayDraft({ ...dayDraft, title: e.target.value })} style={{ ...inputBase, width: '100%' }} placeholder="e.g. Upper Body Strength" />
+                      </div>
+                      <div>
+                        <label style={labelBase}>Type</label>
+                        <select value={dayDraft.type} onChange={e => setDayDraft({ ...dayDraft, type: e.target.value })} style={{ ...inputBase, width: '100%', cursor: 'pointer' }}>
+                          <option value="conditioning">Conditioning</option>
+                          <option value="basketball">Basketball</option>
+                          <option value="both">Both</option>
+                        </select>
+                      </div>
+                    </div>
+                    <label style={{ ...labelBase, marginBottom: '0.5rem' }}>Exercises</label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      {dayDraft.exercises.map((ex, idx) => (
+                        <div key={idx} style={{ background: '#0a1518', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.875rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                            <span style={{ fontSize: '0.65rem', color: 'var(--teal-secondary)', fontWeight: 700, letterSpacing: '0.08em' }}>EXERCISE {idx + 1}</span>
+                            {dayDraft.exercises.length > 1 && (
+                              <button type="button" onClick={() => setDayDraft({ ...dayDraft, exercises: dayDraft.exercises.filter((_, i) => i !== idx) })} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0 }}>
+                                <Trash2 size={12} />
+                              </button>
+                            )}
+                          </div>
+                          <input
+                            type="text" value={ex.name} autoComplete="off" placeholder="Exercise name"
+                            onChange={e => updateDayDraftEx(idx, 'name', e.target.value)}
+                            style={{ ...inputBase, width: '100%', marginBottom: '0.5rem' }}
+                          />
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+                            {(['sets', 'reps', 'weight'] as const).map(f => (
+                              <div key={f}>
+                                <label style={{ ...labelBase, marginBottom: '0.2rem' }}>{f === 'weight' ? 'Weight kg' : f.charAt(0).toUpperCase() + f.slice(1)}</label>
+                                <input type="number" value={ex[f]} onChange={e => updateDayDraftEx(idx, f, e.target.value)} style={{ ...inputBase, width: '100%' }} placeholder="—" min="0" step="0.5" />
+                              </div>
+                            ))}
+                            {(['duration', 'distance'] as const).map(f => (
+                              <div key={f}>
+                                <label style={{ ...labelBase, marginBottom: '0.2rem' }}>{f === 'duration' ? 'Dur. (min)' : 'Dist. (km)'}</label>
+                                <input type="number" value={ex[f]} onChange={e => updateDayDraftEx(idx, f, e.target.value)} style={{ ...inputBase, width: '100%' }} placeholder="—" min="0" step="0.1" />
+                              </div>
+                            ))}
+                            <div style={{ gridColumn: '3' }}>
+                              <label style={{ ...labelBase, marginBottom: '0.2rem' }}>Notes</label>
+                              <input type="text" value={ex.notes} onChange={e => updateDayDraftEx(idx, 'notes', e.target.value)} style={{ ...inputBase, width: '100%' }} placeholder="—" />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <button type="button" onClick={() => setDayDraft({ ...dayDraft, exercises: [...dayDraft.exercises, blankEx()] })} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', width: '100%', marginBottom: '1rem',
+                      background: 'transparent', border: '1px dashed #1a2e34', borderRadius: '0.5rem', padding: '0.6rem', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem',
+                    }}>
+                      <Plus size={14} /> Add Exercise
+                    </button>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button onClick={saveDaySlot} style={{ flex: 1, background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.7rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>Save Day</button>
+                      <button onClick={() => setOpenDaySlot(null)} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text-secondary)', borderRadius: '0.5rem', padding: '0.7rem 1.25rem', fontSize: '0.875rem', cursor: 'pointer' }}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+
+                {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{error}</div>}
+                {success && <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#4ade80', fontSize: '0.875rem' }}>{success}</div>}
+
+                <button onClick={handleSaveProgram} disabled={programSaving || !programForm.title.trim()} style={{
+                  width: '100%', background: programSaving || !programForm.title.trim() ? '#0d1a1e' : 'var(--teal-primary)', color: 'white',
+                  border: 'none', borderRadius: '0.5rem', padding: '0.875rem', fontWeight: 700, fontSize: '0.95rem',
+                  cursor: programSaving || !programForm.title.trim() ? 'not-allowed' : 'pointer',
+                }}>
+                  {programSaving ? 'Saving…' : 'Save Program'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
       </main>
 
       {selectedMemberProfile && (
@@ -1675,6 +2170,14 @@ export default function CoachPage() {
           memberId={selectedMemberProfile.id}
           memberName={selectedMemberProfile.name}
           onClose={() => setSelectedMemberProfile(null)}
+        />
+      )}
+      {assigningProgram && (
+        <AssignProgramModal
+          program={assigningProgram}
+          members={myMembers}
+          supabase={supabase}
+          onClose={() => setAssigningProgram(null)}
         />
       )}
       <style>{`

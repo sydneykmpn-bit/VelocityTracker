@@ -14,7 +14,7 @@ const inputBase: React.CSSProperties = {
   borderRadius: '0.5rem',
   padding: '0.75rem 1rem',
   color: '#F2F2F2',
-  fontSize: '0.875rem',
+  fontSize: '1rem',
   outline: 'none',
 }
 
@@ -29,7 +29,7 @@ const labelBase: React.CSSProperties = {
 
 export default function LoginForm() {
   const router = useRouter()
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -40,22 +40,34 @@ export default function LoginForm() {
     setLoading(true)
     setError('')
     const supabase = createClient()
-    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password })
-    if (authError) {
-      setError(authError.message)
+    const cleanUsername = username.toLowerCase().trim()
+
+    const { data: check } = await supabase.rpc('check_username_exists', { input_username: cleanUsername })
+    const row = Array.isArray(check) ? check[0] : check
+
+    if (!row?.user_exists) {
+      setError('User not found')
       setLoading(false)
-    } else {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role, approved')
-        .eq('id', data.user.id)
-        .single()
-      if (!profile?.approved) {
-        router.push('/pending-approval')
-        return
-      }
-      router.push('/dashboard')
+      return
     }
+
+    const { data: { user }, error: signInError } = await supabase.auth.signInWithPassword({
+      email: `${cleanUsername}@velocity.local`,
+      password,
+    })
+
+    if (signInError || !user) {
+      setError('Username/Password invalid')
+      setLoading(false)
+      return
+    }
+
+    if (!row.is_approved) {
+      router.push('/pending-approval')
+      return
+    }
+
+    router.push('/dashboard')
   }
 
   return (
@@ -87,10 +99,10 @@ export default function LoginForm() {
 
           <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div>
-              <label style={labelBase}>Email</label>
+              <label style={labelBase}>Username</label>
               <input
-                type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                required style={inputBase} placeholder="you@example.com"
+                type="text" value={username} onChange={(e) => setUsername(e.target.value)}
+                required style={inputBase} placeholder="your username" autoCapitalize="none" autoCorrect="off"
               />
             </div>
             <div>

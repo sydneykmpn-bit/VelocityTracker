@@ -49,20 +49,22 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(loginUrl)
     }
 
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, approved')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile?.approved) {
+      return NextResponse.redirect(new URL('/pending-approval', request.url))
+    }
+
     const requiredRoles = Object.entries(ROLE_PROTECTED).find(([route]) =>
       pathname.startsWith(route)
     )?.[1]
 
-    if (requiredRoles) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single()
-
-      if (!profile || !requiredRoles.includes(profile.role)) {
-        return NextResponse.redirect(new URL('/dashboard', request.url))
-      }
+    if (requiredRoles && !requiredRoles.includes(profile.role)) {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
     }
 
     return response

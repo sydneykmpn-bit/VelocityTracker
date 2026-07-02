@@ -25,10 +25,9 @@ export default function TemplatesPage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [userRole, setUserRole] = useState('')
   const [loading, setLoading] = useState(true)
-  const [defaultTemplates, setDefaultTemplates] = useState<any[]>([])
   const [sharedTemplates, setSharedTemplates] = useState<any[]>([])
   const [myTemplates, setMyTemplates] = useState<any[]>([])
-  const [activeTab, setActiveTab] = useState<'default' | 'shared' | 'mine'>('default')
+  const [activeTab, setActiveTab] = useState<'shared' | 'mine'>('shared')
   const [expandedTemplate, setExpandedTemplate] = useState<string | null>(null)
   const [editingTemplate, setEditingTemplate] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<any>({})
@@ -49,13 +48,6 @@ export default function TemplatesPage() {
   const [createError, setCreateError] = useState('')
 
   async function loadTemplates(uid: string) {
-    const { data: defaults } = await supabase
-      .from('workout_templates')
-      .select('*, workout_template_exercises(*)')
-      .eq('is_default', true)
-      .order('title')
-    setDefaultTemplates(defaults || [])
-
     const { data: shared } = await supabase
       .from('workout_templates')
       .select('*, workout_template_exercises(*), profiles(id, name, role)')
@@ -231,11 +223,10 @@ export default function TemplatesPage() {
   }
 
   const tabs = [
-    { key: 'default' as const, label: '⭐ Default Templates', count: defaultTemplates.length },
     { key: 'shared' as const, label: '🤝 Shared by Coaches', count: sharedTemplates.length },
     { key: 'mine' as const, label: '📁 My Templates', count: myTemplates.length },
   ]
-  const currentList = activeTab === 'default' ? defaultTemplates : activeTab === 'shared' ? sharedTemplates : myTemplates
+  const currentList = activeTab === 'shared' ? sharedTemplates : myTemplates
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>

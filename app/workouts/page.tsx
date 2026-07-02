@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Dumbbell, Pencil } from 'lucide-react'
+import { Plus, Dumbbell, Pencil, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { WorkoutCardSkeleton } from '@/components/Skeleton'
 
@@ -84,6 +84,17 @@ export default function WorkoutsPage() {
     setPage(0)
   }
   const clearDateFilter = () => { setDateRange({ from: '', to: '' }); setPage(0) }
+
+  const handleDeleteWorkout = async (workoutId: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!confirm('Delete this workout? This cannot be undone.')) return
+    const supabase = createClient()
+    // Delete exercises first (cascade should handle it but be explicit)
+    await supabase.from('exercises').delete().eq('workout_id', workoutId)
+    await supabase.from('workouts').delete().eq('id', workoutId)
+    loadWorkouts()
+  }
 
   const hasDateFilter = dateRange.from || dateRange.to
   const totalPages = Math.ceil(totalCount / PAGE_SIZE)
@@ -185,51 +196,87 @@ export default function WorkoutsPage() {
               {workouts.map((w) => {
                 const badge = typeBadge(w.type)
                 return (
-                  <div key={w.id} style={{ position: 'relative' }}>
-                    <Link href={`/workouts/${w.id}`} style={{ textDecoration: 'none', display: 'block' }}>
-                      <div style={{
-                        background: 'var(--surface)', border: '1px solid var(--border)',
-                        borderRadius: '0.75rem', padding: '1.25rem', cursor: 'pointer',
-                        transition: 'all 0.2s', paddingRight: '3.5rem',
-                      }}
-                        onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--teal-primary)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-1px)' }}
-                        onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)' }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                            <span style={{ fontSize: '1.5rem' }}>{badge.icon}</span>
-                            <div>
-                              <h3 style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.2rem' }}>{w.title}</h3>
-                              <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-                                {new Date(w.date ?? w.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                {w.duration ? ` · ${w.duration} min` : ''}
-                                {(w.exercises as any[])?.[0]?.count ? ` · ${(w.exercises as any[])[0].count} exercises` : ''}
-                              </p>
-                            </div>
-                          </div>
-                          <span style={{
-                            fontSize: '0.65rem', fontWeight: 700, padding: '0.25rem 0.625rem',
-                            borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.07em',
-                            background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`,
-                          }}>
-                            {w.type}
-                          </span>
-                        </div>
-                      </div>
-                    </Link>
+                  <div
+                    key={w.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '0.75rem',
+                      padding: '0.875rem 1rem',
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--teal-primary)' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)' }}
+                  >
+                    {/* Clickable area — takes user to workout detail */}
                     <Link
-                      href={`/workouts/${w.id}/edit`}
-                      aria-label="Edit workout"
-                      onClick={e => e.stopPropagation()}
+                      href={`/workouts/${w.id}`}
                       style={{
-                        position: 'absolute', top: '50%', right: '1rem', transform: 'translateY(-50%)',
-                        background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem',
-                        padding: '0.35rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center',
-                        textDecoration: 'none', minHeight: 32,
+                        display: 'flex', alignItems: 'center', gap: '0.875rem',
+                        flex: 1, minWidth: 0, textDecoration: 'none', color: 'inherit',
                       }}
                     >
-                      <Pencil size={13} />
+                      <span style={{ fontSize: '1.5rem', flexShrink: 0 }}>{badge.icon}</span>
+                      <div style={{ minWidth: 0 }}>
+                        <h3 style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.2rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {w.title}
+                        </h3>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {new Date(w.date ?? w.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          {w.duration ? ` · ${w.duration} min` : ''}
+                          {(w.exercises as any[])?.[0]?.count ? ` · ${(w.exercises as any[])[0].count} exercises` : ''}
+                        </p>
+                      </div>
                     </Link>
+
+                    {/* Right side: badge + action buttons */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                      {/* Type badge */}
+                      <span style={{
+                        fontSize: '0.65rem', fontWeight: 700, padding: '0.25rem 0.625rem',
+                        borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.07em',
+                        background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`,
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {w.type}
+                      </span>
+
+                      {/* Edit */}
+                      <Link
+                        href={`/workouts/${w.id}/edit`}
+                        aria-label="Edit workout"
+                        onClick={e => e.stopPropagation()}
+                        style={{
+                          background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem',
+                          padding: '0.35rem', color: 'var(--text-secondary)', display: 'flex',
+                          alignItems: 'center', textDecoration: 'none', minHeight: 32, minWidth: 32,
+                          justifyContent: 'center',
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = 'var(--teal-primary)'; (e.currentTarget as HTMLAnchorElement).style.color = 'var(--teal-secondary)' }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-secondary)' }}
+                      >
+                        <Pencil size={13} />
+                      </Link>
+
+                      {/* Delete */}
+                      <button
+                        onClick={e => handleDeleteWorkout(w.id, e)}
+                        aria-label="Delete workout"
+                        style={{
+                          background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem',
+                          padding: '0.35rem', color: 'var(--text-secondary)', display: 'flex',
+                          alignItems: 'center', cursor: 'pointer', minHeight: 32, minWidth: 32,
+                          justifyContent: 'center',
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#ef4444'; (e.currentTarget as HTMLButtonElement).style.color = '#ef4444' }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)' }}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </div>
                 )
               })}

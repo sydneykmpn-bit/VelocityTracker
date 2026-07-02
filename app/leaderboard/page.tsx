@@ -46,6 +46,12 @@ const MEDALS: Record<number, { emoji: string; color: string }> = {
   2: { emoji: '🥉', color: '#CD7F32' },
 }
 
+const REACTIONS = [
+  { type: 'fire', emoji: '🔥' },
+  { type: 'flex', emoji: '💪' },
+  { type: 'clap', emoji: '👏' },
+]
+
 const inputBase: React.CSSProperties = {
   background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem',
   padding: '0.6rem 0.875rem', color: '#F2F2F2', fontSize: '1rem', outline: 'none',
@@ -112,6 +118,16 @@ export default function LeaderboardPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
+  // Social
+  const [reactionsByPR, setReactionsByPR] = useState<Record<string, any[]>>({})
+  const [commentsByPR, setCommentsByPR] = useState<Record<string, any[]>>({})
+  const [openComments, setOpenComments] = useState<Set<string>>(new Set())
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({})
+  const [kudosPopover, setKudosPopover] = useState<string | null>(null)
+  const [kudosMessage, setKudosMessage] = useState('')
+  const [kudosSentTodayTo, setKudosSentTodayTo] = useState<Set<string>>(new Set())
+  const [kudosConfirm, setKudosConfirm] = useState<string | null>(null)
+
   const filteredExerciseSuggestions = exercise.trim()
     ? EXERCISE_LIST.filter(e => e.toLowerCase().includes(exercise.toLowerCase())).slice(0, 6)
     : []
@@ -137,6 +153,7 @@ export default function LeaderboardPage() {
 
     filtered = sortRecords(filtered)
     setPublicRecords(filtered)
+    return filtered
   }
 
   const loadMyRecords = async (uid: string) => {
@@ -148,8 +165,68 @@ export default function LeaderboardPage() {
     setMyRecords(data ?? [])
   }
 
+  const loadSocial = async (prIds: string[], uid: string) => {
+    if (prIds.length === 0) { setReactionsByPR({}); setCommentsByPR({}); return }
+    const [{ data: reactions }, { data: comments }, { data: todayKudos }] = await Promise.all([
+      supabase.from('leaderboard_reactions').select('*').in('pr_id', prIds),
+      supabase.from('leaderboard_comments').select('*, profiles(name)').in('pr_id', prIds).order('created_at', { ascending: true }),
+      supabase.from('kudos').select('to_user').eq('from_user', uid).gte('created_at', `${getLocalDateString()}T00:00:00`),
+    ])
+    const rMap: Record<string, any[]> = {}
+    for (const r of reactions ?? []) { (rMap[r.pr_id] ??= []).push(r) }
+    setReactionsByPR(rMap)
+    const cMap: Record<string, any[]> = {}
+    for (const c of comments ?? []) { (cMap[c.pr_id] ??= []).push(c) }
+    setCommentsByPR(cMap)
+    setKudosSentTodayTo(new Set((todayKudos ?? []).map((k: any) => k.to_user)))
+  }
+
   const loadData = async (uid: string) => {
-    await Promise.all([loadLeaderboard(), loadMyRecords(uid)])
+    const [recs] = await Promise.all([loadLeaderboard(), loadMyRecords(uid)])
+    await loadSocial(recs.map(r => r.id), uid)
+  }
+
+  const toggleReaction = async (prId: string, type: string) => {
+    if (!userId) return
+    const existing = (reactionsByPR[prId] ?? []).find(r => r.user_id === userId && r.reaction_type === type)
+    if (existing) {
+      await supabase.from('leaderboard_reactions').delete().eq('id', existing.id)
+    } else {
+      await supabase.from('leaderboard_reactions').insert({ pr_id: prId, user_id: userId, reaction_type: type })
+    }
+    await loadSocial(publicRecords.map(r => r.id), userId)
+  }
+
+  const toggleCommentsOpen = (prId: string) => {
+    setOpenComments(prev => {
+      const next = new Set(prev)
+      if (next.has(prId)) next.delete(prId); else next.add(prId)
+      return next
+    })
+  }
+
+  const submitComment = async (prId: string) => {
+    const text = (commentDrafts[prId] || '').trim()
+    if (!text || !userId) return
+    await supabase.from('leaderboard_comments').insert({ pr_id: prId, user_id: userId, comment: text })
+    setCommentDrafts(prev => ({ ...prev, [prId]: '' }))
+    await loadSocial(publicRecords.map(r => r.id), userId)
+  }
+
+  const deleteComment = async (id: string) => {
+    if (!userId) return
+    await supabase.from('leaderboard_comments').delete().eq('id', id)
+    await loadSocial(publicRecords.map(r => r.id), userId)
+  }
+
+  const sendKudos = async (recipientId: string) => {
+    if (!userId || recipientId === userId || kudosSentTodayTo.has(recipientId)) return
+    await supabase.from('kudos').insert({ from_user: userId, to_user: recipientId, message: kudosMessage.trim() || null })
+    setKudosSentTodayTo(prev => new Set(prev).add(recipientId))
+    setKudosMessage('')
+    setKudosPopover(null)
+    setKudosConfirm(recipientId)
+    setTimeout(() => setKudosConfirm(null), 2500)
   }
 
   useEffect(() => {
@@ -175,7 +252,7 @@ export default function LeaderboardPage() {
   }, [])
 
   useEffect(() => {
-    if (userId) loadLeaderboard()
+    if (userId) loadLeaderboard().then(recs => loadSocial(recs.map(r => r.id), userId))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [featuredFilter, genderFilter, memberSearch])
 
@@ -437,31 +514,121 @@ export default function LeaderboardPage() {
                 publicRecords.map((r, i) => {
                   const medal = MEDALS[i]
                   const profile = r.profiles as { id: string; name: string; gender: string } | null
+                  const reactions = reactionsByPR[r.id] ?? []
+                  const comments = commentsByPR[r.id] ?? []
+                  const isOwn = profile?.id === userId
+                  const alreadyKudosed = profile?.id ? kudosSentTodayTo.has(profile.id) : false
                   return (
-                    <div key={r.id} className="card-vel" style={{ padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: medal ? `${medal.color}08` : 'var(--surface)' }}>
-                      <span style={{ fontSize: '1.1rem', width: '2rem', textAlign: 'center', flexShrink: 0 }}>
-                        {medal ? medal.emoji : `#${i + 1}`}
-                      </span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {profile?.name ?? '—'}
-                          {profile?.gender === 'male' && <span style={{ marginLeft: '0.25rem', fontSize: '0.7rem', color: '#60a5fa' }}>♂</span>}
-                          {profile?.gender === 'female' && <span style={{ marginLeft: '0.25rem', fontSize: '0.7rem', color: '#f472b6' }}>♀</span>}
-                        </p>
-                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.exercise_name ?? r.exercise}</p>
+                    <div key={r.id} className="card-vel" style={{ padding: '0.875rem 1rem', background: medal ? `${medal.color}08` : 'var(--surface)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <span style={{ fontSize: '1.1rem', width: '2rem', textAlign: 'center', flexShrink: 0 }}>
+                          {medal ? medal.emoji : `#${i + 1}`}
+                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {profile?.name ?? '—'}
+                            {profile?.gender === 'male' && <span style={{ marginLeft: '0.25rem', fontSize: '0.7rem', color: '#60a5fa' }}>♂</span>}
+                            {profile?.gender === 'female' && <span style={{ marginLeft: '0.25rem', fontSize: '0.7rem', color: '#f472b6' }}>♀</span>}
+                          </p>
+                          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.exercise_name ?? r.exercise}</p>
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.2rem', color: 'var(--teal-secondary)' }}>{r.value} <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{r.unit}</span></p>
+                          {r.unit === 'lbs' && (
+                            <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>≈ {(r.value * 0.453592).toFixed(1)}kg</p>
+                          )}
+                          {LOWER_IS_BETTER.includes(r.exercise_name) && (
+                            <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>lower = better</p>
+                          )}
+                          <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                            {new Date(r.date ?? r.recorded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </p>
+                        </div>
                       </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.2rem', color: 'var(--teal-secondary)' }}>{r.value} <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{r.unit}</span></p>
-                        {r.unit === 'lbs' && (
-                          <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>≈ {(r.value * 0.453592).toFixed(1)}kg</p>
+
+                      {/* Social footer */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem', paddingTop: '0.625rem', borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                        {REACTIONS.map(rx => {
+                          const count = reactions.filter(x => x.reaction_type === rx.type).length
+                          const mine = reactions.some(x => x.reaction_type === rx.type && x.user_id === userId)
+                          return (
+                            <button key={rx.type} onClick={() => toggleReaction(r.id, rx.type)} style={{
+                              display: 'flex', alignItems: 'center', gap: '0.3rem', background: mine ? 'rgba(8,119,160,0.15)' : 'var(--surface-raised)',
+                              border: `1px solid ${mine ? 'var(--teal-primary)' : 'var(--border)'}`, borderRadius: '999px',
+                              padding: '0.3rem 0.625rem', fontSize: '0.75rem', cursor: 'pointer', color: mine ? 'var(--teal-secondary)' : 'var(--text-secondary)', minHeight: 0,
+                            }}>
+                              {rx.emoji} {count > 0 && count}
+                            </button>
+                          )
+                        })}
+                        <button onClick={() => toggleCommentsOpen(r.id)} style={{
+                          display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'var(--surface-raised)', border: '1px solid var(--border)',
+                          borderRadius: '999px', padding: '0.3rem 0.625rem', fontSize: '0.75rem', cursor: 'pointer', color: 'var(--text-secondary)', minHeight: 0,
+                        }}>
+                          💬 {comments.length > 0 && comments.length}
+                        </button>
+                        {!isOwn && profile?.id && (
+                          <div style={{ position: 'relative', marginLeft: 'auto' }}>
+                            <button
+                              onClick={() => setKudosPopover(kudosPopover === r.id ? null : r.id)}
+                              disabled={alreadyKudosed}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: '0.3rem', background: alreadyKudosed ? 'var(--surface-raised)' : 'rgba(52,186,194,0.12)',
+                                border: `1px solid ${alreadyKudosed ? 'var(--border)' : 'var(--teal-secondary)'}`, borderRadius: '999px',
+                                padding: '0.3rem 0.625rem', fontSize: '0.75rem', cursor: alreadyKudosed ? 'not-allowed' : 'pointer',
+                                color: alreadyKudosed ? 'var(--text-secondary)' : 'var(--teal-secondary)', minHeight: 0,
+                              }}
+                            >
+                              👊 {alreadyKudosed ? 'Sent' : 'Kudos'}
+                            </button>
+                            {kudosConfirm === profile.id && (
+                              <span style={{ position: 'absolute', top: '-22px', right: 0, fontSize: '0.7rem', color: '#4ade80', whiteSpace: 'nowrap' }}>Kudos sent!</span>
+                            )}
+                            {kudosPopover === r.id && (
+                              <div style={{
+                                position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 30, width: '220px',
+                                background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.75rem',
+                                boxShadow: '0 12px 30px rgba(0,0,0,0.5)',
+                              }}>
+                                <input
+                                  type="text" value={kudosMessage} onChange={e => setKudosMessage(e.target.value)}
+                                  placeholder="Optional message…" style={{ ...inputBase, width: '100%', fontSize: '0.8rem', marginBottom: '0.5rem' }}
+                                />
+                                <button onClick={() => sendKudos(profile.id)} style={{ width: '100%', background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.5rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}>
+                                  Send Kudos
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         )}
-                        {LOWER_IS_BETTER.includes(r.exercise_name) && (
-                          <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>lower = better</p>
-                        )}
-                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
-                          {new Date(r.date ?? r.recorded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </p>
                       </div>
+
+                      {/* Comment thread */}
+                      {openComments.has(r.id) && (
+                        <div style={{ marginTop: '0.625rem', paddingTop: '0.625rem', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          {comments.map(c => (
+                            <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', fontSize: '0.8rem' }}>
+                              <div>
+                                <span style={{ fontWeight: 600 }}>{c.profiles?.name ?? '—'}</span>{' '}
+                                <span style={{ color: 'var(--text-secondary)' }}>{c.comment}</span>
+                              </div>
+                              {c.user_id === userId && (
+                                <button onClick={() => deleteComment(c.id)} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', display: 'flex', flexShrink: 0, minHeight: 0 }}>
+                                  <Trash2 size={12} />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <input
+                              type="text" value={commentDrafts[r.id] || ''} onChange={e => setCommentDrafts(prev => ({ ...prev, [r.id]: e.target.value }))}
+                              onKeyDown={e => { if (e.key === 'Enter') submitComment(r.id) }}
+                              placeholder="Add a comment…" style={{ ...inputBase, flex: 1, fontSize: '0.8rem' }}
+                            />
+                            <button onClick={() => submitComment(r.id)} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0 0.875rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}>Post</button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )
                 })

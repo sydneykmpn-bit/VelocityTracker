@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { getLocalDateString } from '@/lib/utils'
+import { TodayPlanCard, SkippedPlansSection } from '@/components/PlanCards'
 
 type Tab = 'plans' | 'prs' | 'schedule' | 'progress' | 'attendance' | 'metrics'
 
@@ -18,6 +19,48 @@ function formatDate(date: string) {
   return new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
+function CompletedPlansCollapse({ plans }: { plans: any[] }) {
+  const [showAll, setShowAll] = useState(false)
+  const visible = showAll ? plans : plans.slice(0, 3)
+
+  return (
+    <div style={{ marginTop: '0.75rem' }}>
+      <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+        ✅ Completed ({plans.length})
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+        {visible.map(plan => (
+          <div key={plan.id} style={{
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: '0.5rem', padding: '0.625rem 0.875rem',
+            display: 'flex', alignItems: 'center', gap: '0.75rem', opacity: 0.7,
+          }}>
+            <span style={{ color: '#4ade80', fontWeight: 800, fontSize: '0.8rem' }}>✓</span>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ fontWeight: 600, fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{plan.title}</p>
+              <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>
+                {new Date(plan.scheduled_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+      {plans.length > 3 && (
+        <button
+          onClick={() => setShowAll(prev => !prev)}
+          style={{
+            background: 'none', border: 'none', color: 'var(--teal-secondary)',
+            fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer',
+            padding: '0.5rem 0', marginTop: '0.25rem', display: 'block',
+          }}
+        >
+          {showAll ? '▲ Show less' : `▼ Show ${plans.length - 3} more completed`}
+        </button>
+      )}
+    </div>
+  )
+}
+
 export default function StudentPage() {
   const supabase = createClient()
   const router = useRouter()
@@ -28,7 +71,11 @@ export default function StudentPage() {
   const [coach, setCoach] = useState<any>(null)
   const [activeTab, setActiveTab] = useState<Tab>('plans')
   const [loading, setLoading] = useState(true)
-  const [allMyPRs, setAllMyPRs] = useState<any[]>([])
+  const [prs, setPRs] = useState<any[]>([])
+  const [editingPRId, setEditingPRId] = useState<string | null>(null)
+  const [editPRValue, setEditPRValue] = useState('')
+  const [editPRUnit, setEditPRUnit] = useState('')
+  const [prLoading, setPRLoading] = useState(false)
   const [upcomingClasses, setUpcomingClasses] = useState<any[]>([])
   const [bodyMetrics, setBodyMetrics] = useState<any[]>([])
   const [metricWeight, setMetricWeight] = useState('')
@@ -170,8 +217,12 @@ export default function StudentPage() {
       setUserId(user.id)
 
       // PRs
-      const { data: prs } = await supabase.from('personal_records').select('*').eq('user_id', user.id).order('recorded_at', { ascending: false })
-      setAllMyPRs(prs || [])
+      const { data: prData } = await supabase
+        .from('personal_records')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('value', { ascending: false })
+      setPRs(prData || [])
 
       // Group IDs for class schedule
       const { data: memberships } = await supabase.from('group_members').select('group_id').eq('member_id', user.id)
@@ -208,8 +259,6 @@ export default function StudentPage() {
   const skippedPlans = assignedPlans.filter(p => p.status === 'skipped')
   const todayPlans = pendingPlans.filter(p => p.scheduled_date === getLocalDateString())
   const nextPlan = [...pendingPlans].sort((a, b) => String(a.scheduled_date).localeCompare(String(b.scheduled_date)))[0]
-  const attendedCount = attendanceHistory.filter(a => a.status === 'attended').length
-  const attendanceRate = attendanceHistory.length > 0 ? Math.round((attendedCount / attendanceHistory.length) * 100) : 0
   const planCompletionRate = assignedPlans.length > 0 ? Math.round((completedPlans.length / assignedPlans.length) * 100) : 0
   const firstName = profile?.name?.split(' ')[0] ?? 'Athlete'
 
@@ -261,7 +310,7 @@ export default function StudentPage() {
                 ? `${todayPlans.length} plan${todayPlans.length === 1 ? '' : 's'} scheduled for today.`
                 : nextPlan
                 ? `Next scheduled for ${formatDate(nextPlan.scheduled_date)}.`
-                : 'You are clear right now. Log an independent workout or check back after your coach assigns a plan.'}
+                : 'You are clear right now. Check back after your coach assigns a plan.'}
             </p>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
               {(() => {
@@ -275,9 +324,7 @@ export default function StudentPage() {
                   >
                     {isLogging ? 'Logging…' : 'Log Workout'}
                   </button>
-                ) : (
-                  <Link href="/workouts/new" style={{ background: 'var(--teal-primary)', color: 'white', borderRadius: '0.5rem', padding: '0.625rem 0.875rem', fontSize: '0.875rem', fontWeight: 700, textDecoration: 'none' }}>Log Workout</Link>
-                )
+                ) : null
               })()}
             </div>
           </div>
@@ -298,7 +345,6 @@ export default function StudentPage() {
             { label: 'Pending Plans', value: pendingPlans.length, color: '#f59e0b' },
             { label: 'Completed', value: completedPlans.length, color: '#4ade80' },
             { label: 'Completion Rate', value: `${planCompletionRate}%`, color: 'var(--teal-secondary)' },
-            { label: 'Attendance Rate', value: `${attendanceRate}%`, color: '#60a5fa' },
           ].map(s => (
             <div key={s.label} style={{ ...cardStyle, padding: '1.1rem', textAlign: 'center' }}>
               <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '2.25rem', color: s.color, lineHeight: 1 }}>{s.value}</p>
@@ -356,71 +402,32 @@ export default function StudentPage() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 {pendingPlans.length > 0 && <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)' }}>Upcoming / Pending</p>}
-                {pendingPlans.map(plan => {
-                  const isActing = actionLoading === plan.id
-                  return (
-                    <div key={plan.id} style={{ ...cardStyle, padding: '1.25rem', borderLeft: '3px solid var(--teal-primary)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-                        <div>
-                          <p style={{ fontWeight: 600, fontSize: '0.95rem' }}>{plan.title}</p>
-                          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-                            {formatDate(plan.scheduled_date)} · Coach {plan.profiles?.name ?? 'Coach'}
-                          </p>
-                        </div>
-                        <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '999px', textTransform: 'uppercase', background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.25)' }}>{plan.type}</span>
-                      </div>
-                      {plan.workout_plan_exercises?.length > 0 && (
-                        <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                          {plan.workout_plan_exercises.sort((a: any, b: any) => a.order_index - b.order_index).map((ex: any) => (
-                            <div key={ex.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '0.375rem 0', borderBottom: '1px solid var(--border)', fontSize: '0.8rem' }}>
-                              <span style={{ fontWeight: 600 }}>{ex.name}</span>
-                              <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', textAlign: 'right' }}>
-                                {ex.sets && ex.reps ? `${ex.sets}x${ex.reps}` : ''}{ex.weight ? ` - ${ex.weight}kg` : ''}{ex.duration ? ` - ${ex.duration}min` : ''}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {reschedulingId === plan.id && (
-                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
-                          <input
-                            type="date"
-                            value={rescheduleDate}
-                            onChange={e => setRescheduleDate(e.target.value)}
-                            min={new Date().toISOString().split('T')[0]}
-                            style={{ flex: 1, minWidth: '130px', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.375rem', padding: '0.4rem 0.625rem', color: '#F2F2F2', fontSize: '0.875rem', outline: 'none' }}
-                          />
-                          <button onClick={() => handleReschedule(plan.id)} disabled={!rescheduleDate || isActing} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', fontSize: '0.8rem', fontWeight: 700, cursor: rescheduleDate ? 'pointer' : 'not-allowed', minHeight: 0 }}>Confirm</button>
-                          <button onClick={() => { setReschedulingId(null); setRescheduleDate('') }} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.4rem 0.625rem', color: 'var(--text-secondary)', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0 }}>Cancel</button>
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.875rem', flexWrap: 'wrap' }}>
-                        <button onClick={() => handlePlanAction(plan.id, 'completed')} disabled={isActing} style={{ flex: 1, background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.6rem', fontSize: '0.8rem', fontWeight: 700, cursor: isActing ? 'not-allowed' : 'pointer', opacity: isActing ? 0.7 : 1 }}>✅ Mark Done</button>
-                        <button onClick={() => { setReschedulingId(plan.id); setRescheduleDate('') }} disabled={isActing} style={{ background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.6rem 0.75rem', fontSize: '0.8rem', cursor: 'pointer' }}>📅 Move</button>
-                        <button onClick={() => handlePlanAction(plan.id, 'skipped')} disabled={isActing} style={{ background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.6rem 0.75rem', fontSize: '0.8rem', cursor: 'pointer' }}>⏭️ Skip</button>
-                      </div>
-                    </div>
-                  )
-                })}
-                {completedPlans.length > 0 && <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>Completed</p>}
-                {completedPlans.slice(0, 5).map(plan => (
-                  <div key={plan.id} style={{ ...cardStyle, padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', opacity: 0.78 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      <span style={{ color: '#4ade80', fontWeight: 800 }}>Done</span>
-                      <div>
-                        <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{plan.title}</p>
-                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>{formatDate(plan.scheduled_date)}</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleUndoCompletion(plan)}
-                      disabled={undoingId === plan.id}
-                      style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.35rem 0.625rem', color: 'var(--text-secondary)', fontSize: '0.7rem', fontWeight: 700, cursor: undoingId === plan.id ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
-                    >
-                      {undoingId === plan.id ? '…' : '↺ Undo'}
-                    </button>
-                  </div>
+                {pendingPlans.map(plan => (
+                  <TodayPlanCard
+                    key={plan.id}
+                    plan={plan}
+                    onUpdate={async () => {
+                      if (!userId) return
+                      await reloadPlans(userId)
+                    }}
+                  />
                 ))}
+                {completedPlans.length > 0 && (
+                  <CompletedPlansCollapse plans={completedPlans} />
+                )}
+              </div>
+            )}
+            {skippedPlans.length > 0 && (
+              <div style={{ marginTop: '1.5rem' }}>
+                <SkippedPlansSection
+                  plans={skippedPlans}
+                  userId={userId}
+                  supabase={supabase}
+                  onUpdate={async () => {
+                    if (!userId) return
+                    await reloadPlans(userId)
+                  }}
+                />
               </div>
             )}
           </div>
@@ -428,56 +435,135 @@ export default function StudentPage() {
 
         {activeTab === 'prs' && (
           <div key="tab-prs">
-            {allMyPRs.length === 0 ? (
-              <div style={{ ...cardStyle, padding: '3rem', textAlign: 'center' }}>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>No personal records yet.</p>
-                <Link href="/leaderboard" style={{ background: 'var(--teal-primary)', color: 'white', padding: '0.5rem 1.25rem', borderRadius: '0.5rem', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 700 }}>Submit a PR</Link>
+            {prs.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>
+                <p style={{ fontSize: '0.875rem' }}>No personal records yet.</p>
               </div>
-            ) : (() => {
-              // Group by exercise, pick best per exercise
-              type PRGroup = { exercise: string; unit: string; best: number; bestDate: string; all: any[] }
-              const grouped = Object.values(
-                allMyPRs.reduce((acc: Record<string, PRGroup>, pr: any) => {
-                  const key = pr.exercise_name
-                  if (!acc[key]) acc[key] = { exercise: key, unit: pr.unit, best: pr.value, bestDate: pr.recorded_at || pr.date, all: [] }
-                  if (pr.value > acc[key].best) { acc[key].best = pr.value; acc[key].bestDate = pr.recorded_at || pr.date }
-                  acc[key].all.push(pr)
+            ) : (
+              Object.entries(
+                prs.reduce((acc: any, pr: any) => {
+                  if (!acc[pr.exercise_name]) acc[pr.exercise_name] = []
+                  acc[pr.exercise_name].push(pr)
                   return acc
                 }, {})
-              ) as PRGroup[]
-              grouped.sort((a, b) => b.best - a.best)
-
-              return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {grouped.map(group => (
-                    <div key={group.exercise} style={{ ...cardStyle, overflow: 'hidden' }}>
-                      <div style={{ padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: group.all.length > 1 ? '1px solid var(--border)' : 'none' }}>
-                        <div>
-                          <p style={{ fontWeight: 700, fontSize: '0.95rem' }}>{group.exercise}</p>
-                          <p style={{ fontSize: '0.65rem', color: 'var(--teal-secondary)', marginTop: '0.15rem' }}>
-                            Personal Best · {new Date(group.bestDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          </p>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.75rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{group.best}</p>
-                          <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{group.unit}</p>
-                        </div>
+              ).map(([exercise, records]: [string, any]) => {
+                const sorted = [...records].sort((a, b) => b.value - a.value)
+                const best = sorted[0]
+                return (
+                  <div key={exercise} style={{
+                    background: 'var(--surface)', border: '1px solid var(--border)',
+                    borderRadius: '0.75rem', overflow: 'hidden', marginBottom: '0.75rem',
+                  }}>
+                    {/* Best PR header */}
+                    <div style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                      <div>
+                        <p style={{ fontWeight: 700, fontSize: '0.95rem' }}>{exercise}</p>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', marginTop: '0.15rem' }}>
+                          Personal Best · {new Date(best.recorded_at || best.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </p>
                       </div>
-                      {group.all.length > 1 && (
-                        <div style={{ padding: '0.625rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                          {group.all.map((pr: any) => (
-                            <div key={pr.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)', padding: '0.1rem 0' }}>
-                              <span>{new Date(pr.recorded_at || pr.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                              <span style={{ color: pr.value === group.best ? 'var(--teal-secondary)' : 'var(--text-secondary)', fontWeight: pr.value === group.best ? 700 : 400 }}>{pr.value} {pr.unit}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      <div style={{ textAlign: 'right' }}>
+                        <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.75rem', letterSpacing: '0.03em', color: 'var(--teal-secondary)', lineHeight: 1 }}>{best.value}</p>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{best.unit}</p>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )
-            })()}
+
+                    {/* All attempts */}
+                    <div style={{ borderTop: '1px solid var(--border)' }}>
+                      {sorted.map(pr => (
+                        <div key={pr.id} style={{ padding: '0.625rem 1.25rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
+                          {editingPRId === pr.id ? (
+                            // Edit mode
+                            <div style={{ display: 'flex', gap: '0.5rem', flex: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                              <input
+                                type="number"
+                                value={editPRValue}
+                                onChange={e => setEditPRValue(e.target.value)}
+                                style={{ width: '80px', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.375rem', padding: '0.375rem 0.5rem', color: '#F2F2F2', fontSize: '0.875rem', outline: 'none' }}
+                                min="0"
+                                step="0.01"
+                              />
+                              <select
+                                value={editPRUnit}
+                                onChange={e => setEditPRUnit(e.target.value)}
+                                style={{ background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.375rem', padding: '0.375rem 0.5rem', color: '#F2F2F2', fontSize: '0.875rem', outline: 'none', cursor: 'pointer' }}
+                              >
+                                {['kg', 'lbs', 'reps', 'seconds', 'minutes', 'km/h', 'mph'].map(u => (
+                                  <option key={u} value={u}>{u}</option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={async () => {
+                                  setPRLoading(true)
+                                  await supabase.from('personal_records').update({
+                                    value: Number(editPRValue),
+                                    unit: editPRUnit,
+                                  }).eq('id', pr.id)
+                                  const { data } = await supabase.from('personal_records').select('*').eq('user_id', profile?.id).order('value', { ascending: false })
+                                  setPRs(data || [])
+                                  setEditingPRId(null)
+                                  setPRLoading(false)
+                                }}
+                                disabled={prLoading}
+                                style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.375rem 0.75rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => setEditingPRId(null)}
+                                style={{ background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.375rem 0.5rem', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0 }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            // View mode
+                            <>
+                              <div>
+                                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                  {new Date(pr.recorded_at || pr.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                  {!pr.is_public && <span style={{ marginLeft: '0.5rem', fontSize: '0.7rem' }}>🔒</span>}
+                                </p>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                                <p style={{ fontWeight: 700, color: pr === best ? 'var(--teal-secondary)' : 'var(--text-primary)', fontSize: '0.9rem' }}>
+                                  {pr.value} {pr.unit}
+                                </p>
+                                {/* Edit button */}
+                                <button
+                                  onClick={() => { setEditingPRId(pr.id); setEditPRValue(String(pr.value)); setEditPRUnit(pr.unit) }}
+                                  style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.25rem 0.5rem', color: 'var(--text-secondary)', fontSize: '0.7rem', cursor: 'pointer', minHeight: 0 }}
+                                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal-primary)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--teal-secondary)' }}
+                                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)' }}
+                                >
+                                  ✏️
+                                </button>
+                                {/* Delete button */}
+                                <button
+                                  onClick={async () => {
+                                    if (!confirm('Delete this PR entry?')) return
+                                    setPRLoading(true)
+                                    await supabase.from('personal_records').delete().eq('id', pr.id)
+                                    const { data } = await supabase.from('personal_records').select('*').eq('user_id', profile?.id).order('value', { ascending: false })
+                                    setPRs(data || [])
+                                    setPRLoading(false)
+                                  }}
+                                  style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.25rem 0.5rem', color: 'var(--text-secondary)', fontSize: '0.7rem', cursor: 'pointer', minHeight: 0 }}
+                                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#ef4444'; (e.currentTarget as HTMLButtonElement).style.color = '#ef4444' }}
+                                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)' }}
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })
+            )}
           </div>
         )}
 

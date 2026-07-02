@@ -144,3 +144,42 @@ export const ACTIVITY_COLORS = {
   warning: '#f59e0b',
   inactive: '#ef4444',
 }
+
+// Strength standards — bodyweight multipliers per level, per exercise, per gender
+export const STRENGTH_STANDARDS: Record<string, { male: number[]; female: number[] }> = {
+  'Back Squat': { male: [0.75, 1.25, 1.5, 2.0, 2.5], female: [0.5, 0.75, 1.25, 1.5, 2.0] },
+  'Deadlift': { male: [1.0, 1.5, 2.0, 2.5, 3.0], female: [0.5, 1.0, 1.25, 1.75, 2.25] },
+  'Bench Press': { male: [0.5, 0.75, 1.25, 1.75, 2.0], female: [0.35, 0.5, 0.75, 1.0, 1.25] },
+  'Overhead Press': { male: [0.35, 0.55, 0.8, 1.05, 1.3], female: [0.25, 0.35, 0.5, 0.65, 0.85] },
+}
+
+export const STRENGTH_LEVELS = ['Beginner', 'Novice', 'Intermediate', 'Advanced', 'Elite']
+
+export interface StrengthLevelResult {
+  level: string
+  levelIndex: number // -1 = below Beginner
+  thresholds: number[] // kg thresholds for each of the 5 levels
+  nextLevel: string | null
+  nextTargetKg: number | null
+}
+
+// Compute strength level + progress from a PR (kg) and bodyweight (kg)
+export function getStrengthLevel(
+  exercise: string,
+  prKg: number,
+  bodyweightKg: number,
+  gender?: string
+): StrengthLevelResult | null {
+  const standard = STRENGTH_STANDARDS[exercise]
+  if (!standard || !bodyweightKg) return null
+  const multipliers = gender === 'female' ? standard.female : standard.male
+  const thresholds = multipliers.map(m => m * bodyweightKg)
+  let levelIndex = -1
+  for (let i = 0; i < thresholds.length; i++) {
+    if (prKg >= thresholds[i]) levelIndex = i
+  }
+  const level = levelIndex >= 0 ? STRENGTH_LEVELS[levelIndex] : 'Untrained'
+  const nextLevel = levelIndex + 1 < STRENGTH_LEVELS.length ? STRENGTH_LEVELS[levelIndex + 1] : null
+  const nextTargetKg = nextLevel ? thresholds[levelIndex + 1] : null
+  return { level, levelIndex, thresholds, nextLevel, nextTargetKg }
+}
