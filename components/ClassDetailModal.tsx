@@ -37,6 +37,10 @@ export default function ClassDetailModal({
   })
   const [coaches, setCoaches] = useState<any[]>([])
   const [editCoachId, setEditCoachId] = useState<string>(cls.coach_id || '')
+  const [showAddAttendee, setShowAddAttendee] = useState(false)
+  const [memberCandidates, setMemberCandidates] = useState<any[]>([])
+  const [addAttendeeSearch, setAddAttendeeSearch] = useState('')
+  const [addAttendeeLoading, setAddAttendeeLoading] = useState(false)
 
   const classId = cls.is_dynamic ? cls.parent_class_id : cls.id
 
@@ -50,6 +54,19 @@ export default function ClassDetailModal({
       .then(({ data }) => setCoaches(data || []))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Fetch member candidates for "Add Attendee" (admin/coach only). Intentionally unscoped to
+  // all members for now — could be narrowed later (e.g. to members in groups where groups.coach_id = userId).
+  useEffect(() => {
+    if (userRole !== 'admin' && userRole !== 'coach') return
+    supabase
+      .from('profiles')
+      .select('id, name, email')
+      .eq('role', 'member')
+      .order('name')
+      .then(({ data }) => setMemberCandidates(data || []))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userRole])
 
   useEffect(() => {
     async function load() {
@@ -124,6 +141,42 @@ export default function ClassDetailModal({
     }
 
     setRsvpLoading(false)
+    onUpdate()
+  }
+
+  const handleAddAttendee = async (memberId: string) => {
+    const attendanceClassId = cls.is_dynamic ? cls.parent_class_id : cls.id
+    if (!attendanceClassId) return
+
+    setAddAttendeeLoading(true)
+
+    // Check if already exists first to avoid duplicate
+    const { data: existing } = await supabase
+      .from('class_attendees')
+      .select('id')
+      .eq('class_id', attendanceClassId)
+      .eq('member_id', memberId)
+      .maybeSingle()
+
+    if (!existing) {
+      const { data, error } = await supabase
+        .from('class_attendees')
+        .insert({
+          class_id: attendanceClassId,
+          member_id: memberId,
+          rsvp_status: 'attending',
+          status: 'scheduled',
+        })
+        .select('*, profiles(name, email, gender)')
+        .single()
+
+      if (!error && data) {
+        setAttendees(prev => [...prev, data])
+      }
+    }
+
+    setAddAttendeeSearch('')
+    setAddAttendeeLoading(false)
     onUpdate()
   }
 
@@ -406,7 +459,52 @@ export default function ClassDetailModal({
         {/* Attendees */}
         {!cls.isPlan && (
           <div style={{ padding: '1.25rem 1.5rem' }}>
-            <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>Attendees ({attendees.length})</p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', gap: '0.75rem' }}>
+              <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)' }}>Attendees ({attendees.length})</p>
+              {(userRole === 'admin' || userRole === 'coach') && (
+                <button
+                  onClick={() => setShowAddAttendee(o => !o)}
+                  style={{ padding: '0.3rem 0.7rem', borderRadius: '0.375rem', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: 'var(--teal-secondary)', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, minHeight: 0, flexShrink: 0 }}
+                >
+                  {showAddAttendee ? '✕ Cancel' : '+ Add Attendee'}
+                </button>
+              )}
+            </div>
+
+            {(userRole === 'admin' || userRole === 'coach') && showAddAttendee && (
+              <div style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '0.75rem' }}>
+                <label style={labelBase}>Search Members</label>
+                <input
+                  style={inputBase}
+                  value={addAttendeeSearch}
+                  onChange={e => setAddAttendeeSearch(e.target.value)}
+                  placeholder="Type a name…"
+                  autoFocus
+                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginTop: '0.625rem', maxHeight: '200px', overflowY: 'auto' }}>
+                  {memberCandidates
+                    .filter(m => !attendees.some((a: any) => a.member_id === m.id))
+                    .filter(m => m.name?.toLowerCase().includes(addAttendeeSearch.toLowerCase()))
+                    .map(m => (
+                      <button
+                        key={m.id}
+                        onClick={() => handleAddAttendee(m.id)}
+                        disabled={addAttendeeLoading}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', textAlign: 'left', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.5rem 0.75rem', cursor: addAttendeeLoading ? 'not-allowed' : 'pointer', fontSize: '0.8rem', color: 'var(--text-primary)', minHeight: 0 }}
+                      >
+                        <span>{m.name}</span>
+                        <span style={{ color: 'var(--teal-primary)', fontWeight: 700 }}>+ Add</span>
+                      </button>
+                    ))}
+                  {memberCandidates
+                    .filter(m => !attendees.some((a: any) => a.member_id === m.id))
+                    .filter(m => m.name?.toLowerCase().includes(addAttendeeSearch.toLowerCase())).length === 0 && (
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', padding: '0.25rem' }}>No matching members found.</p>
+                  )}
+                </div>
+              </div>
+            )}
+
             {loadingAttendees ? (
               <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Loading…</p>
             ) : attendees.length === 0 ? (

@@ -100,6 +100,7 @@ Key Rules for all code:
 	•	All RLS policies use get_my_role() function to avoid infinite recursion
 	•	Mobile responsive: 375px minimum width, px-4 md:px-6, tap targets min 44px
 	•	Inputs must be font-size: 16px minimum to prevent iOS zoom
+	•	After any schema, page, or route change, append a one-line entry under 'Recent Changes' below (don't rewrite the whole doc unless asked) so this file doesn't drift from the real repo
 
 When I ask for code changes:
 
@@ -108,3 +109,7 @@ When I ask for code changes:
 	•	If a database change is needed, provide the SQL to run in Supabase SQL Editor first, then the code
 	•	Never use Prisma, LibSQL, or Turso — Supabase only
 	•	Never commit build artifacts (.next/) or stray shell output — if a Windows/PowerShell cleanup command needs to run, give it as a separate instruction to run yourself, not chained into a git command
+
+Recent Changes:
+
+	•	Profile page (/profile): added a "Change Password" section — verifies current password via signInWithPassword, then calls supabase.auth.updateUser({ password }) to set the new one

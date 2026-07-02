@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { ChevronDown } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 const inputBase: React.CSSProperties = {
@@ -30,6 +31,14 @@ export default function ProfilePage() {
   const [form, setForm] = useState({
     name: '', gender: '', age: '', weight_kg: '', weight_unit: 'kg',
     city: '', contact_number: '', medical_info: '',
+  })
+
+  const [passwordOpen, setPasswordOpen] = useState(false)
+  const [passwordSaving, setPasswordSaving] = useState(false)
+  const [passwordError, setPasswordError] = useState('')
+  const [passwordSuccess, setPasswordSuccess] = useState(false)
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '', newPassword: '', confirmPassword: '',
   })
 
   useEffect(() => {
@@ -73,6 +82,45 @@ export default function ProfilePage() {
     if (err) setError(err.message)
     else setSuccess(true)
     setSaving(false)
+  }
+
+  const handlePasswordChange = async () => {
+    setPasswordError(''); setPasswordSuccess(false)
+
+    if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+      setPasswordError('Please fill in all fields.')
+      return
+    }
+    if (passwordForm.newPassword.length < 6) {
+      setPasswordError('New password must be at least 6 characters.')
+      return
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError('New password and confirmation do not match.')
+      return
+    }
+
+    setPasswordSaving(true)
+    const { error: signInErr } = await supabase.auth.signInWithPassword({
+      email: profile.email,
+      password: passwordForm.currentPassword,
+    })
+    if (signInErr) {
+      setPasswordError('Current password is incorrect.')
+      setPasswordSaving(false)
+      return
+    }
+
+    const { error: updateErr } = await supabase.auth.updateUser({ password: passwordForm.newPassword })
+    if (updateErr) {
+      setPasswordError(updateErr.message)
+      setPasswordSaving(false)
+      return
+    }
+
+    setPasswordSuccess(true)
+    setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
+    setPasswordSaving(false)
   }
 
   if (loading) {
@@ -198,6 +246,78 @@ export default function ProfilePage() {
           }}>
             {saving ? 'Saving…' : 'Save Changes'}
           </button>
+        </div>
+
+        {/* Change Password */}
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem', marginBottom: '1rem', overflow: 'hidden' }}>
+          <button
+            type="button"
+            onClick={() => setPasswordOpen(o => !o)}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: 'none', border: 'none', padding: '1.5rem', cursor: 'pointer',
+            }}
+          >
+            <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', color: '#F2F2F2' }}>CHANGE PASSWORD</h2>
+            <ChevronDown
+              size={20}
+              style={{
+                color: 'var(--text-secondary)', transition: 'transform 0.2s',
+                transform: passwordOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+              }}
+            />
+          </button>
+
+          {passwordOpen && (
+            <div style={{ padding: '0 1.5rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div>
+                <label style={labelBase}>Current Password</label>
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={passwordForm.currentPassword}
+                  onChange={e => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                  style={inputBase}
+                  placeholder="Enter current password"
+                />
+              </div>
+
+              <div>
+                <label style={labelBase}>New Password</label>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={passwordForm.newPassword}
+                  onChange={e => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                  style={inputBase}
+                  placeholder="At least 6 characters"
+                />
+              </div>
+
+              <div>
+                <label style={labelBase}>Confirm New Password</label>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={passwordForm.confirmPassword}
+                  onChange={e => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                  style={inputBase}
+                  placeholder="Re-enter new password"
+                />
+              </div>
+
+              {passwordError && <p style={{ fontSize: '0.875rem', color: '#fca5a5' }}>{passwordError}</p>}
+              {passwordSuccess && <p style={{ fontSize: '0.875rem', color: '#4ade80' }}>✅ Password changed successfully!</p>}
+
+              <button onClick={handlePasswordChange} disabled={passwordSaving} style={{
+                background: passwordSaving ? '#0d1a1e' : 'var(--teal-primary)', color: 'white',
+                border: 'none', borderRadius: '0.75rem', padding: '0.875rem',
+                fontWeight: 700, fontSize: '1rem', cursor: passwordSaving ? 'not-allowed' : 'pointer',
+              }}>
+                {passwordSaving ? 'Updating…' : 'Update Password'}
+              </button>
+            </div>
+          )}
         </div>
 
         <button
