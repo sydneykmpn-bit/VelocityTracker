@@ -1695,33 +1695,20 @@ export default function CoachPage() {
         {activeTab === 'assigned' && (
           <div key="tab-assigned">
             {/* Filter assigned plans by member */}
-            <div style={{ marginTop: '1.5rem' }}>
-              <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Filter by student:</p>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-                <button
-                  onClick={() => setPlanMemberFilter('all')}
-                  style={{
-                    padding: '0.375rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600,
-                    background: planMemberFilter === 'all' ? 'var(--teal-primary)' : 'var(--surface)',
-                    color: planMemberFilter === 'all' ? '#fff' : 'var(--text-secondary)',
-                    border: `1px solid ${planMemberFilter === 'all' ? 'var(--teal-primary)' : 'var(--border)'}`,
-                    cursor: 'pointer', minHeight: 0,
-                  }}
-                >All Students</button>
-                {myMembers.map((m: any) => (
-                  <button
-                    key={m.id}
-                    onClick={() => setPlanMemberFilter(m.id)}
-                    style={{
-                      padding: '0.375rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600,
-                      background: planMemberFilter === m.id ? 'var(--teal-primary)' : 'var(--surface)',
-                      color: planMemberFilter === m.id ? '#fff' : 'var(--text-secondary)',
-                      border: `1px solid ${planMemberFilter === m.id ? 'var(--teal-primary)' : 'var(--border)'}`,
-                      cursor: 'pointer', minHeight: 0,
-                    }}
-                  >{m.name}</button>
-                ))}
-              </div>
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                type="text" placeholder="Search students…" value={planSearch}
+                onChange={e => setPlanSearch(e.target.value)}
+                style={{ flex: 1, minWidth: '160px', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none' }}
+              />
+              <select
+                value={planMemberFilter}
+                onChange={e => setPlanMemberFilter(e.target.value)}
+                style={{ background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', cursor: 'pointer' }}
+              >
+                <option value="all">All Students</option>
+                {myGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
             </div>
 
             {/* Assigned Plans List */}
@@ -1752,9 +1739,13 @@ export default function CoachPage() {
               </div>
             </div>
             {(() => {
-              const filteredAssignedPlans = planMemberFilter === 'all'
+              let filteredAssignedPlans = !planSearch.trim()
                 ? assignedPlans
-                : assignedPlans.filter((p: any) => p.profiles?.id === planMemberFilter || p.member_id === planMemberFilter)
+                : assignedPlans.filter((p: any) => p.profiles?.name?.toLowerCase().includes(planSearch.toLowerCase()))
+              if (planMemberFilter !== 'all') {
+                const groupMemberIds = new Set((groupMembers[planMemberFilter] ?? []).map((gm: any) => gm.member_id))
+                filteredAssignedPlans = filteredAssignedPlans.filter((p: any) => groupMemberIds.has(p.member_id))
+              }
               const filtered = planStatusFilter === 'all' ? filteredAssignedPlans : filteredAssignedPlans.filter(p => p.status === planStatusFilter)
               if (filtered.length === 0) return <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No {planStatusFilter !== 'all' ? planStatusFilter : ''} plans yet.</p>
               const grouped = filtered.reduce((acc: any, plan: any) => {
@@ -2047,38 +2038,31 @@ export default function CoachPage() {
             </div>
 
             {/* Filter notes by member */}
-            <div style={{ marginTop: '1.5rem' }}>
-              <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Filter by student:</p>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-                <button
-                  onClick={() => setNoteMemberFilter('all')}
-                  style={{
-                    padding: '0.375rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600,
-                    background: noteMemberFilter === 'all' ? 'var(--teal-primary)' : 'var(--surface)',
-                    color: noteMemberFilter === 'all' ? '#fff' : 'var(--text-secondary)',
-                    border: `1px solid ${noteMemberFilter === 'all' ? 'var(--teal-primary)' : 'var(--border)'}`,
-                    cursor: 'pointer', minHeight: 0,
-                  }}
-                >All Students</button>
-                {myMembers.map((m: any) => (
-                  <button
-                    key={m.id}
-                    onClick={() => setNoteMemberFilter(m.id)}
-                    style={{
-                      padding: '0.375rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600,
-                      background: noteMemberFilter === m.id ? 'var(--teal-primary)' : 'var(--surface)',
-                      color: noteMemberFilter === m.id ? '#fff' : 'var(--text-secondary)',
-                      border: `1px solid ${noteMemberFilter === m.id ? 'var(--teal-primary)' : 'var(--border)'}`,
-                      cursor: 'pointer', minHeight: 0,
-                    }}
-                  >{m.name}</button>
-                ))}
-              </div>
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                type="text" placeholder="Search students…" value={noteSearch}
+                onChange={e => setNoteSearch(e.target.value)}
+                style={{ flex: 1, minWidth: '160px', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none' }}
+              />
+              <select
+                value={noteMemberFilter}
+                onChange={e => setNoteMemberFilter(e.target.value)}
+                style={{ background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', cursor: 'pointer' }}
+              >
+                <option value="all">All Students</option>
+                {myGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
             </div>
 
             {/* Notes list — pinned first */}
             {(() => {
-              const filteredNotes = noteMemberFilter === 'all' ? notes : notes.filter((n: any) => n.member_id === noteMemberFilter)
+              let filteredNotes = !noteSearch.trim()
+                ? notes
+                : notes.filter((n: any) => n.member?.name?.toLowerCase().includes(noteSearch.toLowerCase()))
+              if (noteMemberFilter !== 'all') {
+                const groupMemberIds = new Set((groupMembers[noteMemberFilter] ?? []).map((gm: any) => gm.member_id))
+                filteredNotes = filteredNotes.filter((n: any) => groupMemberIds.has(n.member_id))
+              }
               if (filteredNotes.length === 0) return <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No notes for this student yet.</p>
               return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>

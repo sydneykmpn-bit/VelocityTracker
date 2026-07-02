@@ -123,10 +123,6 @@ export default function LeaderboardPage() {
   const [commentsByPR, setCommentsByPR] = useState<Record<string, any[]>>({})
   const [openComments, setOpenComments] = useState<Set<string>>(new Set())
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({})
-  const [kudosPopover, setKudosPopover] = useState<string | null>(null)
-  const [kudosMessage, setKudosMessage] = useState('')
-  const [kudosSentTodayTo, setKudosSentTodayTo] = useState<Set<string>>(new Set())
-  const [kudosConfirm, setKudosConfirm] = useState<string | null>(null)
 
   const filteredExerciseSuggestions = exercise.trim()
     ? EXERCISE_LIST.filter(e => e.toLowerCase().includes(exercise.toLowerCase())).slice(0, 6)
@@ -167,10 +163,9 @@ export default function LeaderboardPage() {
 
   const loadSocial = async (prIds: string[], uid: string) => {
     if (prIds.length === 0) { setReactionsByPR({}); setCommentsByPR({}); return }
-    const [{ data: reactions }, { data: comments }, { data: todayKudos }] = await Promise.all([
+    const [{ data: reactions }, { data: comments }] = await Promise.all([
       supabase.from('leaderboard_reactions').select('*').in('pr_id', prIds),
       supabase.from('leaderboard_comments').select('*, profiles(name)').in('pr_id', prIds).order('created_at', { ascending: true }),
-      supabase.from('kudos').select('to_user').eq('from_user', uid).gte('created_at', `${getLocalDateString()}T00:00:00`),
     ])
     const rMap: Record<string, any[]> = {}
     for (const r of reactions ?? []) { (rMap[r.pr_id] ??= []).push(r) }
@@ -178,7 +173,6 @@ export default function LeaderboardPage() {
     const cMap: Record<string, any[]> = {}
     for (const c of comments ?? []) { (cMap[c.pr_id] ??= []).push(c) }
     setCommentsByPR(cMap)
-    setKudosSentTodayTo(new Set((todayKudos ?? []).map((k: any) => k.to_user)))
   }
 
   const loadData = async (uid: string) => {
@@ -217,16 +211,6 @@ export default function LeaderboardPage() {
     if (!userId) return
     await supabase.from('leaderboard_comments').delete().eq('id', id)
     await loadSocial(publicRecords.map(r => r.id), userId)
-  }
-
-  const sendKudos = async (recipientId: string) => {
-    if (!userId || recipientId === userId || kudosSentTodayTo.has(recipientId)) return
-    await supabase.from('kudos').insert({ from_user: userId, to_user: recipientId, message: kudosMessage.trim() || null })
-    setKudosSentTodayTo(prev => new Set(prev).add(recipientId))
-    setKudosMessage('')
-    setKudosPopover(null)
-    setKudosConfirm(recipientId)
-    setTimeout(() => setKudosConfirm(null), 2500)
   }
 
   useEffect(() => {
@@ -516,8 +500,6 @@ export default function LeaderboardPage() {
                   const profile = r.profiles as { id: string; name: string; gender: string } | null
                   const reactions = reactionsByPR[r.id] ?? []
                   const comments = commentsByPR[r.id] ?? []
-                  const isOwn = profile?.id === userId
-                  const alreadyKudosed = profile?.id ? kudosSentTodayTo.has(profile.id) : false
                   return (
                     <div key={r.id} className="card-vel" style={{ padding: '0.875rem 1rem', background: medal ? `${medal.color}08` : 'var(--surface)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -555,7 +537,8 @@ export default function LeaderboardPage() {
                             <button key={rx.type} onClick={() => toggleReaction(r.id, rx.type)} style={{
                               display: 'flex', alignItems: 'center', gap: '0.3rem', background: mine ? 'rgba(8,119,160,0.15)' : 'var(--surface-raised)',
                               border: `1px solid ${mine ? 'var(--teal-primary)' : 'var(--border)'}`, borderRadius: '999px',
-                              padding: '0.3rem 0.625rem', fontSize: '0.75rem', cursor: 'pointer', color: mine ? 'var(--teal-secondary)' : 'var(--text-secondary)', minHeight: 0,
+                              padding: '0.3rem 0.625rem', fontSize: '0.75rem', cursor: 'pointer',
+                              color: mine ? 'var(--teal-secondary)' : 'var(--text-secondary)', minHeight: 0,
                             }}>
                               {rx.emoji} {count > 0 && count}
                             </button>
@@ -567,40 +550,6 @@ export default function LeaderboardPage() {
                         }}>
                           💬 {comments.length > 0 && comments.length}
                         </button>
-                        {!isOwn && profile?.id && (
-                          <div style={{ position: 'relative', marginLeft: 'auto' }}>
-                            <button
-                              onClick={() => setKudosPopover(kudosPopover === r.id ? null : r.id)}
-                              disabled={alreadyKudosed}
-                              style={{
-                                display: 'flex', alignItems: 'center', gap: '0.3rem', background: alreadyKudosed ? 'var(--surface-raised)' : 'rgba(52,186,194,0.12)',
-                                border: `1px solid ${alreadyKudosed ? 'var(--border)' : 'var(--teal-secondary)'}`, borderRadius: '999px',
-                                padding: '0.3rem 0.625rem', fontSize: '0.75rem', cursor: alreadyKudosed ? 'not-allowed' : 'pointer',
-                                color: alreadyKudosed ? 'var(--text-secondary)' : 'var(--teal-secondary)', minHeight: 0,
-                              }}
-                            >
-                              👊 {alreadyKudosed ? 'Sent' : 'Kudos'}
-                            </button>
-                            {kudosConfirm === profile.id && (
-                              <span style={{ position: 'absolute', top: '-22px', right: 0, fontSize: '0.7rem', color: '#4ade80', whiteSpace: 'nowrap' }}>Kudos sent!</span>
-                            )}
-                            {kudosPopover === r.id && (
-                              <div style={{
-                                position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 30, width: '220px',
-                                background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.75rem',
-                                boxShadow: '0 12px 30px rgba(0,0,0,0.5)',
-                              }}>
-                                <input
-                                  type="text" value={kudosMessage} onChange={e => setKudosMessage(e.target.value)}
-                                  placeholder="Optional message…" style={{ ...inputBase, width: '100%', fontSize: '0.8rem', marginBottom: '0.5rem' }}
-                                />
-                                <button onClick={() => sendKudos(profile.id)} style={{ width: '100%', background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.5rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}>
-                                  Send Kudos
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )}
                       </div>
 
                       {/* Comment thread */}
