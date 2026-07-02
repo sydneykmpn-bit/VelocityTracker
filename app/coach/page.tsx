@@ -316,13 +316,40 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
   )
 }
 
-function AssignProgramModal({ program, members, supabase, onClose }: { program: any; members: any[]; supabase: any; onClose: () => void }) {
+const ASSIGN_MODAL_PAGE_SIZE = 5
+
+function AssignProgramModal({ program, members, groups, supabase, onClose }: { program: any; members: any[]; groups: any[]; supabase: any; onClose: () => void }) {
   const [selected, setSelected] = useState<string[]>([])
   const [startDate, setStartDate] = useState(getLocalDateString())
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
+  const [filterMode, setFilterMode] = useState<'member' | 'group'>('member')
+  const [selectedGroupId, setSelectedGroupId] = useState('')
+  const [groupMembersList, setGroupMembersList] = useState<any[]>([])
+  const [loadingGroupMembers, setLoadingGroupMembers] = useState(false)
+  const [page, setPage] = useState(0)
 
   const toggleMember = (id: string) => setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+
+  useEffect(() => { setPage(0) }, [filterMode, selectedGroupId])
+
+  useEffect(() => {
+    if (filterMode !== 'group' || !selectedGroupId) { setGroupMembersList([]); return }
+    setLoadingGroupMembers(true)
+    supabase
+      .from('group_members')
+      .select('member_id, profiles(id, name)')
+      .eq('group_id', selectedGroupId)
+      .then(({ data, error }: any) => {
+        if (error) console.error('AssignProgramModal: group_members query failed', error)
+        setGroupMembersList((data ?? []).map((gm: any) => gm.profiles).filter(Boolean))
+        setLoadingGroupMembers(false)
+      })
+  }, [filterMode, selectedGroupId, supabase])
+
+  const activeList = filterMode === 'member' ? members : groupMembersList
+  const totalPages = Math.max(1, Math.ceil(activeList.length / ASSIGN_MODAL_PAGE_SIZE))
+  const pageItems = activeList.slice(page * ASSIGN_MODAL_PAGE_SIZE, page * ASSIGN_MODAL_PAGE_SIZE + ASSIGN_MODAL_PAGE_SIZE)
 
   const handleAssign = async () => {
     if (selected.length === 0) return
@@ -378,15 +405,74 @@ function AssignProgramModal({ program, members, supabase, onClose }: { program: 
               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={{ ...inputBase, width: '100%' }} />
             </div>
             <label style={labelBase}>Members</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', maxHeight: '260px', overflowY: 'auto', marginBottom: '1.25rem' }}>
-              {members.length === 0 && <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No members in your groups yet.</p>}
-              {members.map(m => (
-                <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.5rem 0.625rem', borderRadius: '0.5rem', background: selected.includes(m.id) ? 'rgba(8,119,160,0.15)' : 'var(--surface-raised)', cursor: 'pointer', border: `1px solid ${selected.includes(m.id) ? 'var(--teal-primary)' : 'transparent'}` }}>
-                  <input type="checkbox" checked={selected.includes(m.id)} onChange={() => toggleMember(m.id)} style={{ minHeight: 0, width: 'auto' }} />
-                  <span style={{ fontSize: '0.875rem' }}>{m.name}</span>
-                </label>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              {(['member', 'group'] as const).map(mode => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setFilterMode(mode)}
+                  style={{
+                    padding: '0.35rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize',
+                    background: filterMode === mode ? 'var(--teal-primary)' : 'var(--surface-raised)',
+                    color: filterMode === mode ? '#fff' : 'var(--text-secondary)',
+                    border: `1px solid ${filterMode === mode ? 'var(--teal-primary)' : 'var(--border)'}`,
+                    minHeight: 0,
+                  }}
+                >
+                  {mode}
+                </button>
               ))}
             </div>
+
+            {filterMode === 'group' && (
+              <select
+                value={selectedGroupId}
+                onChange={e => setSelectedGroupId(e.target.value)}
+                style={{ ...inputBase, width: '100%', cursor: 'pointer', marginBottom: '0.75rem' }}
+              >
+                <option value="">— Select a group —</option>
+                {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', minHeight: '80px', marginBottom: '0.5rem' }}>
+              {filterMode === 'group' && !selectedGroupId ? (
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Select a group to see its members.</p>
+              ) : filterMode === 'group' && loadingGroupMembers ? (
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Loading…</p>
+              ) : activeList.length === 0 ? (
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No students found.</p>
+              ) : (
+                pageItems.map(m => (
+                  <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.5rem 0.625rem', borderRadius: '0.5rem', background: selected.includes(m.id) ? 'rgba(8,119,160,0.15)' : 'var(--surface-raised)', cursor: 'pointer', border: `1px solid ${selected.includes(m.id) ? 'var(--teal-primary)' : 'transparent'}` }}>
+                    <input type="checkbox" checked={selected.includes(m.id)} onChange={() => toggleMember(m.id)} style={{ minHeight: 0, width: 'auto' }} />
+                    <span style={{ fontSize: '0.875rem' }}>{m.name}</span>
+                  </label>
+                ))
+              )}
+            </div>
+
+            {activeList.length > ASSIGN_MODAL_PAGE_SIZE && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  style={{ padding: '0.35rem 0.75rem', borderRadius: '0.375rem', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: page === 0 ? 'var(--text-secondary)' : 'var(--text-primary)', fontSize: '0.75rem', fontWeight: 600, cursor: page === 0 ? 'not-allowed' : 'pointer', opacity: page === 0 ? 0.5 : 1, minHeight: 0 }}
+                >
+                  ← Prev
+                </button>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Page {page + 1} of {totalPages}</span>
+                <button
+                  type="button"
+                  onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  style={{ padding: '0.35rem 0.75rem', borderRadius: '0.375rem', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: page >= totalPages - 1 ? 'var(--text-secondary)' : 'var(--text-primary)', fontSize: '0.75rem', fontWeight: 600, cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer', opacity: page >= totalPages - 1 ? 0.5 : 1, minHeight: 0 }}
+                >
+                  Next →
+                </button>
+              </div>
+            )}
             <button onClick={handleAssign} disabled={saving || selected.length === 0} style={{
               width: '100%', background: saving || selected.length === 0 ? '#0d1a1e' : 'var(--teal-primary)', color: 'white',
               border: 'none', borderRadius: '0.5rem', padding: '0.875rem', fontWeight: 700, fontSize: '0.875rem',
@@ -496,18 +582,46 @@ export default function CoachPage() {
   const [assigningProgram, setAssigningProgram] = useState<any | null>(null)
 
   const loadMyMembers = async (coachId: string) => {
-    const { data: groupData } = await supabase.from('groups').select('id').eq('coach_id', coachId)
-    if (!groupData || groupData.length === 0) { setMyMembers([]); return }
-    const groupIds = groupData.map((g: any) => g.id)
-    const { data: gmData } = await supabase.from('group_members').select('member_id, profiles(id, name, email)').in('group_id', groupIds)
-    const seen = new Set<string>()
-    const unique: any[] = []
-    for (const gm of gmData ?? []) {
-      if (!seen.has(gm.member_id)) { seen.add(gm.member_id); unique.push(gm.profiles) }
+    const memberIds = new Set<string>()
+
+    // a) members in any group where groups.coach_id = coachId
+    const { data: groupData, error: groupErr } = await supabase.from('groups').select('id').eq('coach_id', coachId)
+    if (groupErr) console.error('loadMyMembers: groups query failed', groupErr)
+    const groupIds = (groupData ?? []).map((g: any) => g.id)
+    if (groupIds.length > 0) {
+      const { data: gmData, error: gmErr } = await supabase.from('group_members').select('member_id').in('group_id', groupIds)
+      if (gmErr) console.error('loadMyMembers: group_members query failed', gmErr)
+      for (const gm of gmData ?? []) memberIds.add(gm.member_id)
     }
-    const withCounts = await Promise.all(unique.map(async m => {
-      const { count } = await supabase.from('workouts').select('*', { count: 'exact', head: true }).eq('user_id', m.id)
-      const { data: last } = await supabase.from('workouts').select('date, created_at').eq('user_id', m.id).order('created_at', { ascending: false }).limit(1)
+
+    // b) members with any workout_plans row assigned by this coach
+    const { data: planData, error: planErr } = await supabase.from('workout_plans').select('member_id').eq('coach_id', coachId)
+    if (planErr) console.error('loadMyMembers: workout_plans query failed', planErr)
+    for (const p of planData ?? []) memberIds.add(p.member_id)
+
+    // c) members assigned to any program owned by this coach
+    const { data: myPrograms, error: programsErr } = await supabase.from('programs').select('id').eq('coach_id', coachId)
+    if (programsErr) console.error('loadMyMembers: programs query failed', programsErr)
+    const programIds = (myPrograms ?? []).map((p: any) => p.id)
+    if (programIds.length > 0) {
+      const { data: assignData, error: assignErr } = await supabase.from('program_assignments').select('member_id').in('program_id', programIds)
+      if (assignErr) console.error('loadMyMembers: program_assignments query failed', assignErr)
+      for (const a of assignData ?? []) memberIds.add(a.member_id)
+    }
+
+    if (memberIds.size === 0) { setMyMembers([]); return }
+
+    const { data: profilesData, error: profilesErr } = await supabase
+      .from('profiles')
+      .select('id, name, email')
+      .in('id', Array.from(memberIds))
+    if (profilesErr) console.error('loadMyMembers: profiles query failed', profilesErr)
+
+    const withCounts = await Promise.all((profilesData ?? []).map(async (m: any) => {
+      const { count, error: countErr } = await supabase.from('workouts').select('*', { count: 'exact', head: true }).eq('user_id', m.id)
+      if (countErr) console.error('loadMyMembers: workout count query failed', countErr)
+      const { data: last, error: lastErr } = await supabase.from('workouts').select('date, created_at').eq('user_id', m.id).order('created_at', { ascending: false }).limit(1)
+      if (lastErr) console.error('loadMyMembers: last workout query failed', lastErr)
       return { ...m, workoutCount: count ?? 0, lastWorkout: last?.[0]?.date ?? last?.[0]?.created_at ?? null }
     }))
     setMyMembers(withCounts)
@@ -626,7 +740,15 @@ export default function CoachPage() {
   const handleAddToGroup = async (groupId: string) => {
     const memberId = addMemberId[groupId]
     if (!memberId || !userId) return
-    await supabase.from('group_members').insert({ group_id: groupId, member_id: memberId })
+    const { data, error } = await supabase
+      .from('group_members')
+      .insert({ group_id: groupId, member_id: memberId })
+      .select('*, profiles(name, email, gender)')
+      .single()
+    if (!error && data) {
+      // Optimistic update for instant feedback — reloads below reconcile with the server
+      setGroupMembers(prev => ({ ...prev, [groupId]: [...(prev[groupId] ?? []), data] }))
+    }
     await loadGroupMembers(groupId)
     await loadMyGroups(userId)
     await loadMyMembers(userId)
@@ -1219,12 +1341,13 @@ export default function CoachPage() {
                   {myGroups.map(g => {
                     const isExpanded = expandedGroup === g.id
                     const gms = groupMembers[g.id] ?? []
+                    const memberCount = groupMembers[g.id] ? groupMembers[g.id].length : ((g.group_members as any[])?.[0]?.count ?? 0)
                     return (
                       <div key={g.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', overflow: 'hidden' }}>
                         <button onClick={() => toggleGroup(g.id)} style={{ width: '100%', background: 'none', border: 'none', padding: '1rem 1.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#F2F2F2' }}>
                           <div style={{ textAlign: 'left' }}>
                             <h3 style={{ fontWeight: 600, marginBottom: '0.15rem' }}>{g.name}</h3>
-                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{(g.group_members as any[])?.[0]?.count ?? 0} members</p>
+                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{memberCount} members</p>
                           </div>
                           {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)' }} />}
                         </button>
@@ -2176,6 +2299,7 @@ export default function CoachPage() {
         <AssignProgramModal
           program={assigningProgram}
           members={myMembers}
+          groups={myGroups}
           supabase={supabase}
           onClose={() => setAssigningProgram(null)}
         />
