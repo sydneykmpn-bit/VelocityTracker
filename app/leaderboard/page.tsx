@@ -184,7 +184,7 @@ export default function LeaderboardPage() {
   const toggleReaction = async (prId: string, type: string) => {
     if (!userId) return
     setReactionError('')
-    const existing = (reactionsByPR[prId] ?? []).find(r => r.user_id === userId && r.reaction_type === type)
+    const existing = (reactionsByPR[prId] ?? []).find(r => r.user_id === userId && r.emoji === type)
     if (existing) {
       const { error } = await supabase.from('leaderboard_reactions').delete().eq('id', existing.id)
       if (error) {
@@ -193,7 +193,7 @@ export default function LeaderboardPage() {
         return
       }
     } else {
-      const { error } = await supabase.from('leaderboard_reactions').insert({ pr_id: prId, user_id: userId, reaction_type: type })
+      const { error } = await supabase.from('leaderboard_reactions').insert({ pr_id: prId, user_id: userId, emoji: type })
       if (error) {
         console.error('toggleReaction failed:', error)
         setReactionError(error.message)
@@ -545,8 +545,8 @@ export default function LeaderboardPage() {
                       {/* Social footer */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem', paddingTop: '0.625rem', borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
                         {REACTIONS.map(rx => {
-                          const count = reactions.filter(x => x.reaction_type === rx.type).length
-                          const mine = reactions.some(x => x.reaction_type === rx.type && x.user_id === userId)
+                          const count = reactions.filter(x => x.emoji === rx.type).length
+                          const mine = reactions.some(x => x.emoji === rx.type && x.user_id === userId)
                           return (
                             <button key={rx.type} onClick={() => toggleReaction(r.id, rx.type)} style={{
                               display: 'flex', alignItems: 'center', gap: '0.3rem', background: mine ? 'rgba(8,119,160,0.15)' : 'var(--surface-raised)',
