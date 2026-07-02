@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { ChevronDown, ChevronUp, Trash2, Pencil, Plus, Calendar } from 'lucide-react'
 import { getLocalDateString, formatLocalDate } from '@/lib/utils'
 
-type Tab = 'members' | 'groups' | 'assign' | 'calendar' | 'notes' | 'programs'
+type Tab = 'members' | 'groups' | 'assign' | 'assigned' | 'calendar' | 'notes' | 'programs'
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 const inputBase: React.CSSProperties = {
@@ -540,6 +540,7 @@ export default function CoachPage() {
   const [activePlanEditSuggestion, setActivePlanEditSuggestion] = useState<number | null>(null)
   const [planStatusFilter, setPlanStatusFilter] = useState<'all'|'pending'|'completed'|'skipped'|'rescheduled'>('all')
   const [planMemberFilter, setPlanMemberFilter] = useState('all')
+  const [planSearch, setPlanSearch] = useState('')
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<{id: string; name: string} | null>(null)
   const [memberSearch, setMemberSearch] = useState('')
   const [memberSort, setMemberSort] = useState<'name' | 'most-active' | 'least-active' | 'last-workout'>('name')
@@ -563,6 +564,8 @@ export default function CoachPage() {
   // Notes
   const [notes, setNotes] = useState<any[]>([])
   const [notesMemberId, setNotesMemberId] = useState('')
+  const [noteMemberFilter, setNoteMemberFilter] = useState('all')
+  const [noteSearch, setNoteSearch] = useState('')
   const [noteText, setNoteText] = useState('')
   const [editingNote, setEditingNote] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
@@ -711,6 +714,16 @@ export default function CoachPage() {
     supabase.from('workouts').select('id, title, type, date, duration').eq('user_id', assignForm.member_id).order('date', { ascending: false }).limit(3).then(({ data }) => setAssignMemberWorkouts(data || []))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignForm.member_id])
+
+  useEffect(() => {
+    if (planMemberFilter !== 'all' && !groupMembers[planMemberFilter]) loadGroupMembers(planMemberFilter)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planMemberFilter])
+
+  useEffect(() => {
+    if (noteMemberFilter !== 'all' && !groupMembers[noteMemberFilter]) loadGroupMembers(noteMemberFilter)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noteMemberFilter])
 
   const toggleMember = async (memberId: string) => {
     if (expandedMember === memberId) { setExpandedMember(null); return }
@@ -1137,6 +1150,7 @@ export default function CoachPage() {
     { value: 'members', label: 'My Students' },
     { value: 'groups', label: 'Groups' },
     { value: 'assign', label: 'Assign Plan' },
+    { value: 'assigned', label: 'Assigned Plans' },
     { value: 'programs', label: 'Programs' },
     { value: 'calendar', label: 'Workout Calendar' },
     { value: 'notes', label: 'Notes' },
@@ -1167,7 +1181,7 @@ export default function CoachPage() {
               key={card.label}
               onClick={() => {
                 if (card.label === 'Groups') switchTab('groups')
-                else if (card.label === 'Needs Review') switchTab('assign')
+                else if (card.label === 'Needs Review') switchTab('assigned')
                 else switchTab('members')
               }}
               style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.1rem', textAlign: 'left', cursor: 'pointer' }}
@@ -1674,7 +1688,12 @@ export default function CoachPage() {
                 </button>
               </form>
             </div>
+          </div>
+        )}
 
+        {/* ── ASSIGNED PLANS TAB ── */}
+        {activeTab === 'assigned' && (
+          <div key="tab-assigned">
             {/* Filter assigned plans by member */}
             <div style={{ marginTop: '1.5rem' }}>
               <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Filter by student:</p>
@@ -2027,9 +2046,43 @@ export default function CoachPage() {
               </form>
             </div>
 
+            {/* Filter notes by member */}
+            <div style={{ marginTop: '1.5rem' }}>
+              <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Filter by student:</p>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                <button
+                  onClick={() => setNoteMemberFilter('all')}
+                  style={{
+                    padding: '0.375rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600,
+                    background: noteMemberFilter === 'all' ? 'var(--teal-primary)' : 'var(--surface)',
+                    color: noteMemberFilter === 'all' ? '#fff' : 'var(--text-secondary)',
+                    border: `1px solid ${noteMemberFilter === 'all' ? 'var(--teal-primary)' : 'var(--border)'}`,
+                    cursor: 'pointer', minHeight: 0,
+                  }}
+                >All Students</button>
+                {myMembers.map((m: any) => (
+                  <button
+                    key={m.id}
+                    onClick={() => setNoteMemberFilter(m.id)}
+                    style={{
+                      padding: '0.375rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600,
+                      background: noteMemberFilter === m.id ? 'var(--teal-primary)' : 'var(--surface)',
+                      color: noteMemberFilter === m.id ? '#fff' : 'var(--text-secondary)',
+                      border: `1px solid ${noteMemberFilter === m.id ? 'var(--teal-primary)' : 'var(--border)'}`,
+                      cursor: 'pointer', minHeight: 0,
+                    }}
+                  >{m.name}</button>
+                ))}
+              </div>
+            </div>
+
             {/* Notes list — pinned first */}
+            {(() => {
+              const filteredNotes = noteMemberFilter === 'all' ? notes : notes.filter((n: any) => n.member_id === noteMemberFilter)
+              if (filteredNotes.length === 0) return <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No notes for this student yet.</p>
+              return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {[...notes].sort((a, b) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0)).map(note => (
+              {[...filteredNotes].sort((a, b) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0)).map(note => (
                 <div key={note.id} style={{
                   background: 'var(--surface)', borderRadius: '0.75rem', overflow: 'hidden',
                   border: note.is_pinned ? '1px solid var(--teal-primary)' : '1px solid var(--border)',
@@ -2101,12 +2154,9 @@ export default function CoachPage() {
                   </div>
                 </div>
               ))}
-              {notes.length === 0 && (
-                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '3rem', textAlign: 'center' }}>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No notes yet. Add a note above.</p>
-                </div>
-              )}
             </div>
+              )
+            })()}
           </div>
         )}
 
