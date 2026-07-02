@@ -197,7 +197,16 @@ export default function StudentPage() {
         .select('*, workout_plan_exercises(*), profiles!workout_plans_coach_id_fkey(name)')
         .eq('member_id', user.id)
         .order('scheduled_date', { ascending: false })
-      setAssignedPlans(plans || [])
+
+      // Client-side catch-up only — a plan won't flip to 'skipped' until the member or their coach next opens /student or /dashboard, not on a schedule.
+      const today = getLocalDateString()
+      const overdueIds = (plans ?? []).filter((p: any) => p.status === 'pending' && p.scheduled_date < today).map((p: any) => p.id)
+      let finalPlans = plans ?? []
+      if (overdueIds.length > 0) {
+        await supabase.from('workout_plans').update({ status: 'skipped' }).in('id', overdueIds)
+        finalPlans = finalPlans.map((p: any) => overdueIds.includes(p.id) ? { ...p, status: 'skipped' } : p)
+      }
+      setAssignedPlans(finalPlans)
 
       const { data: workouts } = await supabase
         .from('workouts')
@@ -299,40 +308,16 @@ export default function StudentPage() {
           </Link>
         </div>
 
-        <div className="student-overview" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(240px, 0.8fr)', gap: '1rem', marginBottom: '1.25rem' }}>
-          <div style={{ ...cardStyle, padding: '1.25rem' }}>
-            <p style={{ color: 'var(--teal-secondary)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>Upcoming Workouts</p>
-            <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.75rem', letterSpacing: '0.03em', marginBottom: '0.25rem' }}>
-              {todayPlans.length > 0 ? todayPlans[0].title : nextPlan ? nextPlan.title : 'No assigned plan'}
-            </h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: 1.5, marginBottom: '1rem' }}>
-              {todayPlans.length > 0
-                ? `${todayPlans.length} plan${todayPlans.length === 1 ? '' : 's'} scheduled for today.`
-                : nextPlan
-                ? `Next scheduled for ${formatDate(nextPlan.scheduled_date)}.`
-                : 'You are clear right now. Check back after your coach assigns a plan.'}
-            </p>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              {(() => {
-                const actionPlan = todayPlans.length > 0 ? todayPlans[0] : nextPlan
-                const isLogging = actionPlan && loggingPlanId === actionPlan.id
-                return actionPlan ? (
-                  <button
-                    onClick={() => handleLogWorkoutFromPlan(actionPlan)}
-                    disabled={isLogging}
-                    style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.625rem 0.875rem', fontSize: '0.875rem', fontWeight: 700, cursor: isLogging ? 'not-allowed' : 'pointer', opacity: isLogging ? 0.7 : 1 }}
-                  >
-                    {isLogging ? 'Logging…' : 'Log Workout'}
-                  </button>
-                ) : null
-              })()}
-            </div>
-          </div>
-
+        <div className="student-overview" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', marginBottom: '1.25rem' }}>
           <div style={{ ...cardStyle, padding: '1.25rem' }}>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.75rem' }}>Coach Context</p>
             <p style={{ fontWeight: 700, marginBottom: '0.25rem' }}>{coach?.name ?? 'No coach assigned'}</p>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.5 }}>{coach?.email ?? 'Join a group or ask an admin to assign your coach.'}</p>
+            {nextPlan && todayPlans.length === 0 && (
+              <p style={{ color: 'var(--teal-secondary)', fontSize: '0.8rem', marginTop: '0.5rem' }}>
+                Next: {nextPlan.title} on {formatDate(nextPlan.scheduled_date)}
+              </p>
+            )}
             <div style={{ height: 1, background: 'var(--border)', margin: '1rem 0' }} />
             <p style={{ color: skippedPlans.length > 0 ? '#f59e0b' : 'var(--text-secondary)', fontSize: '0.8rem' }}>
               {skippedPlans.length > 0 ? `${skippedPlans.length} skipped plan${skippedPlans.length === 1 ? '' : 's'} to revisit.` : 'No skipped plans waiting.'}
@@ -356,17 +341,29 @@ export default function StudentPage() {
         {todayPlans.length > 0 && (
           <div style={{ background: 'rgba(8,119,160,0.08)', border: '2px solid var(--teal-primary)', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.5rem' }}>
             <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--teal-secondary)', marginBottom: '0.5rem' }}>Today&apos;s Assignment</p>
-            {todayPlans.map(plan => (
-              <div key={plan.id}>
-                <h3 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '0.25rem' }}>{plan.title}</h3>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
-                  From Coach {plan.profiles?.name ?? 'Coach'} - {plan.workout_plan_exercises?.length || 0} exercises
-                </p>
-                <Link href="/dashboard" style={{ background: 'var(--teal-primary)', color: 'white', padding: '0.5rem 1rem', borderRadius: '0.5rem', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 700 }}>
-                  View on Dashboard
-                </Link>
-              </div>
-            ))}
+            {todayPlans.map(plan => {
+              const isLogging = loggingPlanId === plan.id
+              return (
+                <div key={plan.id}>
+                  <h3 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '0.25rem' }}>{plan.title}</h3>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                    From Coach {plan.profiles?.name ?? 'Coach'} - {plan.workout_plan_exercises?.length || 0} exercises
+                  </p>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <Link href="/dashboard" style={{ background: 'var(--teal-primary)', color: 'white', padding: '0.5rem 1rem', borderRadius: '0.5rem', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 700 }}>
+                      View on Dashboard
+                    </Link>
+                    <button
+                      onClick={() => handleLogWorkoutFromPlan(plan)}
+                      disabled={isLogging}
+                      style={{ background: 'var(--surface)', color: 'var(--text-primary)', border: '1px solid var(--teal-primary)', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.875rem', fontWeight: 700, cursor: isLogging ? 'not-allowed' : 'pointer', opacity: isLogging ? 0.7 : 1 }}
+                    >
+                      {isLogging ? 'Logging…' : 'Log Workout'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
 

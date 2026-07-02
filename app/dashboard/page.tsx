@@ -38,6 +38,17 @@ export default function DashboardPage() {
     const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
     const nextWeek = new Date(); nextWeek.setDate(nextWeek.getDate() + 7)
 
+    // Client-side catch-up only — a plan won't flip to 'skipped' until the member or their coach next opens /dashboard or /student, not on a schedule.
+    const { data: overdueP } = await supabase
+      .from('workout_plans')
+      .select('id')
+      .eq('member_id', uid)
+      .eq('status', 'pending')
+      .lt('scheduled_date', today)
+    if (overdueP && overdueP.length > 0) {
+      await supabase.from('workout_plans').update({ status: 'skipped' }).in('id', overdueP.map((p: any) => p.id))
+    }
+
     const [
       { data: prof },
       { data: workoutsData },
