@@ -123,6 +123,7 @@ export default function LeaderboardPage() {
   const [commentsByPR, setCommentsByPR] = useState<Record<string, any[]>>({})
   const [openComments, setOpenComments] = useState<Set<string>>(new Set())
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({})
+  const [reactionError, setReactionError] = useState('')
 
   const filteredExerciseSuggestions = exercise.trim()
     ? EXERCISE_LIST.filter(e => e.toLowerCase().includes(exercise.toLowerCase())).slice(0, 6)
@@ -182,11 +183,22 @@ export default function LeaderboardPage() {
 
   const toggleReaction = async (prId: string, type: string) => {
     if (!userId) return
+    setReactionError('')
     const existing = (reactionsByPR[prId] ?? []).find(r => r.user_id === userId && r.reaction_type === type)
     if (existing) {
-      await supabase.from('leaderboard_reactions').delete().eq('id', existing.id)
+      const { error } = await supabase.from('leaderboard_reactions').delete().eq('id', existing.id)
+      if (error) {
+        console.error('toggleReaction failed:', error)
+        setReactionError(error.message)
+        return
+      }
     } else {
-      await supabase.from('leaderboard_reactions').insert({ pr_id: prId, user_id: userId, reaction_type: type })
+      const { error } = await supabase.from('leaderboard_reactions').insert({ pr_id: prId, user_id: userId, reaction_type: type })
+      if (error) {
+        console.error('toggleReaction failed:', error)
+        setReactionError(error.message)
+        return
+      }
     }
     await loadSocial(publicRecords.map(r => r.id), userId)
   }
@@ -487,6 +499,8 @@ export default function LeaderboardPage() {
                 }}>{g.label}</button>
               ))}
             </div>
+
+            {reactionError && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{reactionError}</div>}
 
             {/* Mobile card layout */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }} className="lb-mobile">
