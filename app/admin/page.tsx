@@ -421,7 +421,7 @@ export default function AdminPage() {
   const loadGroupMembers = async (groupId: string) => {
     const { data } = await supabase
       .from('group_members')
-      .select('*, profiles(name, email)')
+      .select('*, profiles!member_id(name, email)')
       .eq('group_id', groupId)
     setGroupMembers(prev => ({ ...prev, [groupId]: data ?? [] }))
   }
@@ -520,11 +520,15 @@ export default function AdminPage() {
   const handleAddToGroup = async (groupId: string) => {
     const memberId = addMemberId[groupId]
     if (!memberId) return
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('group_members')
       .insert({ group_id: groupId, member_id: memberId })
-      .select('*, profiles(name, email, gender)')
+      .select('*, profiles!member_id(name, email, gender)')
       .single()
+    if (error) {
+      setError(error.message)
+      return
+    }
     if (data) {
       setGroupMembers(prev => ({ ...prev, [groupId]: [...(prev[groupId] ?? []), data] }))
     }

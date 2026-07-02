@@ -41,6 +41,8 @@ export default function ClassDetailModal({
   const [memberCandidates, setMemberCandidates] = useState<any[]>([])
   const [addAttendeeSearch, setAddAttendeeSearch] = useState('')
   const [addAttendeeLoading, setAddAttendeeLoading] = useState(false)
+  const [addAttendeeError, setAddAttendeeError] = useState('')
+  const [rsvpError, setRsvpError] = useState('')
 
   const classId = cls.is_dynamic ? cls.parent_class_id : cls.id
 
@@ -68,26 +70,28 @@ export default function ClassDetailModal({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userRole])
 
+  const loadAttendees = async () => {
+    const attendanceClassId = cls.is_dynamic ? cls.parent_class_id : cls.id
+    if (!attendanceClassId) return
+    setLoadingAttendees(true)
+    const { data } = await supabase
+      .from('class_attendees')
+      .select('*, profiles(name, email, gender)')
+      .eq('class_id', attendanceClassId)
+    setAttendees(data || [])
+    const mine = (data || []).find((a: any) => a.member_id === userId)
+    setMyAttendance(mine || null)
+    setLoadingAttendees(false)
+  }
+
   useEffect(() => {
-    async function load() {
-      const attendanceClassId = cls.is_dynamic ? cls.parent_class_id : cls.id
-      if (!attendanceClassId) return
-      setLoadingAttendees(true)
-      const { data } = await supabase
-        .from('class_attendees')
-        .select('*, profiles(name, email, gender)')
-        .eq('class_id', attendanceClassId)
-      setAttendees(data || [])
-      const mine = (data || []).find((a: any) => a.member_id === userId)
-      setMyAttendance(mine || null)
-      setLoadingAttendees(false)
-    }
-    load()
+    loadAttendees()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cls.id, cls.parent_class_id, cls.is_dynamic, userId])
 
   const handleRSVP = async () => {
     setRsvpLoading(true)
+    setRsvpError('')
 
     // For dynamic recurring instances, use parent_class_id
     // For stored classes, use the actual id
@@ -105,10 +109,14 @@ export default function ClassDetailModal({
         .delete()
         .eq('id', myAttendance.id)
 
-      if (!error) {
-        setMyAttendance(null)
-        setAttendees(prev => prev.filter((a: any) => a.id !== myAttendance.id))
+      if (error) {
+        console.error('handleRSVP failed:', error)
+        setRsvpError(error.message)
+        setRsvpLoading(false)
+        return
       }
+
+      await loadAttendees()
     } else {
       // Add attendance — check if already exists first to avoid duplicate
       const { data: existing } = await supabase
@@ -119,23 +127,27 @@ export default function ClassDetailModal({
         .maybeSingle()
 
       if (existing) {
-        // Already exists, just update local state
-        setMyAttendance(existing)
+        await loadAttendees()
       } else {
         const { data, error } = await supabase
           .from('class_attendees')
           .insert({
             class_id: attendanceClassId,
             member_id: userId,
-            rsvp_status: 'attending',
             status: 'scheduled',
           })
           .select('*, profiles(name, email, gender)')
           .single()
 
-        if (!error && data) {
-          setMyAttendance(data)
-          setAttendees(prev => [...prev, data])
+        if (error) {
+          console.error('handleRSVP failed:', error)
+          setRsvpError(error.message)
+          setRsvpLoading(false)
+          return
+        }
+
+        if (data) {
+          await loadAttendees()
         }
       }
     }
@@ -149,6 +161,7 @@ export default function ClassDetailModal({
     if (!attendanceClassId) return
 
     setAddAttendeeLoading(true)
+    setAddAttendeeError('')
 
     // Check if already exists first to avoid duplicate
     const { data: existing } = await supabase
@@ -164,25 +177,26 @@ export default function ClassDetailModal({
         .insert({
           class_id: attendanceClassId,
           member_id: memberId,
-          rsvp_status: 'attending',
           status: 'scheduled',
         })
         .select('*, profiles(name, email, gender)')
         .single()
 
-      if (!error && data) {
-        setAttendees(prev => [...prev, data])
+      if (error) {
+        console.error('handleAddAttendee failed:', error)
+        setAddAttendeeError(error.message)
+        setAddAttendeeLoading(false)
+        return
+      }
+
+      if (data) {
+        await loadAttendees()
       }
     }
 
     setAddAttendeeSearch('')
     setAddAttendeeLoading(false)
     onUpdate()
-  }
-
-  const handleMarkAttendance = async (attendeeId: string, status: string) => {
-    await supabase.from('class_attendees').update({ status }).eq('id', attendeeId)
-    setAttendees(prev => prev.map((a: any) => a.id === attendeeId ? { ...a, status } : a))
   }
 
   const handleDeleteClass = async () => {
@@ -413,6 +427,11 @@ export default function ClassDetailModal({
               </div>
             ) : (
               <>
+                {rsvpError && (
+                  <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.375rem', padding: '0.5rem 0.625rem', color: '#f87171', fontSize: '0.75rem', marginBottom: '0.5rem' }}>
+                    {rsvpError}
+                  </div>
+                )}
                 <button
                   onClick={handleRSVP}
                   disabled={rsvpLoading}
@@ -463,7 +482,7 @@ export default function ClassDetailModal({
               <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)' }}>Attendees ({attendees.length})</p>
               {(userRole === 'admin' || userRole === 'coach') && (
                 <button
-                  onClick={() => setShowAddAttendee(o => !o)}
+                  onClick={() => { setShowAddAttendee(o => !o); setAddAttendeeError('') }}
                   style={{ padding: '0.3rem 0.7rem', borderRadius: '0.375rem', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: 'var(--teal-secondary)', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, minHeight: 0, flexShrink: 0 }}
                 >
                   {showAddAttendee ? '✕ Cancel' : '+ Add Attendee'}
@@ -474,6 +493,11 @@ export default function ClassDetailModal({
             {(userRole === 'admin' || userRole === 'coach') && showAddAttendee && (
               <div style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '0.75rem' }}>
                 <label style={labelBase}>Search Members</label>
+                {addAttendeeError && (
+                  <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.375rem', padding: '0.5rem 0.625rem', color: '#f87171', fontSize: '0.75rem', marginBottom: '0.5rem' }}>
+                    {addAttendeeError}
+                  </div>
+                )}
                 <input
                   style={inputBase}
                   value={addAttendeeSearch}
@@ -522,15 +546,6 @@ export default function ClassDetailModal({
                         {(userRole === 'coach' || userRole === 'admin') && <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{a.profiles?.email}</p>}
                       </div>
                     </div>
-                    {(userRole === 'coach' || userRole === 'admin') && (
-                      <div style={{ display: 'flex', gap: '0.25rem', flexShrink: 0 }}>
-                        {(['attended', 'absent', 'excused'] as const).map(s => (
-                          <button key={s} onClick={() => handleMarkAttendance(a.id, s)} style={{ width: '28px', height: '28px', borderRadius: '0.25rem', border: 'none', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 700, minHeight: 0, background: a.status === s ? (s === 'attended' ? '#22c55e' : s === 'absent' ? '#ef4444' : '#f59e0b') : 'var(--surface)', color: a.status === s ? '#fff' : 'var(--text-secondary)' }}>
-                            {s === 'attended' ? '✓' : s === 'absent' ? '✗' : 'E'}
-                          </button>
-                        ))}
-                      </div>
-                    )}
                     {userRole === 'member' && a.member_id === userId && (
                       <span style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '999px', background: a.status === 'attended' ? 'rgba(34,197,94,0.2)' : 'rgba(8,119,160,0.2)', color: a.status === 'attended' ? '#4ade80' : 'var(--teal-secondary)' }}>
                         {a.status === 'attended' ? 'Attended' : 'Attending'}

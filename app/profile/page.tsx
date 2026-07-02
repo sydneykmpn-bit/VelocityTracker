@@ -41,6 +41,12 @@ export default function ProfilePage() {
     currentPassword: '', newPassword: '', confirmPassword: '',
   })
 
+  const [usernameOpen, setUsernameOpen] = useState(false)
+  const [usernameSaving, setUsernameSaving] = useState(false)
+  const [usernameError, setUsernameError] = useState('')
+  const [usernameSuccess, setUsernameSuccess] = useState('')
+  const [newUsername, setNewUsername] = useState('')
+
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -121,6 +127,34 @@ export default function ProfilePage() {
     setPasswordSuccess(true)
     setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
     setPasswordSaving(false)
+  }
+
+  const handleUsernameChange = async () => {
+    setUsernameError(''); setUsernameSuccess('')
+
+    const cleanUsername = newUsername.toLowerCase().trim()
+    if (!/^[a-z0-9_]{3,20}$/.test(cleanUsername)) {
+      setUsernameError('Username must be 3–20 characters, letters/numbers/underscores only.')
+      return
+    }
+
+    setUsernameSaving(true)
+    const res = await fetch('/api/user/change-username', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newUsername: cleanUsername }),
+    })
+    if (!res.ok) {
+      const { error: err } = await res.json().catch(() => ({ error: 'Failed to change username.' }))
+      setUsernameError(err || 'Failed to change username.')
+      setUsernameSaving(false)
+      return
+    }
+
+    setProfile((prev: any) => prev ? { ...prev, username: cleanUsername, email: `${cleanUsername}@velocity.local` } : prev)
+    setUsernameSuccess(`Username updated! You'll use '${cleanUsername}' to log in from now on.`)
+    setNewUsername('')
+    setUsernameSaving(false)
   }
 
   if (loading) {
@@ -315,6 +349,58 @@ export default function ProfilePage() {
                 fontWeight: 700, fontSize: '1rem', cursor: passwordSaving ? 'not-allowed' : 'pointer',
               }}>
                 {passwordSaving ? 'Updating…' : 'Update Password'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Change Username */}
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem', marginBottom: '1rem', overflow: 'hidden' }}>
+          <button
+            type="button"
+            onClick={() => setUsernameOpen(o => !o)}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: 'none', border: 'none', padding: '1.5rem', cursor: 'pointer',
+            }}
+          >
+            <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', color: '#F2F2F2' }}>CHANGE USERNAME</h2>
+            <ChevronDown
+              size={20}
+              style={{
+                color: 'var(--text-secondary)', transition: 'transform 0.2s',
+                transform: usernameOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+              }}
+            />
+          </button>
+
+          {usernameOpen && (
+            <div style={{ padding: '0 1.5rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div>
+                <label style={labelBase}>New Username</label>
+                <input
+                  type="text"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  value={newUsername}
+                  onChange={e => setNewUsername(e.target.value)}
+                  style={inputBase}
+                  placeholder="3–20 characters, letters/numbers/underscores only"
+                />
+                <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
+                  This is what you use to log in — you&apos;ll need to use your new username next time you sign in.
+                </p>
+              </div>
+
+              {usernameError && <p style={{ fontSize: '0.875rem', color: '#fca5a5' }}>{usernameError}</p>}
+              {usernameSuccess && <p style={{ fontSize: '0.875rem', color: '#4ade80' }}>✅ {usernameSuccess}</p>}
+
+              <button onClick={handleUsernameChange} disabled={usernameSaving} style={{
+                background: usernameSaving ? '#0d1a1e' : 'var(--teal-primary)', color: 'white',
+                border: 'none', borderRadius: '0.75rem', padding: '0.875rem',
+                fontWeight: 700, fontSize: '1rem', cursor: usernameSaving ? 'not-allowed' : 'pointer',
+              }}>
+                {usernameSaving ? 'Updating…' : 'Update Username'}
               </button>
             </div>
           )}

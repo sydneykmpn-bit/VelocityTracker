@@ -338,7 +338,7 @@ function AssignProgramModal({ program, members, groups, supabase, onClose }: { p
     setLoadingGroupMembers(true)
     supabase
       .from('group_members')
-      .select('member_id, profiles(id, name)')
+      .select('member_id, profiles!member_id(id, name)')
       .eq('group_id', selectedGroupId)
       .then(({ data, error }: any) => {
         if (error) console.error('AssignProgramModal: group_members query failed', error)
@@ -633,7 +633,7 @@ export default function CoachPage() {
   }
 
   const loadGroupMembers = async (groupId: string) => {
-    const { data } = await supabase.from('group_members').select('*, profiles(name, email)').eq('group_id', groupId)
+    const { data } = await supabase.from('group_members').select('*, profiles!member_id(name, email)').eq('group_id', groupId)
     setGroupMembers(prev => ({ ...prev, [groupId]: data ?? [] }))
   }
 
@@ -743,7 +743,7 @@ export default function CoachPage() {
     const { data, error } = await supabase
       .from('group_members')
       .insert({ group_id: groupId, member_id: memberId })
-      .select('*, profiles(name, email, gender)')
+      .select('*, profiles!member_id(name, email, gender)')
       .single()
     if (!error && data) {
       // Optimistic update for instant feedback — reloads below reconcile with the server
@@ -761,6 +761,51 @@ export default function CoachPage() {
     await loadGroupMembers(groupId)
     await loadMyGroups(userId)
     await loadMyMembers(userId)
+  }
+
+  const handleRemoveStudent = async (studentId: string, studentName: string) => {
+    if (!userId) return
+    if (!confirm(`Remove ${studentName} as your student? This removes them from your groups and cancels any plans/programs you've assigned them. This cannot be undone.`)) return
+
+    setError(''); setSuccess('')
+
+    // a) Remove from this coach's groups only
+    const myGroupIds = myGroups.length > 0
+      ? myGroups.map((g: any) => g.id)
+      : ((await supabase.from('groups').select('id').eq('coach_id', userId)).data ?? []).map((g: any) => g.id)
+    if (myGroupIds.length > 0) {
+      const { error: gmErr } = await supabase
+        .from('group_members')
+        .delete()
+        .eq('member_id', studentId)
+        .in('group_id', myGroupIds)
+      if (gmErr) { setError(gmErr.message); return }
+    }
+
+    // b) Mark this coach's pending plans for this student as skipped (preserve history)
+    const { error: planErr } = await supabase
+      .from('workout_plans')
+      .update({ status: 'skipped' })
+      .eq('coach_id', userId)
+      .eq('member_id', studentId)
+      .eq('status', 'pending')
+    if (planErr) { setError(planErr.message); return }
+
+    // c) Unassign from this coach's programs (no status column, so delete is the only option)
+    const { data: myPrograms, error: programsErr } = await supabase.from('programs').select('id').eq('coach_id', userId)
+    if (programsErr) { setError(programsErr.message); return }
+    const programIds = (myPrograms ?? []).map((p: any) => p.id)
+    if (programIds.length > 0) {
+      const { error: assignErr } = await supabase
+        .from('program_assignments')
+        .delete()
+        .eq('member_id', studentId)
+        .in('program_id', programIds)
+      if (assignErr) { setError(assignErr.message); return }
+    }
+
+    await loadMyMembers(userId)
+    setSuccess(`${studentName} has been removed as your student.`)
   }
 
   const handleAssignPlan = async (e: React.FormEvent) => {
@@ -1288,6 +1333,12 @@ export default function CoachPage() {
                               style={{ background: 'rgba(8,119,160,0.15)', border: '1px solid rgba(8,119,160,0.35)', borderRadius: '0.375rem', padding: '0.3rem 0.5rem', color: 'var(--teal-secondary)', fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', minHeight: 0 }}
                             >
                               <Calendar size={11} /> Calendar
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); handleRemoveStudent(m.id, m.name) }}
+                              style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.3rem 0.5rem', color: '#f87171', fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 0 }}
+                            >
+                              Remove
                             </button>
                             <div style={{ textAlign: 'right' }}>
                               <div style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{m.workoutCount}</div>
