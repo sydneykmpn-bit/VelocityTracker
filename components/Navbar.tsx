@@ -11,22 +11,22 @@ export default function Navbar() {
   const supabase = createClient()
   const router = useRouter()
   const pathname = usePathname()
-  const [userRole, setUserRole] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null
-    return sessionStorage.getItem('vel_role') || null
-  })
-  const [userName, setUserName] = useState(() => {
-    if (typeof window === 'undefined') return ''
-    return sessionStorage.getItem('vel_name') || ''
-  })
-  const [isStudent, setIsStudent] = useState(() => {
-    if (typeof window === 'undefined') return false
-    return sessionStorage.getItem('vel_is_student') === 'true'
-  })
+  const [userRole, setUserRole] = useState<string | null>(null)
+  const [userName, setUserName] = useState('')
+  const [isStudent, setIsStudent] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [avatarOpen, setAvatarOpen] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
   const avatarRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const cachedRole = sessionStorage.getItem('vel_role')
+    const cachedName = sessionStorage.getItem('vel_name')
+    const cachedIsStudent = sessionStorage.getItem('vel_is_student')
+    if (cachedRole !== null) setUserRole(cachedRole)
+    if (cachedName !== null) setUserName(cachedName)
+    if (cachedIsStudent !== null) setIsStudent(cachedIsStudent === 'true')
+  }, [])
 
   useEffect(() => {
     async function load() {
