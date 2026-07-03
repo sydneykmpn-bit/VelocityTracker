@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { getLocalDateString } from '@/lib/utils'
 import { TodayPlanCard, SkippedPlansSection } from '@/components/PlanCards'
 
-type Tab = 'plans' | 'prs' | 'schedule' | 'progress' | 'attendance' | 'metrics'
+type Tab = 'plans' | 'prs' | 'schedule' | 'progress' | 'metrics'
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--surface)',
@@ -73,7 +73,6 @@ export default function StudentPage() {
   const router = useRouter()
   const [profile, setProfile] = useState<any>(null)
   const [assignedPlans, setAssignedPlans] = useState<any[]>([])
-  const [attendanceHistory, setAttendanceHistory] = useState<any[]>([])
   const [workoutHistory, setWorkoutHistory] = useState<any[]>([])
   const [coach, setCoach] = useState<any>(null)
   const [activeTab, setActiveTab] = useState<Tab>('plans')
@@ -193,7 +192,7 @@ export default function StudentPage() {
 
       const { data: membership } = await supabase
         .from('group_members')
-        .select('*, groups(*, profiles!groups_coach_id_fkey(name, email))')
+        .select('*, groups(*, profiles!groups_coach_id_fkey(name))')
         .eq('member_id', user.id)
         .limit(1)
         .maybeSingle()
@@ -207,7 +206,7 @@ export default function StudentPage() {
 
       // Client-side catch-up only — a plan won't flip to 'skipped' until the member or their coach next opens /student or /dashboard, not on a schedule.
       const today = getLocalDateString()
-      const overdueIds = (plans ?? []).filter((p: any) => p.status === 'pending' && p.scheduled_date < today).map((p: any) => p.id)
+      const overdueIds = (plans ?? []).filter((p: any) => (p.status === 'pending' || p.status === 'rescheduled') && p.scheduled_date < today).map((p: any) => p.id)
       let finalPlans = plans ?? []
       if (overdueIds.length > 0) {
         await supabase.from('workout_plans').update({ status: 'skipped' }).in('id', overdueIds)
@@ -222,13 +221,6 @@ export default function StudentPage() {
         .order('date', { ascending: true })
         .limit(30)
       setWorkoutHistory(workouts || [])
-
-      const { data: attendance } = await supabase
-        .from('class_attendees')
-        .select('*, scheduled_classes(title, scheduled_date, type, start_time, profiles!scheduled_classes_coach_id_fkey(name))')
-        .eq('member_id', user.id)
-        .order('id', { ascending: false })
-      setAttendanceHistory(attendance || [])
 
       setUserId(user.id)
 
@@ -270,7 +262,7 @@ export default function StudentPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const pendingPlans = assignedPlans.filter(p => p.status === 'pending')
+  const pendingPlans = assignedPlans.filter(p => p.status === 'pending' || p.status === 'rescheduled')
   const completedPlans = assignedPlans.filter(p => p.status === 'completed')
   const skippedPlans = assignedPlans.filter(p => p.status === 'skipped')
   const todayPlans = pendingPlans.filter(p => p.scheduled_date === getLocalDateString())
@@ -295,7 +287,6 @@ export default function StudentPage() {
     { value: 'prs', label: 'My PRs' },
     { value: 'schedule', label: 'Class Schedule' },
     { value: 'progress', label: 'Progress' },
-    { value: 'attendance', label: 'Attendance' },
     { value: 'metrics', label: 'Body Metrics' },
   ]
 
@@ -319,7 +310,9 @@ export default function StudentPage() {
           <div style={{ ...cardStyle, padding: '1.25rem' }}>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.75rem' }}>Coach Context</p>
             <p style={{ fontWeight: 700, marginBottom: '0.25rem' }}>{coach?.name ?? 'No coach assigned'}</p>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.5 }}>{coach?.email ?? 'Join a group or ask an admin to assign your coach.'}</p>
+            {!coach && (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.5 }}>Join a group or ask an admin to assign your coach.</p>
+            )}
             {nextPlan && todayPlans.length === 0 && (
               <p style={{ color: 'var(--teal-secondary)', fontSize: '0.8rem', marginTop: '0.5rem' }}>
                 Next: {nextPlan.title} on {formatDate(nextPlan.scheduled_date)}
@@ -661,36 +654,6 @@ export default function StudentPage() {
                   <span>Last 30 sessions</span>
                   <span>{workoutHistory[workoutHistory.length - 1] && new Date(workoutHistory[workoutHistory.length - 1].date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'attendance' && (
-          <div>
-            {attendanceHistory.length === 0 ? (
-              <div style={{ ...cardStyle, padding: '3rem', textAlign: 'center' }}>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No attendance records yet.</p>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {attendanceHistory.map(a => {
-                  const statusColor = a.status === 'attended' ? '#4ade80' : a.status === 'absent' ? '#ef4444' : a.status === 'excused' ? '#f59e0b' : 'var(--text-secondary)'
-                  return (
-                    <div key={a.id} style={{ ...cardStyle, padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.scheduled_classes?.title || 'Class'}</p>
-                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
-                          {a.scheduled_classes?.scheduled_date && formatDate(a.scheduled_classes.scheduled_date)}
-                          {a.scheduled_classes?.start_time && ` · ${a.scheduled_classes.start_time?.slice(0, 5)}`}
-                          {(a.scheduled_classes as any)?.['profiles!scheduled_classes_coach_id_fkey']?.name &&
-                            ` · Coach ${(a.scheduled_classes as any)['profiles!scheduled_classes_coach_id_fkey'].name}`}
-                        </p>
-                      </div>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'capitalize', padding: '0.2rem 0.5rem', borderRadius: '999px', background: `${statusColor}20`, color: statusColor, flexShrink: 0 }}>{a.status}</span>
-                    </div>
-                  )
-                })}
               </div>
             )}
           </div>

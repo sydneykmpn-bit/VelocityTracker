@@ -732,7 +732,7 @@ export default function CoachPage() {
     // Client-side catch-up only — a plan won't flip to 'skipped' until the coach next opens Assigned
     // Plans, not on a schedule. Same limitation as the equivalent logic in dashboard/student pages.
     const today = getLocalDateString()
-    const overdueIds = (data ?? []).filter((p: any) => p.status === 'pending' && p.scheduled_date < today).map((p: any) => p.id)
+    const overdueIds = (data ?? []).filter((p: any) => (p.status === 'pending' || p.status === 'rescheduled') && p.scheduled_date < today).map((p: any) => p.id)
     let finalPlans = data ?? []
     if (overdueIds.length > 0) {
       await supabase.from('workout_plans').update({ status: 'skipped' }).in('id', overdueIds)
@@ -907,13 +907,13 @@ export default function CoachPage() {
       if (gmErr) { setError(gmErr.message); return }
     }
 
-    // b) Mark this coach's pending plans for this student as skipped (preserve history)
+    // b) Mark this coach's pending/rescheduled plans for this student as skipped (preserve history)
     const { error: planErr } = await supabase
       .from('workout_plans')
       .update({ status: 'skipped' })
       .eq('coach_id', userId)
       .eq('member_id', studentId)
-      .eq('status', 'pending')
+      .in('status', ['pending', 'rescheduled'])
     if (planErr) { setError(planErr.message); return }
 
     // c) Unassign from this coach's programs (no status column, so delete is the only option)
@@ -997,14 +997,22 @@ export default function CoachPage() {
   const handleCompletePlan = async (plan: any) => {
     if (!userId) return
     setPlanActionLoading(plan.id)
+    setError('')
 
-    const { data: planExercises } = await supabase
+    const { data: planExercises, error: planExError } = await supabase
       .from('workout_plan_exercises')
       .select('*')
       .eq('plan_id', plan.id)
       .order('order_index')
 
-    const { data: newWorkout } = await supabase.from('workouts').insert({
+    if (planExError) {
+      console.error('handleCompletePlan: workout_plan_exercises fetch failed', planExError)
+      setError(planExError.message)
+      setPlanActionLoading(null)
+      return
+    }
+
+    const { data: newWorkout, error: workoutErr } = await supabase.from('workouts').insert({
       user_id: plan.member_id,
       title: plan.title,
       type: plan.type,
@@ -1013,8 +1021,15 @@ export default function CoachPage() {
       date: new Date().toISOString(),
     }).select().single()
 
+    if (workoutErr) {
+      console.error('handleCompletePlan: workouts insert failed', workoutErr)
+      setError(workoutErr.message)
+      setPlanActionLoading(null)
+      return
+    }
+
     if (newWorkout && planExercises && planExercises.length > 0) {
-      await supabase.from('exercises').insert(
+      const { error: exError } = await supabase.from('exercises').insert(
         planExercises.map((ex: any) => ({
           workout_id: newWorkout.id,
           name: ex.name, sets: ex.sets, reps: ex.reps,
@@ -1022,13 +1037,27 @@ export default function CoachPage() {
           distance: ex.distance, notes: ex.notes,
         }))
       )
+
+      if (exError) {
+        console.error('handleCompletePlan: exercises insert failed', exError)
+        setError(exError.message)
+        setPlanActionLoading(null)
+        return
+      }
     }
 
-    await supabase.from('workout_plans').update({
+    const { error: updateErr } = await supabase.from('workout_plans').update({
       status: 'completed',
       completed_at: new Date().toISOString(),
       auto_logged_workout_id: newWorkout?.id ?? null,
     }).eq('id', plan.id)
+
+    if (updateErr) {
+      console.error('handleCompletePlan: workout_plans update failed', updateErr)
+      setError(updateErr.message)
+      setPlanActionLoading(null)
+      return
+    }
 
     await loadAssignedPlans(userId)
     setPlanActionLoading(null)
@@ -1037,11 +1066,34 @@ export default function CoachPage() {
   const handleUndoCompletePlan = async (plan: any) => {
     if (!userId) return
     setPlanActionLoading(plan.id)
+    setError('')
+
     if (plan.auto_logged_workout_id) {
-      await supabase.from('exercises').delete().eq('workout_id', plan.auto_logged_workout_id)
-      await supabase.from('workouts').delete().eq('id', plan.auto_logged_workout_id)
+      const { error: exDelErr } = await supabase.from('exercises').delete().eq('workout_id', plan.auto_logged_workout_id)
+      if (exDelErr) {
+        console.error('handleUndoCompletePlan: exercises delete failed', exDelErr)
+        setError(exDelErr.message)
+        setPlanActionLoading(null)
+        return
+      }
+
+      const { error: workoutDelErr } = await supabase.from('workouts').delete().eq('id', plan.auto_logged_workout_id)
+      if (workoutDelErr) {
+        console.error('handleUndoCompletePlan: workouts delete failed', workoutDelErr)
+        setError(workoutDelErr.message)
+        setPlanActionLoading(null)
+        return
+      }
     }
-    await supabase.from('workout_plans').update({ status: 'pending', completed_at: null, auto_logged_workout_id: null }).eq('id', plan.id)
+
+    const { error: updateErr } = await supabase.from('workout_plans').update({ status: 'pending', completed_at: null, auto_logged_workout_id: null }).eq('id', plan.id)
+    if (updateErr) {
+      console.error('handleUndoCompletePlan: workout_plans update failed', updateErr)
+      setError(updateErr.message)
+      setPlanActionLoading(null)
+      return
+    }
+
     await loadAssignedPlans(userId)
     setPlanActionLoading(null)
   }
@@ -1050,7 +1102,7 @@ export default function CoachPage() {
     if (!userId || !reschedulePlanDate) return
     setPlanActionLoading(planId)
     await supabase.from('workout_plans').update({
-      status: 'pending', scheduled_date: reschedulePlanDate, rescheduled_date: reschedulePlanDate,
+      status: 'rescheduled', scheduled_date: reschedulePlanDate, rescheduled_date: reschedulePlanDate,
     }).eq('id', planId)
     setReschedulingPlan(null)
     setReschedulePlanDate('')
@@ -1313,7 +1365,7 @@ export default function CoachPage() {
     rescheduled: { label: '📅 Rescheduled', color: '#60a5fa' },
   }
 
-  const pendingPlanCount = assignedPlans.filter(p => p.status === 'pending').length
+  const pendingPlanCount = assignedPlans.filter(p => p.status === 'pending' || p.status === 'rescheduled').length
   const completedPlanCount = assignedPlans.filter(p => p.status === 'completed').length
   const skippedPlanCount = assignedPlans.filter(p => p.status === 'skipped').length
   const inactiveMembers = myMembers.filter(m => {
@@ -2034,7 +2086,7 @@ export default function CoachPage() {
 
               const studentGroups = Object.entries(byMember).map(([memberId, plans]) => {
                 const memberName = (plans as any[])[0]?.member?.name ?? '—'
-                const pendingCount = (plans as any[]).filter(p => p.status === 'pending').length
+                const pendingCount = (plans as any[]).filter(p => p.status === 'pending' || p.status === 'rescheduled').length
                 const todayCount = (plans as any[]).filter(p => p.scheduled_date === todayStr).length
                 const skippedCount = (plans as any[]).filter(p => p.status === 'skipped').length
                 const priority = todayCount > 0 ? 0 : skippedCount > 0 ? 1 : 2

@@ -42,7 +42,7 @@ export default function DashboardPage() {
       .from('workout_plans')
       .select('id')
       .eq('member_id', uid)
-      .eq('status', 'pending')
+      .in('status', ['pending', 'rescheduled'])
       .lt('scheduled_date', today)
     if (overdueP && overdueP.length > 0) {
       await supabase.from('workout_plans').update({ status: 'skipped' }).in('id', overdueP.map((p: any) => p.id))
@@ -61,9 +61,9 @@ export default function DashboardPage() {
       supabase.from('profiles').select('*').eq('id', uid).single(),
       supabase.from('workouts').select('id, title, type, date, created_at, duration, exercises(count)').eq('user_id', uid).order('date', { ascending: false }),
       supabase.from('personal_records').select('*').eq('user_id', uid).order('recorded_at', { ascending: false }).limit(5),
-      supabase.from('workout_plans').select('*, workout_plan_exercises(*), profiles!workout_plans_coach_id_fkey(name)').eq('member_id', uid).or(`scheduled_date.eq.${today},rescheduled_date.eq.${today}`).eq('status', 'pending').order('scheduled_date'),
+      supabase.from('workout_plans').select('*, workout_plan_exercises(*), profiles!workout_plans_coach_id_fkey(name)').eq('member_id', uid).or(`scheduled_date.eq.${today},rescheduled_date.eq.${today}`).in('status', ['pending', 'rescheduled']).order('scheduled_date'),
       supabase.from('workout_plans').select('*, workout_plan_exercises(*)').eq('member_id', uid).or(`scheduled_date.eq.${today},rescheduled_date.eq.${today}`).eq('status', 'completed'),
-      supabase.from('workout_plans').select('*, workout_plan_exercises(count), profiles!workout_plans_coach_id_fkey(name)').eq('member_id', uid).eq('status', 'pending').gte('scheduled_date', tomorrow.toISOString().split('T')[0]).lte('scheduled_date', nextWeek.toISOString().split('T')[0]).order('scheduled_date'),
+      supabase.from('workout_plans').select('*, workout_plan_exercises(count), profiles!workout_plans_coach_id_fkey(name)').eq('member_id', uid).in('status', ['pending', 'rescheduled']).gte('scheduled_date', tomorrow.toISOString().split('T')[0]).lte('scheduled_date', nextWeek.toISOString().split('T')[0]).order('scheduled_date'),
       supabase.from('workout_plans').select('*, profiles!workout_plans_coach_id_fkey(name)').eq('member_id', uid).eq('status', 'skipped').order('scheduled_date', { ascending: false }).limit(5),
       supabase.from('scheduled_classes').select('*, groups(name), profiles!scheduled_classes_coach_id_fkey(name)').eq('scheduled_date', today).order('start_time').limit(5),
     ])
