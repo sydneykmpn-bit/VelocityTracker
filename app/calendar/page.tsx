@@ -194,10 +194,62 @@ export default function CalendarPage() {
       is_recurring: false,
     }))
 
+    // Fetch this user's active Programs assignments — these live outside workout_plans entirely,
+    // so without this they'd never show up on the calendar.
+    let assignments: any[] = []
+    if (userRole === 'admin') {
+      const { data } = await supabase.from('program_assignments').select('*, programs(*, profiles!programs_coach_id_fkey(name))')
+      assignments = data || []
+    } else if (userRole === 'member') {
+      const { data } = await supabase.from('program_assignments').select('*, programs(*, profiles!programs_coach_id_fkey(name))').eq('member_id', userId)
+      assignments = data || []
+    } else if (userRole === 'coach') {
+      // Filtering on an embedded table's column (programs.coach_id) via .eq doesn't work directly in
+      // supabase-js, so fetch this coach's program ids first and filter program_assignments by those.
+      const { data: coachPrograms } = await supabase.from('programs').select('id').eq('coach_id', userId)
+      const coachProgramIds = (coachPrograms || []).map((p: any) => p.id)
+      if (coachProgramIds.length > 0) {
+        const { data } = await supabase.from('program_assignments').select('*, programs(*, profiles!programs_coach_id_fkey(name))').in('program_id', coachProgramIds)
+        assignments = data || []
+      }
+    }
+
+    // Expand each assignment's program_workouts into concrete calendar dates for this month
+    const programWorkoutEntries: any[] = []
+    for (const assignment of assignments) {
+      if (!assignment.start_date) continue
+      const { data: workouts } = await supabase
+        .from('program_workouts')
+        .select('*')
+        .eq('program_id', assignment.program_id)
+
+      for (const w of (workouts || [])) {
+        // Same day-of-week convention as the coach panel's assign-program flow: offsetDays from
+        // start_date, day_of_week is 0-6 Sunday-based (matches Date.getDay()).
+        const offsetDays = (w.week_number - 1) * 7 + w.day_of_week
+        const d = parseLocalDate(assignment.start_date)
+        d.setDate(d.getDate() + offsetDays)
+        const scheduledDate = formatLocalDate(d)
+        if (scheduledDate < startOfMonth || scheduledDate > endOfMonth) continue
+        programWorkoutEntries.push({
+          ...w,
+          id: `${assignment.id}-${w.id}`,
+          isProgramWorkout: true,
+          scheduled_date: scheduledDate,
+          title: w.title,
+          start_time: '00:00',
+          is_recurring: false,
+          coach_name: assignment.programs?.['profiles!programs_coach_id_fkey']?.name,
+          program_title: assignment.programs?.title,
+        })
+      }
+    }
+
     const allData = [
       ...(classData || []),
       ...dynamicInstances,
       ...normalizedPlans,
+      ...programWorkoutEntries,
     ]
     setClasses(allData)
     if (selectedDate) {
@@ -214,6 +266,23 @@ export default function CalendarPage() {
       setUserRole(prof?.role ?? 'member')
       const { data: grps } = await supabase.from('groups').select('id, name')
       setGroups(grps ?? [])
+
+      // Client-side catch-up only — an RSVP won't flip to 'absent' until this user next opens their
+      // calendar, not on a schedule. Only touches this user's own attendee rows (member_id = user.id),
+      // since RLS only allows updating your own attendance.
+      const today = getLocalDateString()
+      const { data: myAttendance } = await supabase
+        .from('class_attendees')
+        .select('id, scheduled_classes(scheduled_date)')
+        .eq('member_id', user.id)
+        .eq('status', 'scheduled')
+      const overdueAttendeeIds = (myAttendance || [])
+        .filter((a: any) => a.scheduled_classes?.scheduled_date && a.scheduled_classes.scheduled_date < today)
+        .map((a: any) => a.id)
+      if (overdueAttendeeIds.length > 0) {
+        await supabase.from('class_attendees').update({ status: 'absent' }).in('id', overdueAttendeeIds)
+      }
+
       setLoading(false)
     }
     init()
@@ -426,6 +495,13 @@ export default function CalendarPage() {
                           </div>
                         )
                       }
+                      if (c.isProgramWorkout) {
+                        return (
+                          <div key={c.id} style={{ background: 'rgba(168,85,247,0.2)', color: '#c084fc', border: '1px dotted rgba(168,85,247,0.5)', borderRadius: '0.2rem', fontSize: '0.6rem', padding: '0.1rem 0.3rem', marginBottom: '0.15rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                            📘 {c.title}
+                          </div>
+                        )
+                      }
                       const tc = classTypeColor(c.type)
                       return (
                         <div key={c.id} onClick={e => { e.stopPropagation(); setSelectedClass(c) }} style={{ ...tc, borderRadius: '0.2rem', fontSize: '0.6rem', padding: '0.1rem 0.3rem', marginBottom: '0.15rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', cursor: 'pointer' }}>
@@ -480,11 +556,30 @@ export default function CalendarPage() {
                         })}
                       </div>
                     )}
+                    {/* Program Workouts */}
+                    {selectedDateClasses.filter(c => c.isProgramWorkout).length > 0 && (
+                      <div style={{ marginBottom: '1rem' }}>
+                        <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#c084fc', marginBottom: '0.5rem' }}>📘 Program Workouts</p>
+                        {selectedDateClasses.filter(c => c.isProgramWorkout).map(pw => {
+                          const tb = pw.type === 'basketball' ? { bg: 'rgba(8,119,160,0.2)', color: '#34bac2' } : pw.type === 'both' ? { bg: 'rgba(168,85,247,0.15)', color: '#c084fc' } : { bg: 'rgba(34,197,94,0.15)', color: '#4ade80' }
+                          return (
+                            <div key={pw.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderLeft: '2px dotted #c084fc', borderRadius: '0.75rem', padding: '0.875rem', marginBottom: '0.5rem' }}>
+                              <p style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.25rem' }}>{pw.title}</p>
+                              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.375rem' }}>
+                                {pw.program_title ? `Program: ${pw.program_title}` : ''}{pw.coach_name ? ` · Coach: ${pw.coach_name}` : ''}
+                              </p>
+                              <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '999px', textTransform: 'uppercase', ...tb }}>{pw.type}</span>
+                              <p style={{ fontSize: '0.7rem', color: '#c084fc', fontWeight: 600, marginTop: '0.375rem' }}>Week {pw.week_number}, Day {pw.day_of_week}</p>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                     {/* Scheduled Classes */}
-                    {selectedDateClasses.filter(c => !c.isPlan).length > 0 && (
+                    {selectedDateClasses.filter(c => !c.isPlan && !c.isProgramWorkout).length > 0 && (
                       <div>
                         <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>🏋️ Scheduled Classes</p>
-                        {selectedDateClasses.filter(c => !c.isPlan).map(cls => (
+                        {selectedDateClasses.filter(c => !c.isPlan && !c.isProgramWorkout).map(cls => (
                           <div key={cls.id} onClick={() => setSelectedClass(cls)} style={{ cursor: 'pointer' }}>
                             <ClassCard cls={cls} userRole={userRole} />
                           </div>

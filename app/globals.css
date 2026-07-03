@@ -247,6 +247,70 @@ p a, span a, td a {
   transform: translateY(-2px);
 }
 
+/* Mobile bottom navigation */
+.bottom-nav {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 60;
+  display: grid; grid-template-columns: repeat(5, 1fr); align-items: stretch;
+  background: rgba(13, 26, 30, 0.92);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+@media (min-width: 768px) { .bottom-nav { display: none; } }
+
+.bottom-nav-item {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; height: 64px; min-height: 64px;
+  color: var(--text-secondary); text-decoration: none;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.02em;
+}
+.bottom-nav-item.active { color: var(--teal-secondary); }
+.bottom-nav-item:active { opacity: 0.7; }
+
+.bottom-nav-log {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--teal-primary); color: white;
+  display: flex; align-items: center; justify-content: center;
+  margin-top: -22px; border: 4px solid var(--background);
+  box-shadow: 0 4px 20px var(--teal-glow);
+}
+
+.has-bottom-nav { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+@media (min-width: 768px) { .has-bottom-nav { padding-bottom: 0; } }
+
+/* Interactive cards & carousels */
+.card-interactive {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 0.75rem;
+  cursor: pointer; transition: border-color 0.15s, background 0.15s, transform 0.1s;
+}
+.card-interactive:hover { border-color: var(--teal-primary); background: var(--surface-raised); }
+.card-interactive:active { transform: scale(0.99); }
+
+.snap-carousel {
+  display: flex; gap: 0.75rem; overflow-x: auto;
+  scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; -ms-overflow-style: none;
+  margin-left: -1rem; margin-right: -1rem; padding: 0 1rem 4px;
+}
+.snap-carousel::-webkit-scrollbar { display: none; }
+.snap-carousel > * { scroll-snap-align: start; flex-shrink: 0; }
+@media (min-width: 768px) {
+  .snap-carousel { margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; }
+}
+
+.stat-number {
+  font-family: var(--font-bebas); font-size: 2.5rem; line-height: 1; letter-spacing: 0.02em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Mobile portrait optimizations */
 @media (max-width: 480px) {
   main {

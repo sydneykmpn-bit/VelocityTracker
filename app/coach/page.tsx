@@ -323,6 +323,7 @@ function AssignProgramModal({ program, members, groups, supabase, onClose }: { p
   const [startDate, setStartDate] = useState(getLocalDateString())
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
+  const [assignError, setAssignError] = useState('')
   const [filterMode, setFilterMode] = useState<'member' | 'group'>('member')
   const [selectedGroupId, setSelectedGroupId] = useState('')
   const [groupMembersList, setGroupMembersList] = useState<any[]>([])
@@ -354,9 +355,23 @@ function AssignProgramModal({ program, members, groups, supabase, onClose }: { p
   const handleAssign = async () => {
     if (selected.length === 0) return
     setSaving(true)
+    setAssignError('')
+
+    const memberNameById = new Map([...members, ...groupMembersList].map((m: any) => [m.id, m.name]))
+    const errors: string[] = []
+
     const { data: workouts } = await supabase.from('program_workouts').select('*, program_workout_exercises(*)').eq('program_id', program.id)
+
     for (const memberId of selected) {
-      await supabase.from('program_assignments').insert({ program_id: program.id, member_id: memberId, start_date: startDate })
+      const memberLabel = memberNameById.get(memberId) ?? memberId
+
+      const { error: assignmentError } = await supabase.from('program_assignments').insert({ program_id: program.id, member_id: memberId, start_date: startDate })
+      if (assignmentError) {
+        console.error(`handleAssign: program_assignments insert failed for ${memberLabel}`, assignmentError)
+        errors.push(`${memberLabel}: failed to create program assignment (${assignmentError.message})`)
+        continue
+      }
+
       for (const w of workouts ?? []) {
         const offsetDays = (w.week_number - 1) * 7 + w.day_of_week
         const d = new Date(startDate + 'T00:00:00')
@@ -364,24 +379,40 @@ function AssignProgramModal({ program, members, groups, supabase, onClose }: { p
         const scheduledDate = formatLocalDate(d)
         const isDeload = !!program.deload_week && w.week_number === program.deload_week
         const title = isDeload ? `${w.title} (Deload)` : w.title
-        const { data: plan } = await supabase.from('workout_plans').insert({
+
+        const { data: plan, error: planError } = await supabase.from('workout_plans').insert({
           coach_id: program.coach_id, member_id: memberId, title, type: w.type,
           scheduled_date: scheduledDate, status: 'pending',
         }).select().single()
-        if (!plan) continue
+
+        if (planError || !plan) {
+          console.error(`handleAssign: workout_plans insert failed for ${memberLabel} / "${title}"`, planError)
+          errors.push(`${memberLabel}: failed to create workout plan "${title}" (${planError?.message ?? 'no plan returned'})`)
+          continue
+        }
+
         const exs = w.program_workout_exercises ?? []
         if (exs.length > 0) {
           const factor = isDeload ? (program.deload_intensity_pct / 100) : 1
-          await supabase.from('workout_plan_exercises').insert(exs.map((e: any, i: number) => ({
+          const { error: exercisesError } = await supabase.from('workout_plan_exercises').insert(exs.map((e: any, i: number) => ({
             plan_id: plan.id, name: e.name, sets: e.sets, reps: e.reps,
             weight: e.weight != null ? Math.round(e.weight * factor * 2) / 2 : null,
             duration: e.duration, distance: e.distance, notes: e.notes, order_index: i,
           })))
+          if (exercisesError) {
+            console.error(`handleAssign: workout_plan_exercises insert failed for ${memberLabel} / "${title}"`, exercisesError)
+            errors.push(`${memberLabel}: failed to save exercises for "${title}" (${exercisesError.message})`)
+          }
         }
       }
     }
+
     setSaving(false)
-    setDone(true)
+    if (errors.length > 0) {
+      setAssignError(errors.join('; '))
+    } else {
+      setDone(true)
+    }
   }
 
   return (
@@ -397,6 +428,18 @@ function AssignProgramModal({ program, members, groups, supabase, onClose }: { p
             <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>✅</p>
             <p style={{ color: 'var(--text-primary)', fontSize: '0.95rem', fontWeight: 600, marginBottom: '1rem' }}>Assigned to {selected.length} member{selected.length === 1 ? '' : 's'}!</p>
             <button onClick={onClose} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.7rem 1.5rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>Done</button>
+          </div>
+        ) : assignError ? (
+          <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
+            <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⚠️</p>
+            <p style={{ color: 'var(--text-primary)', fontSize: '0.95rem', fontWeight: 600, marginBottom: '0.75rem' }}>Assignment partially failed</p>
+            <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.5rem', padding: '0.875rem', marginBottom: '1rem', textAlign: 'left' }}>
+              <p style={{ color: '#fca5a5', fontSize: '0.8rem', lineHeight: 1.5 }}>{assignError}</p>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+              <button onClick={() => setAssignError('')} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.7rem 1.5rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>Try Again</button>
+              <button onClick={onClose} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.7rem 1.5rem', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer' }}>Close</button>
+            </div>
           </div>
         ) : (
           <>
@@ -670,6 +713,8 @@ export default function CoachPage() {
     const startOfMonth = `${year}-${String(month + 1).padStart(2, '0')}-01`
     const endOfMonth = new Date(year, month + 1, 0)
     const endStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(endOfMonth.getDate()).padStart(2, '0')}`
+
+    // Logged workouts (what a student has DONE)
     let query = supabase
       .from('workouts')
       .select('*, profiles(name), exercises(count)')
@@ -677,8 +722,31 @@ export default function CoachPage() {
       .lte('date', `${endStr}T23:59:59`)
       .order('date', { ascending: false })
     if (memberFilter !== 'all') query = query.eq('user_id', memberFilter)
-    const { data } = await query
-    setCalendarWorkouts(data ?? [])
+    const { data: loggedData } = await query
+    const loggedWorkouts = (loggedData ?? []).map((w: any) => ({ ...w, isPlan: false, member_name: w.profiles?.name }))
+
+    // Assigned workout_plans (what's UPCOMING/ASSIGNED) — this already covers both manually-assigned
+    // plans and program-derived ones (assigning a program materializes one workout_plans row per
+    // program workout, see AssignProgramModal.handleAssign), so this is the single source of truth
+    // for anything not yet logged. Exclude completed since those already show as logged workouts
+    // above, but keep skipped so misses are still visible on the calendar.
+    let planQuery = supabase
+      .from('workout_plans')
+      .select('*, profiles!workout_plans_member_id_fkey(name)')
+      .gte('scheduled_date', startOfMonth)
+      .lte('scheduled_date', endStr)
+      .neq('status', 'completed')
+    if (memberFilter !== 'all') planQuery = planQuery.eq('member_id', memberFilter)
+    else planQuery = planQuery.eq('coach_id', userId)
+    const { data: planData } = await planQuery.order('scheduled_date', { ascending: false })
+    const normalizedPlans = (planData ?? []).map((p: any) => ({
+      ...p,
+      isPlan: true,
+      date: p.scheduled_date,
+      member_name: p['profiles!workout_plans_member_id_fkey']?.name,
+    }))
+
+    setCalendarWorkouts([...loggedWorkouts, ...normalizedPlans])
     setCalLoading(false)
   }
 
@@ -1958,11 +2026,23 @@ export default function CoachPage() {
                         }}
                       >
                         <p style={{ fontSize: '0.65rem', fontWeight: 600, textAlign: 'right', color: isToday ? 'var(--teal-secondary)' : 'var(--text-secondary)', marginBottom: '0.2rem' }}>{day}</p>
-                        {dayWorkouts.slice(0, 2).map(w => (
-                          <div key={w.id} style={{ borderRadius: '0.2rem', fontSize: '0.55rem', padding: '0.1rem 0.25rem', marginBottom: '0.1rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', background: 'rgba(8,119,160,0.2)', color: 'var(--teal-secondary)' }}>
-                            {w.profiles?.name?.split(' ')[0]}: {w.title}
-                          </div>
-                        ))}
+                        {dayWorkouts.slice(0, 2).map(w => {
+                          const label = `${w.member_name?.split(' ')[0] ?? '—'}: ${w.title}`
+                          const badgeStyle: React.CSSProperties = { borderRadius: '0.2rem', fontSize: '0.55rem', padding: '0.1rem 0.25rem', marginBottom: '0.1rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }
+                          if (w.isPlan) {
+                            const isSkipped = w.status === 'skipped'
+                            return (
+                              <div key={w.id} style={{ ...badgeStyle, background: 'transparent', color: isSkipped ? '#f59e0b' : '#34bac2', border: `1px dashed ${isSkipped ? 'rgba(245,158,11,0.6)' : 'rgba(8,119,160,0.5)'}` }}>
+                                {isSkipped ? '⚠️' : '📋'} {label}
+                              </div>
+                            )
+                          }
+                          return (
+                            <div key={w.id} style={{ ...badgeStyle, background: 'rgba(8,119,160,0.2)', color: 'var(--teal-secondary)' }}>
+                              {label}
+                            </div>
+                          )
+                        })}
                         {dayWorkouts.length > 2 && <p style={{ fontSize: '0.55rem', color: 'var(--text-secondary)' }}>+{dayWorkouts.length - 2}</p>}
                       </div>
                     )
@@ -1986,12 +2066,28 @@ export default function CoachPage() {
                   </div>
                   <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {calendarWorkouts.filter(w => w.date?.startsWith(calendarSelectedDate)).length === 0 ? (
-                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', textAlign: 'center', padding: '2rem 0' }}>No workouts logged on this date.</p>
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', textAlign: 'center', padding: '2rem 0' }}>No workouts or plans on this date.</p>
                     ) : calendarWorkouts
                         .filter(w => w.date?.startsWith(calendarSelectedDate))
-                        .map(w => (
-                          <WorkoutHistoryCard key={w.id} workout={w} supabase={supabase} />
-                        ))
+                        .map(w => {
+                          if (w.isPlan) {
+                            const isSkipped = w.status === 'skipped'
+                            const tb = TYPE_BADGE[w.type] ?? TYPE_BADGE.both
+                            return (
+                              <div key={w.id} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderLeft: `2px dashed ${isSkipped ? '#f59e0b' : 'var(--teal-primary)'}`, borderRadius: '0.75rem', padding: '1rem', opacity: isSkipped ? 0.7 : 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
+                                  <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', ...tb }}>{w.type}</span>
+                                  <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', background: isSkipped ? 'rgba(245,158,11,0.15)' : 'rgba(8,119,160,0.15)', color: isSkipped ? '#f59e0b' : 'var(--teal-secondary)' }}>
+                                    {isSkipped ? '⚠️ Skipped' : '📋 Assigned'}
+                                  </span>
+                                </div>
+                                <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>{w.title}</p>
+                                <p style={{ fontSize: '0.7rem', marginTop: '0.15rem', color: 'var(--text-secondary)' }}>{w.member_name ?? '—'}</p>
+                              </div>
+                            )
+                          }
+                          return <WorkoutHistoryCard key={w.id} workout={w} supabase={supabase} />
+                        })
                     }
                   </div>
                 </div>

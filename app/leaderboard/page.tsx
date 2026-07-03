@@ -226,20 +226,14 @@ export default function LeaderboardPage() {
   }
 
   useEffect(() => {
-    const today = new Date()
-    if (today.getDate() === 1) {
-      supabase.rpc('reset_monthly_leaderboard').then(() => {
-        loadLeaderboard()
-      })
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
       setUserId(user.id)
+
+      const { error: archiveError } = await supabase.rpc('archive_old_leaderboard_records')
+      if (archiveError) console.error('archive_old_leaderboard_records failed:', archiveError)
+
       await loadData(user.id)
       setLoading(false)
     }

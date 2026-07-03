@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { WorkoutCardSkeleton } from '@/components/Skeleton'
+import { WorkoutCardSkeleton, StatCardSkeleton, Skeleton } from '@/components/Skeleton'
 import ClassDetailModal from '@/components/ClassDetailModal'
-import { getLocalDateString, getLocalDisplayDate } from '@/lib/utils'
+import { getLocalDateString, formatLocalDate, formatDuration } from '@/lib/utils'
 import { TodayPlanCard, SkippedPlansSection, typeBadge } from '@/components/PlanCards'
 
 export default function DashboardPage() {
@@ -158,21 +158,43 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
-        <div style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem 1rem' }}>
+      <div style={{ minHeight: '100dvh', background: 'var(--background)' }}>
+        <main style={{ maxWidth: '900px', margin: '0 auto', padding: '1.5rem 1rem 2rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.75rem' }}>
+            <Skeleton height={12} width="30%" />
+            <Skeleton height={40} width="60%" />
+            <Skeleton height={14} width="40%" />
+          </div>
+          <div style={{ marginBottom: '1.75rem' }}>
+            <WorkoutCardSkeleton />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem', marginBottom: '1.75rem' }}>
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             <WorkoutCardSkeleton /><WorkoutCardSkeleton /><WorkoutCardSkeleton />
           </div>
-        </div>
+        </main>
       </div>
     )
   }
 
   const firstName = profile?.name?.split(' ')[0] ?? 'Athlete'
+  const shortDate = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'Asia/Manila' }).format(new Date())
+
+  const weekStart = (() => {
+    const now = new Date()
+    const s = new Date(now)
+    s.setDate(now.getDate() - now.getDay())
+    return formatLocalDate(s)
+  })()
+  const thisWeekWorkouts = allWorkoutsList.filter(w => (w.date ?? w.created_at ?? '').slice(0, 10) >= weekStart)
+  const thisWeekDuration = thisWeekWorkouts.reduce((sum, w) => sum + (w.duration || 0), 0)
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
-      <main style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem 1rem 7rem' }}>
+    <div style={{ minHeight: '100dvh', background: 'var(--background)' }}>
+      <main style={{ maxWidth: '900px', margin: '0 auto', padding: '1.5rem 1rem 2rem' }}>
 
         {/* ── ADMIN: Pending approvals banner ── */}
         {userRole === 'admin' && pendingApprovals > 0 && (
@@ -231,24 +253,24 @@ export default function DashboardPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.75rem' }}>
           <div>
             <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Welcome back</p>
-            <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: 'clamp(2.25rem, 6vw, 3.5rem)', letterSpacing: '0.03em', lineHeight: 1 }}>
-              HEY, {firstName.toUpperCase()} 👋
+            <h1 className="font-display" style={{ fontSize: 'clamp(2.25rem, 6vw, 3.5rem)', letterSpacing: '0.03em', lineHeight: 1 }}>
+              HEY, {firstName.toUpperCase()}
             </h1>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '0.35rem' }}>{getLocalDisplayDate()}</p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '0.35rem' }}>{shortDate}</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }} className="header-actions">
             {userRole === 'admin' && (
-              <Link href="/admin" style={{ display: 'none', alignItems: 'center', gap: '0.5rem', background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '0.625rem 1rem', borderRadius: '0.5rem', textDecoration: 'none', fontWeight: 600, fontSize: '0.8rem', whiteSpace: 'nowrap', minHeight: 0 }} className="md-show-flex">
+              <Link href="/admin" className="btn-ghost md-show-flex" style={{ display: 'none', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
                 ⚙️ Admin Panel
               </Link>
             )}
             {userRole === 'coach' && (
-              <Link href="/coach" style={{ display: 'none', alignItems: 'center', gap: '0.5rem', background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '0.625rem 1rem', borderRadius: '0.5rem', textDecoration: 'none', fontWeight: 600, fontSize: '0.8rem', whiteSpace: 'nowrap', minHeight: 0 }} className="md-show-flex">
-                👨‍💼 Coach Panel
+              <Link href="/coach" className="btn-ghost md-show-flex" style={{ display: 'none', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                Coach Panel
               </Link>
             )}
-            <Link href="/workouts/new" style={{ display: 'none', alignItems: 'center', gap: '0.5rem', background: 'var(--teal-primary)', color: 'white', padding: '0.625rem 1rem', borderRadius: '0.5rem', textDecoration: 'none', fontWeight: 700, fontSize: '0.8rem', whiteSpace: 'nowrap', minHeight: 0 }} className="md-show-flex">
-              + Log Workout
+            <Link href="/workouts/new" className="btn-primary md-show-flex" style={{ display: 'none', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+              Log Workout
             </Link>
           </div>
         </div>
@@ -267,33 +289,90 @@ export default function DashboardPage() {
         )}
 
         {/* ── TODAY'S PLAN ── */}
-        {(todayPlans.length > 0 || completedToday.length > 0) && (
-          <section style={{ marginBottom: '1.75rem' }}>
-            <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '0.875rem', color: 'var(--teal-secondary)' }}>TODAY&apos;S PLAN</h2>
-            {todayPlans.map(plan => (
-              <TodayPlanCard key={plan.id} plan={plan} onUpdate={handlePlanUpdate} />
-            ))}
-            {completedToday.map(plan => (
-              <div key={plan.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '0.5rem', opacity: 0.6 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>✅ {plan.title}</span>
-                  <span style={{ fontSize: '0.7rem', color: '#22c55e' }}>Completed</span>
+        <section style={{ marginBottom: '1.75rem' }}>
+          <h2 className="font-display" style={{ fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '0.875rem', color: 'var(--teal-secondary)' }}>TODAY&apos;S PLAN</h2>
+          {todayPlans.length === 0 && completedToday.length === 0 ? (
+            <div className="card-vel" style={{ padding: '1.5rem', textAlign: 'center' }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>Rest day — no plan assigned for today.</p>
+              <Link href="/workouts/new" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontWeight: 600, fontSize: '0.875rem', display: 'inline', minHeight: 0 }}>
+                Log your own session →
+              </Link>
+            </div>
+          ) : (
+            <>
+              {todayPlans.map(plan => (
+                <TodayPlanCard key={plan.id} plan={plan} onUpdate={handlePlanUpdate} />
+              ))}
+              {completedToday.map(plan => (
+                <div key={plan.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '0.5rem', opacity: 0.6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>✅ {plan.title}</span>
+                    <span style={{ fontSize: '0.7rem', color: '#22c55e' }}>Completed</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </>
+          )}
+        </section>
+
+        {/* ── TODAY'S CLASSES ── */}
+        {todayClasses.length > 0 && (
+          <section style={{ marginBottom: '1.75rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
+              <h2 className="font-display" style={{ fontSize: '1.5rem', letterSpacing: '0.03em' }}>TODAY&apos;S CLASSES</h2>
+              <Link href="/calendar" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontSize: '0.8rem', minHeight: 0, display: 'inline' }}>View calendar →</Link>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {todayClasses.map(cls => (
+                <div
+                  key={cls.id}
+                  onClick={() => setSelectedClass(cls)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedClass(cls) } }}
+                  className="card-interactive"
+                  style={{ padding: '0.875rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', minHeight: '56px' }}
+                >
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <p style={{ fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cls.title}</p>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      🕐 {cls.start_time?.slice(0, 5)}{cls.end_time ? ` – ${cls.end_time?.slice(0, 5)}` : ''}
+                      {cls.location ? ` · 📍 ${cls.location}` : ''}
+                      {cls.profiles?.name ? ` · ${cls.profiles.name}` : ''}
+                    </p>
+                  </div>
+                  <span style={{ fontSize: '1.1rem', color: 'var(--text-secondary)', flexShrink: 0 }}>›</span>
+                </div>
+              ))}
+            </div>
           </section>
         )}
+
+        {/* ── THIS WEEK ── */}
+        <section style={{ marginBottom: '1.75rem' }}>
+          <h2 className="font-display" style={{ fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '0.875rem' }}>THIS WEEK</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem' }}>
+            <div className="card-vel" style={{ padding: '1rem', textAlign: 'center' }}>
+              <p className="stat-number" style={{ color: 'var(--teal-secondary)' }}>{thisWeekWorkouts.length}</p>
+              <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Workouts</p>
+            </div>
+            <div className="card-vel" style={{ padding: '1rem', textAlign: 'center' }}>
+              <p className="stat-number" style={{ color: 'var(--text-primary)' }}>{thisWeekDuration > 0 ? formatDuration(thisWeekDuration) : '—'}</p>
+              <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Time Trained</p>
+            </div>
+          </div>
+        </section>
 
         {/* ── UPCOMING PLANS ── */}
         {upcomingPlans.length > 0 && (
           <section style={{ marginBottom: '1.75rem' }}>
-            <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '0.875rem' }}>UPCOMING THIS WEEK</h2>
-            <div style={{ display: 'flex', gap: '0.75rem', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', paddingBottom: '4px' }}>
+            <h2 className="font-display" style={{ fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '0.875rem' }}>UPCOMING THIS WEEK</h2>
+            <div className="snap-carousel">
               {upcomingPlans.map(p => {
                 const tb = typeBadge(p.type)
                 const isActing = quickActionLoading === p.id
                 return (
-                  <div key={p.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', minWidth: '180px', flexShrink: 0 }}>
+                  <div key={p.id} className="card-vel" style={{ padding: '1rem', width: '200px' }}>
                     <p style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', fontWeight: 700, marginBottom: '0.25rem' }}>
                       {new Date(p.scheduled_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                     </p>
@@ -308,14 +387,14 @@ export default function DashboardPage() {
                       <button
                         onClick={() => handleQuickPlanAction(p.id, 'completed')}
                         disabled={isActing}
-                        style={{ flex: 1, background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.375rem', padding: '0.3rem 0.25rem', fontSize: '0.65rem', fontWeight: 700, color: '#4ade80', cursor: isActing ? 'not-allowed' : 'pointer', minHeight: 0 }}
+                        style={{ flex: 1, minHeight: '44px', background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.3rem 0.25rem', fontSize: '0.75rem', fontWeight: 700, color: '#4ade80', cursor: isActing ? 'not-allowed' : 'pointer' }}
                       >
                         ✅ Done
                       </button>
                       <button
                         onClick={() => handleQuickPlanAction(p.id, 'skipped')}
                         disabled={isActing}
-                        style={{ flex: 1, background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.3rem 0.25rem', fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-secondary)', cursor: isActing ? 'not-allowed' : 'pointer', minHeight: 0 }}
+                        style={{ flex: 1, minHeight: '44px', background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.3rem 0.25rem', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', cursor: isActing ? 'not-allowed' : 'pointer' }}
                       >
                         ⏭️ Skip
                       </button>
@@ -327,48 +406,13 @@ export default function DashboardPage() {
           </section>
         )}
 
-        {/* ── TODAY'S CLASSES ── */}
-        {todayClasses.length > 0 && (
-          <section style={{ marginBottom: '1.75rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
-              <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>TODAY&apos;S CLASSES</h2>
-              <Link href="/calendar" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontSize: '0.8rem', minHeight: 0, display: 'inline' }}>View calendar →</Link>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {todayClasses.map(cls => (
-                <div
-                  key={cls.id}
-                  onClick={() => setSelectedClass(cls)}
-                  role="button"
-                  style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', cursor: 'pointer', transition: 'border-color 0.15s' }}
-                  onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--teal-primary)'}
-                  onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'}
-                >
-                  <div>
-                    <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{cls.title}</p>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                      🕐 {cls.start_time?.slice(0, 5)}{cls.end_time ? ` – ${cls.end_time?.slice(0, 5)}` : ''}
-                      {cls.location ? ` · 📍 ${cls.location}` : ''}
-                      {cls.groups ? ` · 👥 ${cls.groups.name}` : ''}
-                    </p>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    {cls.profiles && <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)' }}>Coach: {cls.profiles.name}</p>}
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Tap →</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* ── COACH: Upcoming classes I'm coaching ── */}
+        {/* ── COACH: Classes I'm coaching ── */}
         {userRole === 'coach' && upcomingCoachClasses.length > 0 && (
           <section style={{ marginBottom: '1.75rem' }}>
-            <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '0.875rem' }}>CLASSES I&apos;M COACHING</h2>
+            <h2 className="font-display" style={{ fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '0.875rem' }}>CLASSES I&apos;M COACHING</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               {upcomingCoachClasses.map(cls => (
-                <div key={cls.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                <div key={cls.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', minHeight: '56px' }}>
                   <div style={{ minWidth: 0 }}>
                     <p style={{ fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cls.title}</p>
                     <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -377,7 +421,7 @@ export default function DashboardPage() {
                       {cls.groups?.name ? ` · 👥 ${cls.groups.name}` : ''}
                     </p>
                   </div>
-                  <Link href="/coach" style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '0.4rem 0.875rem', borderRadius: '0.5rem', textDecoration: 'none', fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, minHeight: 0 }}>
+                  <Link href="/coach" className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.4rem 0.875rem', minHeight: '36px', whiteSpace: 'nowrap', flexShrink: 0 }}>
                     Manage
                   </Link>
                 </div>
@@ -386,82 +430,36 @@ export default function DashboardPage() {
           </section>
         )}
 
-        {/* ── RECENT WORKOUTS + PRs GRID ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '2rem', alignItems: 'start' }} className="dashboard-grid">
-          {/* Workouts */}
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
-              <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>MY RECENT WORKOUTS</h2>
-              <Link href="/workouts" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontSize: '0.8rem', minHeight: 0, display: 'inline' }}>View all →</Link>
-            </div>
-            {allWorkoutsList.length === 0 ? (
-              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '3rem', textAlign: 'center' }}>
-                <p style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>💪</p>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>No workouts yet. Let&apos;s get started!</p>
-                <Link href="/workouts/new" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontWeight: 600, minHeight: 0, display: 'inline' }}>Log your first workout →</Link>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {allWorkoutsList.slice(0, 3).map(w => {
-                  const badge = typeBadge(w.type)
-                  return (
-                    <Link key={w.id} href={`/workouts/${w.id}`} style={{ textDecoration: 'none' }}>
-                      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem', cursor: 'pointer', transition: 'border-color 0.2s' }}
-                        onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--teal-primary)'}
-                        onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <span style={{ fontSize: '1.25rem' }}>{badge.icon}</span>
-                            <div>
-                              <h3 style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.2rem' }}>{w.title}</h3>
-                              <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-                                {new Date(w.date ?? w.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                {w.duration ? ` · ${w.duration} min` : ''}
-                                {(w.exercises as any[])?.[0]?.count ? ` · ${(w.exercises as any[])[0].count} exercises` : ''}
-                              </p>
-                            </div>
-                          </div>
-                          <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.25rem 0.625rem', borderRadius: '999px', textTransform: 'uppercase' as const, letterSpacing: '0.07em', background: badge.bg, color: badge.color, border: `1px solid ${badge.border}` }}>
-                            {w.type}
-                          </span>
-                        </div>
-                      </div>
-                    </Link>
-                  )
-                })}
-              </div>
-            )}
-          </div>
+        {/* ── PRs + RECENT WORKOUTS GRID ── */}
+        <div className="dashboard-grid" style={{ display: 'grid', gap: '2rem', alignItems: 'start' }}>
 
-          {/* Sidebar: PRs + Skipped + Quick Log */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* Sidebar: PRs + Kudos + Skipped */}
+          <div className="dash-col-side" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             {/* PRs */}
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', letterSpacing: '0.03em' }}>🏆 MY RECENT PRs</h2>
+                <h2 className="font-display" style={{ fontSize: '1.25rem', letterSpacing: '0.03em' }}>🏆 MY RECENT PRs</h2>
                 <Link href="/leaderboard" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontSize: '0.75rem', minHeight: 0, display: 'inline' }}>Board →</Link>
               </div>
               {prs.length === 0 ? (
-                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.5rem', textAlign: 'center' }}>
+                <div className="card-vel" style={{ padding: '1.5rem', textAlign: 'center' }}>
                   <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>No PRs yet.</p>
                   <Link href="/leaderboard" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontSize: '0.8rem', minHeight: 0, display: 'inline' }}>Submit your first PR →</Link>
                 </div>
               ) : (
                 <>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div className="snap-carousel pr-carousel">
                     {prs.map(pr => (
-                      <div key={pr.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', minWidth: 0 }}>
-                            <span style={{ fontSize: '0.75rem', flexShrink: 0 }}>{pr.is_public ? '🌐' : '🔒'}</span>
-                            <span style={{ fontSize: '0.875rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.exercise_name ?? pr.exercise}</span>
-                          </div>
-                          <span style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.1rem', color: 'var(--teal-secondary)', flexShrink: 0 }}>
-                            {pr.value} <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{pr.unit}</span>
-                          </span>
+                      <div key={pr.id} className="card-vel pr-card" style={{ padding: '0.875rem', width: '160px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', minWidth: 0 }}>
+                          <span style={{ fontSize: '0.75rem', flexShrink: 0 }}>{pr.is_public ? '🌐' : '🔒'}</span>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.exercise_name ?? pr.exercise}</span>
                         </div>
+                        <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.75rem', color: 'var(--teal-secondary)', lineHeight: 1.1, marginTop: '0.25rem' }}>
+                          {pr.value} <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{pr.unit}</span>
+                        </p>
                         <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-                          {new Date(pr.date ?? pr.recorded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          {new Date(pr.date ?? pr.recorded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                         </p>
                       </div>
                     ))}
@@ -481,7 +479,7 @@ export default function DashboardPage() {
             {/* Kudos received */}
             {kudosReceived.length > 0 && (
               <div>
-                <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', letterSpacing: '0.03em', marginBottom: '0.75rem' }}>👊 KUDOS RECEIVED</h2>
+                <h2 className="font-display" style={{ fontSize: '1.25rem', letterSpacing: '0.03em', marginBottom: '0.75rem' }}>👊 KUDOS RECEIVED</h2>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   {kudosReceived.map(k => (
                     <div key={k.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.75rem 0.875rem' }}>
@@ -497,8 +495,51 @@ export default function DashboardPage() {
             {skippedPlans.length > 0 && (
               <SkippedPlansSection plans={skippedPlans} userId={userId} supabase={supabase} onUpdate={loadData} />
             )}
-
           </div>
+
+          {/* Workouts */}
+          <div className="dash-col-main">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
+              <h2 className="font-display" style={{ fontSize: '1.5rem', letterSpacing: '0.03em' }}>MY RECENT WORKOUTS</h2>
+              <Link href="/workouts" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontSize: '0.8rem', minHeight: 0, display: 'inline' }}>View all →</Link>
+            </div>
+            {allWorkoutsList.length === 0 ? (
+              <div className="card-vel" style={{ padding: '3rem', textAlign: 'center' }}>
+                <p style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>💪</p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>No workouts yet. Let&apos;s get started!</p>
+                <Link href="/workouts/new" className="btn-primary" style={{ display: 'inline-flex' }}>+ Log your first workout</Link>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {allWorkoutsList.slice(0, 3).map(w => {
+                  const badge = typeBadge(w.type)
+                  return (
+                    <Link key={w.id} href={`/workouts/${w.id}`} style={{ textDecoration: 'none' }}>
+                      <div className="card-interactive" style={{ padding: '1rem 1.25rem', minHeight: '56px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: 1 }}>
+                            <span style={{ fontSize: '1.25rem', flexShrink: 0 }}>{badge.icon}</span>
+                            <div style={{ minWidth: 0 }}>
+                              <h3 style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.2rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.title}</h3>
+                              <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                                {new Date(w.date ?? w.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                {w.duration ? ` · ${w.duration} min` : ''}
+                                {(w.exercises as any[])?.[0]?.count ? ` · ${(w.exercises as any[])[0].count} exercises` : ''}
+                              </p>
+                            </div>
+                          </div>
+                          <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.25rem 0.625rem', borderRadius: '999px', textTransform: 'uppercase' as const, letterSpacing: '0.07em', background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`, flexShrink: 0 }}>
+                            {w.type}
+                          </span>
+                        </div>
+                      </div>
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
         </div>
 
       </main>
@@ -514,24 +555,16 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* Mobile FAB */}
-      <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 50 }}>
-        <Link href="/workouts/new" aria-label="Log new workout" style={{
-          background: 'var(--teal-primary)', color: 'white',
-          width: '56px', height: '56px', borderRadius: '50%',
-          display: 'none', alignItems: 'center', justifyContent: 'center',
-          textDecoration: 'none', fontSize: '1.5rem', fontWeight: 700,
-          boxShadow: '0 4px 20px rgba(8,119,160,0.5)',
-        }} className="mobile-fab">
-          +
-        </Link>
-      </div>
       <style>{`
+        .dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+        .dash-col-side { order: 0; }
+        .dash-col-main { order: 1; }
         @media (min-width: 768px) {
           .dashboard-grid { grid-template-columns: minmax(0, 1fr) 280px !important; }
-        }
-        @media (max-width: 767px) {
-          .mobile-fab { display: flex !important; }
+          .dash-col-main { order: 0; }
+          .dash-col-side { order: 1; }
+          .pr-carousel { flex-direction: column; overflow-x: visible; scroll-snap-type: none; }
+          .pr-card { width: 100% !important; }
           .md-show-flex { display: inline-flex !important; }
         }
       `}</style>
