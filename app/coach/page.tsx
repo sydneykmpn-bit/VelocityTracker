@@ -691,7 +691,7 @@ export default function CoachPage() {
   const loadAssignedPlans = async (coachId: string) => {
     const { data } = await supabase
       .from('workout_plans')
-      .select('*, profiles!workout_plans_member_id_fkey(name), workout_plan_exercises(count)')
+      .select('*, member:profiles!workout_plans_member_id_fkey(name), workout_plan_exercises(count)')
       .eq('coach_id', coachId)
       .order('scheduled_date', { ascending: false })
     setAssignedPlans(data ?? [])
@@ -732,7 +732,7 @@ export default function CoachPage() {
     // above, but keep skipped so misses are still visible on the calendar.
     let planQuery = supabase
       .from('workout_plans')
-      .select('*, profiles!workout_plans_member_id_fkey(name)')
+      .select('*, member:profiles!workout_plans_member_id_fkey(name)')
       .gte('scheduled_date', startOfMonth)
       .lte('scheduled_date', endStr)
       .neq('status', 'completed')
@@ -743,7 +743,7 @@ export default function CoachPage() {
       ...p,
       isPlan: true,
       date: p.scheduled_date,
-      member_name: p['profiles!workout_plans_member_id_fkey']?.name,
+      member_name: p.member?.name,
     }))
 
     setCalendarWorkouts([...loggedWorkouts, ...normalizedPlans])
@@ -1809,7 +1809,7 @@ export default function CoachPage() {
             {(() => {
               let filteredAssignedPlans = !planSearch.trim()
                 ? assignedPlans
-                : assignedPlans.filter((p: any) => p.profiles?.name?.toLowerCase().includes(planSearch.toLowerCase()))
+                : assignedPlans.filter((p: any) => p.member?.name?.toLowerCase().includes(planSearch.toLowerCase()))
               if (planMemberFilter !== 'all') {
                 const groupMemberIds = new Set((groupMembers[planMemberFilter] ?? []).map((gm: any) => gm.member_id))
                 filteredAssignedPlans = filteredAssignedPlans.filter((p: any) => groupMemberIds.has(p.member_id))
@@ -1846,7 +1846,7 @@ export default function CoachPage() {
                                       <span style={{ fontSize: '0.75rem', color: st.color }}>{st.label}</span>
                                     </div>
                                     <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                                      {p.profiles?.name} · {(p.workout_plan_exercises as any[])?.[0]?.count ?? 0} exercises
+                                      {p.member?.name} · {(p.workout_plan_exercises as any[])?.[0]?.count ?? 0} exercises
                                     </p>
                                   </div>
                                 </div>
