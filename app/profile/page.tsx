@@ -30,7 +30,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<any>(null)
   const [form, setForm] = useState({
     name: '', gender: '', age: '', weight_kg: '', weight_unit: 'kg',
-    city: '', contact_number: '', medical_info: '',
+    city: '', contact_number: '', medical_info: '', goals: '',
   })
 
   const [passwordOpen, setPasswordOpen] = useState(false)
@@ -63,6 +63,7 @@ export default function ProfilePage() {
           city: data.city || '',
           contact_number: data.contact_number || '',
           medical_info: data.medical_info || '',
+          goals: data.goals || '',
         })
       }
       setLoading(false)
@@ -84,6 +85,7 @@ export default function ProfilePage() {
       city: form.city.trim() || null,
       contact_number: form.contact_number.trim() || null,
       medical_info: form.medical_info.trim() || null,
+      goals: form.goals.trim() || null,
     }).eq('id', user.id)
     if (err) setError(err.message)
     else setSuccess(true)
@@ -260,6 +262,16 @@ export default function ProfilePage() {
             <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
               🔒 Visible to your coaches and admins only.
             </p>
+          </div>
+
+          {/* Goals */}
+          <div>
+            <label style={labelBase}>Goals</label>
+            <textarea
+              value={form.goals} onChange={e => setForm({ ...form, goals: e.target.value })}
+              style={{ ...inputBase, minHeight: '90px', resize: 'vertical', fontFamily: 'inherit' }}
+              placeholder="e.g. Get stronger / Conditioning for basketball: improve handles, dribbling, shooting"
+            />
           </div>
 
           {/* Role (read-only) */}

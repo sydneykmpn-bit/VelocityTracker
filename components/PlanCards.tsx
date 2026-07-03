@@ -169,8 +169,8 @@ export function SkippedPlansSection({ plans, userId, supabase, onUpdate }: { pla
 
   return (
     <div>
-      <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.1rem', letterSpacing: '0.03em', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>
-        ⏭️ SKIPPED / MISSED
+      <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.1rem', letterSpacing: '0.03em', marginBottom: '0.5rem', color: '#ef4444' }}>
+        ❌ MISSED
       </h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
         {plans.map(p => (

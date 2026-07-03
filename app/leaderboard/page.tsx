@@ -20,10 +20,10 @@ const EXERCISE_LIST = [
 ]
 
 const FEATURED_EXERCISES = [
-  { key: 'Back Squat', label: 'Squat', icon: '🏋️' },
-  { key: 'Deadlift', label: 'Deadlift', icon: '💀' },
-  { key: 'Overhead Press', label: 'OHP', icon: '☝️' },
-  { key: 'Sprint', label: 'Sprint', icon: '💨' },
+  { key: 'Back Squat', label: 'Squat' },
+  { key: 'Deadlift', label: 'Deadlift' },
+  { key: 'Overhead Press', label: 'OHP' },
+  { key: 'Sprint', label: 'Sprint' },
 ]
 
 const PUBLIC_PR_EXERCISES = [
@@ -453,7 +453,7 @@ export default function LeaderboardPage() {
                     border: `1px solid ${featuredFilter === ex.key ? 'var(--teal-primary)' : 'var(--border)'}`,
                     transition: 'all 0.15s', minHeight: 38,
                   }}>
-                  {ex.icon} {ex.label}
+                  {ex.label}
                 </button>
               ))}
             </div>

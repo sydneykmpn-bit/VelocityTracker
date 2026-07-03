@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -241,6 +241,12 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
                     <div style={{ background: 'rgba(245,158,11,0.08)', borderLeft: '3px solid #f59e0b', borderRadius: '0.5rem', padding: '0.75rem 1rem' }}>
                       <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#f59e0b', marginBottom: '0.35rem' }}>⚠️ Medical / Injury Info</p>
                       <p style={{ fontSize: '0.8rem', color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{profile.medical_info}</p>
+                    </div>
+                  )}
+                  {profile?.goals && (
+                    <div style={{ background: 'rgba(8,119,160,0.08)', borderLeft: '3px solid var(--teal-primary)', borderRadius: '0.5rem', padding: '0.75rem 1rem' }}>
+                      <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--teal-secondary)', marginBottom: '0.35rem' }}>🎯 Goals</p>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{profile.goals}</p>
                     </div>
                   )}
                   <div>
@@ -545,8 +551,21 @@ export default function CoachPage() {
   const [activeTab, setActiveTab] = useState<Tab>('members')
   const [loading, setLoading] = useState(true)
 
+  const noteTextRef = useRef<HTMLTextAreaElement | null>(null)
+
   const switchTab = (tab: Tab) => {
     setActiveTab(tab)
+  }
+
+  const jumpToNoteEdit = (note: any) => {
+    switchTab('notes')
+    setEditingNote(note.id)
+    setEditText(note.note)
+  }
+
+  const jumpToAddNote = () => {
+    switchTab('notes')
+    setTimeout(() => noteTextRef.current?.focus(), 50)
   }
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -975,18 +994,54 @@ export default function CoachPage() {
     if (userId) await loadAssignedPlans(userId)
   }
 
-  const handleCompletePlan = async (planId: string) => {
+  const handleCompletePlan = async (plan: any) => {
     if (!userId) return
-    setPlanActionLoading(planId)
-    await supabase.from('workout_plans').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', planId)
+    setPlanActionLoading(plan.id)
+
+    const { data: planExercises } = await supabase
+      .from('workout_plan_exercises')
+      .select('*')
+      .eq('plan_id', plan.id)
+      .order('order_index')
+
+    const { data: newWorkout } = await supabase.from('workouts').insert({
+      user_id: plan.member_id,
+      title: plan.title,
+      type: plan.type,
+      notes: `Auto-logged from assigned plan. ${plan.description || ''}`.trim(),
+      duration: null,
+      date: new Date().toISOString(),
+    }).select().single()
+
+    if (newWorkout && planExercises && planExercises.length > 0) {
+      await supabase.from('exercises').insert(
+        planExercises.map((ex: any) => ({
+          workout_id: newWorkout.id,
+          name: ex.name, sets: ex.sets, reps: ex.reps,
+          weight: ex.weight, duration: ex.duration,
+          distance: ex.distance, notes: ex.notes,
+        }))
+      )
+    }
+
+    await supabase.from('workout_plans').update({
+      status: 'completed',
+      completed_at: new Date().toISOString(),
+      auto_logged_workout_id: newWorkout?.id ?? null,
+    }).eq('id', plan.id)
+
     await loadAssignedPlans(userId)
     setPlanActionLoading(null)
   }
 
-  const handleUndoCompletePlan = async (planId: string) => {
+  const handleUndoCompletePlan = async (plan: any) => {
     if (!userId) return
-    setPlanActionLoading(planId)
-    await supabase.from('workout_plans').update({ status: 'pending', completed_at: null }).eq('id', planId)
+    setPlanActionLoading(plan.id)
+    if (plan.auto_logged_workout_id) {
+      await supabase.from('exercises').delete().eq('workout_id', plan.auto_logged_workout_id)
+      await supabase.from('workouts').delete().eq('id', plan.auto_logged_workout_id)
+    }
+    await supabase.from('workout_plans').update({ status: 'pending', completed_at: null, auto_logged_workout_id: null }).eq('id', plan.id)
     await loadAssignedPlans(userId)
     setPlanActionLoading(null)
   }
@@ -1199,10 +1254,11 @@ export default function CoachPage() {
   const handleAddNote = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!noteText.trim() || !userId) return
+    if (!notesMemberId) { setError('Select a member for this note.'); return }
     setNoteSaving(true); setError(''); setSuccess('')
     const { error: err } = await supabase.from('coach_notes').insert({
       coach_id: userId,
-      member_id: notesMemberId || null,
+      member_id: notesMemberId,
       note: noteText.trim(),
       visible_to_member: visibleToMember,
       is_pinned: false,
@@ -1253,7 +1309,7 @@ export default function CoachPage() {
   const PLAN_STATUS: Record<string, { label: string; color: string }> = {
     pending: { label: '🟡 Pending', color: '#f59e0b' },
     completed: { label: '✅ Completed', color: '#22c55e' },
-    skipped: { label: '⏭️ Skipped', color: '#8A8A8A' },
+    skipped: { label: '❌ Missed', color: '#ef4444' },
     rescheduled: { label: '📅 Rescheduled', color: '#60a5fa' },
   }
 
@@ -1328,11 +1384,26 @@ export default function CoachPage() {
             </div>
           </div>
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.75rem' }}>Recent Notes</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', margin: 0 }}>Recent Notes</p>
+              <button
+                onClick={jumpToAddNote}
+                style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.25rem 0.6rem', fontSize: '0.7rem', fontWeight: 700, color: 'var(--teal-secondary)', cursor: 'pointer', minHeight: 0 }}
+              >
+                + Add note
+              </button>
+            </div>
             {recentNotes.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>No coach notes yet.</p>
             ) : recentNotes.map(note => (
-              <div key={note.id} style={{ borderBottom: '1px solid var(--border)', paddingBottom: '0.6rem', marginBottom: '0.6rem' }}>
+              <div
+                key={note.id}
+                onClick={() => jumpToNoteEdit(note)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpToNoteEdit(note) } }}
+                style={{ borderBottom: '1px solid var(--border)', paddingBottom: '0.6rem', marginBottom: '0.6rem', cursor: 'pointer' }}
+              >
                 <p style={{ fontSize: '0.8rem', fontWeight: 700 }}>{note.member?.name ?? 'General note'}</p>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', lineHeight: 1.45, marginTop: '0.2rem' }}>{note.note}</p>
               </div>
@@ -1924,7 +1995,7 @@ export default function CoachPage() {
                   { key: 'all', label: 'All', icon: '📋' },
                   { key: 'pending', label: 'Pending', icon: '🟡' },
                   { key: 'completed', label: 'Completed', icon: '✅' },
-                  { key: 'skipped', label: 'Skipped', icon: '⏭️' },
+                  { key: 'skipped', label: 'Missed', icon: '❌' },
                   { key: 'rescheduled', label: 'Rescheduled', icon: '📅' },
                 ] as const).map(tab => (
                   <button
@@ -2038,7 +2109,7 @@ export default function CoachPage() {
                                   <div style={{ display: 'flex', gap: '0.5rem', padding: '0 1rem 0.875rem', flexWrap: 'wrap' }}>
                                     {p.status !== 'completed' ? (
                                       <button
-                                        onClick={() => handleCompletePlan(p.id)}
+                                        onClick={() => handleCompletePlan(p)}
                                         disabled={isActingThis}
                                         style={{ flex: '1 1 auto', background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.35)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: '#4ade80', fontSize: '0.75rem', cursor: isActingThis ? 'not-allowed' : 'pointer', minHeight: 0 }}
                                       >
@@ -2046,7 +2117,7 @@ export default function CoachPage() {
                                       </button>
                                     ) : (
                                       <button
-                                        onClick={() => handleUndoCompletePlan(p.id)}
+                                        onClick={() => handleUndoCompletePlan(p)}
                                         disabled={isActingThis}
                                         style={{ flex: '1 1 auto', background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: 'var(--text-secondary)', fontSize: '0.75rem', cursor: isActingThis ? 'not-allowed' : 'pointer', minHeight: 0 }}
                                       >
@@ -2266,8 +2337,8 @@ export default function CoachPage() {
                           if (w.isPlan) {
                             const isSkipped = w.status === 'skipped'
                             return (
-                              <div key={w.id} style={{ ...badgeStyle, background: 'transparent', color: isSkipped ? '#f59e0b' : '#34bac2', border: `1px dashed ${isSkipped ? 'rgba(245,158,11,0.6)' : 'rgba(8,119,160,0.5)'}` }}>
-                                {isSkipped ? '⚠️' : '📋'} {label}
+                              <div key={w.id} style={{ ...badgeStyle, background: 'transparent', color: isSkipped ? '#ef4444' : '#34bac2', border: `1px dashed ${isSkipped ? 'rgba(239,68,68,0.6)' : 'rgba(8,119,160,0.5)'}` }}>
+                                {isSkipped ? '❌' : '📋'} {label}
                               </div>
                             )
                           }
@@ -2308,11 +2379,11 @@ export default function CoachPage() {
                             const isSkipped = w.status === 'skipped'
                             const tb = TYPE_BADGE[w.type] ?? TYPE_BADGE.both
                             return (
-                              <div key={w.id} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderLeft: `2px dashed ${isSkipped ? '#f59e0b' : 'var(--teal-primary)'}`, borderRadius: '0.75rem', padding: '1rem', opacity: isSkipped ? 0.7 : 1 }}>
+                              <div key={w.id} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderLeft: `2px dashed ${isSkipped ? '#ef4444' : 'var(--teal-primary)'}`, borderRadius: '0.75rem', padding: '1rem', opacity: isSkipped ? 0.7 : 1 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
                                   <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', ...tb }}>{w.type}</span>
-                                  <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', background: isSkipped ? 'rgba(245,158,11,0.15)' : 'rgba(8,119,160,0.15)', color: isSkipped ? '#f59e0b' : 'var(--teal-secondary)' }}>
-                                    {isSkipped ? '⚠️ Skipped' : '📋 Assigned'}
+                                  <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', background: isSkipped ? 'rgba(239,68,68,0.15)' : 'rgba(8,119,160,0.15)', color: isSkipped ? '#ef4444' : 'var(--teal-secondary)' }}>
+                                    {isSkipped ? '❌ Missed' : '📋 Assigned'}
                                   </span>
                                 </div>
                                 <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>{w.title}</p>
@@ -2338,15 +2409,15 @@ export default function CoachPage() {
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>ADD NOTE</h2>
               <form onSubmit={handleAddNote} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 <div>
-                  <label style={labelBase}>For Member (optional)</label>
-                  <select value={notesMemberId} onChange={e => setNotesMemberId(e.target.value)} style={{ ...inputBase, width: '100%', cursor: 'pointer' }}>
-                    <option value="">General / All</option>
+                  <label style={labelBase}>For Member *</label>
+                  <select value={notesMemberId} onChange={e => setNotesMemberId(e.target.value)} required style={{ ...inputBase, width: '100%', cursor: 'pointer' }}>
+                    <option value="">Select a student…</option>
                     {myMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label style={labelBase}>Note</label>
-                  <textarea value={noteText} onChange={e => setNoteText(e.target.value)} required style={{ ...inputBase, width: '100%', minHeight: '80px', resize: 'vertical' }} placeholder="Write a coaching note…" />
+                  <textarea ref={noteTextRef} value={noteText} onChange={e => setNoteText(e.target.value)} required style={{ ...inputBase, width: '100%', minHeight: '80px', resize: 'vertical' }} placeholder="Write a coaching note…" />
                 </div>
                 {/* Visible to member toggle */}
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
@@ -2361,7 +2432,7 @@ export default function CoachPage() {
                     <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', margin: 0 }}>{visibleToMember ? 'Member will see this note on their dashboard' : 'Only you can see this note'}</p>
                   </div>
                 </label>
-                <button type="submit" disabled={noteSaving} style={{ background: noteSaving ? '#0d1a1e' : 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.7rem', fontWeight: 700, fontSize: '0.875rem', cursor: noteSaving ? 'not-allowed' : 'pointer' }}>
+                <button type="submit" disabled={noteSaving || !notesMemberId} style={{ background: (noteSaving || !notesMemberId) ? '#0d1a1e' : 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.7rem', fontWeight: 700, fontSize: '0.875rem', cursor: (noteSaving || !notesMemberId) ? 'not-allowed' : 'pointer' }}>
                   {noteSaving ? 'Saving…' : 'Save Note'}
                 </button>
               </form>

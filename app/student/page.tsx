@@ -19,7 +19,7 @@ function formatDate(date: string) {
   return new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
-function CompletedPlansCollapse({ plans }: { plans: any[] }) {
+function CompletedPlansCollapse({ plans, onUndo, undoingId }: { plans: any[]; onUndo: (plan: any) => void; undoingId: string | null }) {
   const [showAll, setShowAll] = useState(false)
   const visible = showAll ? plans : plans.slice(0, 3)
 
@@ -36,12 +36,19 @@ function CompletedPlansCollapse({ plans }: { plans: any[] }) {
             display: 'flex', alignItems: 'center', gap: '0.75rem', opacity: 0.7,
           }}>
             <span style={{ color: '#4ade80', fontWeight: 800, fontSize: '0.8rem' }}>✓</span>
-            <div style={{ minWidth: 0 }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
               <p style={{ fontWeight: 600, fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{plan.title}</p>
               <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>
                 {new Date(plan.scheduled_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
               </p>
             </div>
+            <button
+              onClick={() => onUndo(plan)}
+              disabled={undoingId === plan.id}
+              style={{ background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 700, cursor: undoingId === plan.id ? 'not-allowed' : 'pointer', opacity: undoingId === plan.id ? 0.6 : 1, whiteSpace: 'nowrap', flexShrink: 0, minHeight: 0 }}
+            >
+              {undoingId === plan.id ? 'Undoing…' : '↩ Undo'}
+            </button>
           </div>
         ))}
       </div>
@@ -319,8 +326,8 @@ export default function StudentPage() {
               </p>
             )}
             <div style={{ height: 1, background: 'var(--border)', margin: '1rem 0' }} />
-            <p style={{ color: skippedPlans.length > 0 ? '#f59e0b' : 'var(--text-secondary)', fontSize: '0.8rem' }}>
-              {skippedPlans.length > 0 ? `${skippedPlans.length} skipped plan${skippedPlans.length === 1 ? '' : 's'} to revisit.` : 'No skipped plans waiting.'}
+            <p style={{ color: skippedPlans.length > 0 ? '#ef4444' : 'var(--text-secondary)', fontSize: '0.8rem' }}>
+              {skippedPlans.length > 0 ? `${skippedPlans.length} missed plan${skippedPlans.length === 1 ? '' : 's'} to revisit.` : 'No missed plans waiting.'}
             </p>
           </div>
         </div>
@@ -410,7 +417,7 @@ export default function StudentPage() {
                   />
                 ))}
                 {completedPlans.length > 0 && (
-                  <CompletedPlansCollapse plans={completedPlans} />
+                  <CompletedPlansCollapse plans={completedPlans} onUndo={handleUndoCompletion} undoingId={undoingId} />
                 )}
               </div>
             )}

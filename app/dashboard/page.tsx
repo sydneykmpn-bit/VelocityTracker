@@ -30,7 +30,6 @@ export default function DashboardPage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [selectedClass, setSelectedClass] = useState<any>(null)
   const [quickActionLoading, setQuickActionLoading] = useState<string | null>(null)
-  const [kudosReceived, setKudosReceived] = useState<any[]>([])
 
   const today = getLocalDateString()
 
@@ -78,14 +77,6 @@ export default function DashboardPage() {
     setUpcomingPlans(upcomingP ?? [])
     setSkippedPlans(skippedP ?? [])
     setTodayClasses(classes ?? [])
-
-    const { data: kudosData } = await supabase
-      .from('kudos')
-      .select('*, profiles!kudos_from_user_fkey(name)')
-      .eq('to_user', uid)
-      .order('created_at', { ascending: false })
-      .limit(3)
-    setKudosReceived(kudosData ?? [])
 
     // Coach note
     const { data: noteData } = await supabase
@@ -152,6 +143,21 @@ export default function DashboardPage() {
     } else {
       await supabase.from('workout_plans').update({ status: 'skipped' }).eq('id', planId)
     }
+    setQuickActionLoading(null)
+    handlePlanUpdate()
+  }
+
+  const handleUndoQuickPlanAction = async (plan: any) => {
+    setQuickActionLoading(plan.id)
+    if (plan.auto_logged_workout_id) {
+      await supabase.from('exercises').delete().eq('workout_id', plan.auto_logged_workout_id)
+      await supabase.from('workouts').delete().eq('id', plan.auto_logged_workout_id)
+    }
+    await supabase.from('workout_plans').update({
+      status: 'pending',
+      completed_at: null,
+      auto_logged_workout_id: null,
+    }).eq('id', plan.id)
     setQuickActionLoading(null)
     handlePlanUpdate()
   }
@@ -303,14 +309,26 @@ export default function DashboardPage() {
               {todayPlans.map(plan => (
                 <TodayPlanCard key={plan.id} plan={plan} onUpdate={handlePlanUpdate} />
               ))}
-              {completedToday.map(plan => (
-                <div key={plan.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '0.5rem', opacity: 0.6 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>✅ {plan.title}</span>
-                    <span style={{ fontSize: '0.7rem', color: '#22c55e' }}>Completed</span>
+              {completedToday.map(plan => {
+                const isActing = quickActionLoading === plan.id
+                return (
+                  <div key={plan.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '0.5rem', opacity: 0.6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>✅ {plan.title}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '0.7rem', color: '#22c55e' }}>Completed</span>
+                        <button
+                          onClick={() => handleUndoQuickPlanAction(plan)}
+                          disabled={isActing}
+                          style={{ background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 700, cursor: isActing ? 'not-allowed' : 'pointer', opacity: isActing ? 0.6 : 1, whiteSpace: 'nowrap', minHeight: 0 }}
+                        >
+                          {isActing ? 'Undoing…' : '↩ Undo'}
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </>
           )}
         </section>
@@ -433,7 +451,7 @@ export default function DashboardPage() {
         {/* ── PRs + RECENT WORKOUTS GRID ── */}
         <div className="dashboard-grid" style={{ display: 'grid', gap: '2rem', alignItems: 'start' }}>
 
-          {/* Sidebar: PRs + Kudos + Skipped */}
+          {/* Sidebar: PRs + Skipped */}
           <div className="dash-col-side" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             {/* PRs */}
             <div>
@@ -475,21 +493,6 @@ export default function DashboardPage() {
                 </>
               )}
             </div>
-
-            {/* Kudos received */}
-            {kudosReceived.length > 0 && (
-              <div>
-                <h2 className="font-display" style={{ fontSize: '1.25rem', letterSpacing: '0.03em', marginBottom: '0.75rem' }}>👊 KUDOS RECEIVED</h2>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {kudosReceived.map(k => (
-                    <div key={k.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.75rem 0.875rem' }}>
-                      <p style={{ fontSize: '0.8rem', fontWeight: 600 }}>{k.profiles?.name ?? 'A member'}</p>
-                      {k.message && <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>{k.message}</p>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Skipped */}
             {skippedPlans.length > 0 && (
