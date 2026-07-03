@@ -128,6 +128,7 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
   const [stats, setStats] = useState({ total: 0, thisMonth: 0, totalPRs: 0 })
   const [loadingModal, setLoadingModal] = useState(true)
   const [activeModalTab, setActiveModalTab] = useState<'overview'|'workouts'|'prs'>('overview')
+  const [memberGroups, setMemberGroups] = useState<any[]>([])
 
   useEffect(() => {
     async function load() {
@@ -137,6 +138,8 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
       setAllWorkouts(w || [])
       const { data: pr } = await supabase.from('personal_records').select('*').eq('user_id', memberId).order('value', { ascending: false })
       setPRs(pr || [])
+      const { data: gm } = await supabase.from('group_members').select('groups(id, name)').eq('member_id', memberId)
+      setMemberGroups((gm ?? []).map((g: any) => g.groups).filter(Boolean))
       const thisMonth = getLocalDateString().slice(0, 7)
       setStats({
         total: w?.length || 0,
@@ -170,13 +173,18 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
             <div>
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>{memberName}</h2>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{profile?.email}</p>
-              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem', fontSize: '0.7rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem', fontSize: '0.7rem', color: 'var(--text-secondary)', flexWrap: 'wrap', alignItems: 'center' }}>
                 {profile?.gender && <span>{profile.gender === 'male' ? '♂ Male' : profile.gender === 'female' ? '♀ Female' : profile.gender}</span>}
                 {profile?.age && <span>Age {profile.age}</span>}
                 {profile?.weight_kg && <span>{profile.weight_kg} {profile.weight_unit || 'kg'}</span>}
                 {profile?.city && <span>{profile.city}</span>}
                 {profile?.contact_number && <span>{profile.contact_number}</span>}
                 {profile?.created_at && <span>Since {new Date(profile.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>}
+                {memberGroups.map(g => (
+                  <span key={g.id} style={{ fontSize: '0.7rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '999px', background: 'rgba(8,119,160,0.15)', color: 'var(--teal-secondary)', border: '1px solid rgba(8,119,160,0.3)' }}>
+                    👥 {g.name}
+                  </span>
+                ))}
               </div>
             </div>
           </div>
@@ -575,6 +583,9 @@ export default function CoachPage() {
   const [shareTemplate, setShareTemplate] = useState(false)
   const [templateSaved, setTemplateSaved] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null)
+  const [templateSource, setTemplateSource] = useState<'shared' | 'mine'>('shared')
+  const [templateDropdownOpen, setTemplateDropdownOpen] = useState(false)
+  const [templateSearch, setTemplateSearch] = useState('')
 
   // Edit assigned plan
   const [editingPlan, setEditingPlan] = useState<string | null>(null)
@@ -1581,37 +1592,121 @@ export default function CoachPage() {
         {activeTab === 'assign' && (
           <div key="tab-assign">
             {/* Load from Template */}
-            {templates.length > 0 && (
-              <div style={{ marginBottom: '1.5rem' }}>
-                <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>Load from Saved Template</p>
-                <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.375rem', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-                  {templates.map(t => (
-                    <button key={t.id} type="button" onClick={() => {
-                      setSelectedTemplate(t)
-                      setAssignForm(p => ({ ...p, title: t.title, description: t.description || '', type: t.type }))
-                      setPlanExercises(
-                        t.workout_template_exercises.sort((a: any, b: any) => a.order_index - b.order_index).map((ex: any) => ({
-                          name: ex.name, sets: ex.sets?.toString() || '', reps: ex.reps?.toString() || '',
-                          weight: ex.weight?.toString() || '', duration: ex.duration?.toString() || '',
-                          distance: ex.distance?.toString() || '', notes: ex.notes || '',
-                        }))
-                      )
-                    }} style={{
-                      flexShrink: 0, padding: '0.625rem 0.875rem', borderRadius: '0.5rem', textAlign: 'left', cursor: 'pointer',
-                      background: selectedTemplate?.id === t.id ? 'rgba(8,119,160,0.2)' : 'var(--surface-raised)',
-                      border: `1px solid ${selectedTemplate?.id === t.id ? 'var(--teal-primary)' : 'var(--border)'}`,
-                      color: 'var(--text-primary)', minWidth: '140px', minHeight: 0,
-                    }}>
-                      <p style={{ fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</p>
-                      <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>{t.type} · {t.workout_template_exercises?.length || 0} exercises</p>
+            {(() => {
+              const sharedTemplates = templates.filter((t: any) => t.is_shared)
+              const myTemplates = templates.filter((t: any) => t.created_by === userId)
+              if (sharedTemplates.length === 0 && myTemplates.length === 0) return null
+              return (
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={labelBase}>Load from Template</label>
+                  <div style={{ position: 'relative' }}>
+                    {/* Source toggle */}
+                    <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '0.5rem' }}>
+                      {(['shared', 'mine'] as const).map(src => (
+                        <button key={src} type="button"
+                          onClick={() => { setTemplateSource(src); setTemplateSearch('') }}
+                          style={{
+                            padding: '0.3rem 0.75rem', borderRadius: '999px',
+                            fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer',
+                            border: 'none',
+                            background: templateSource === src ? 'var(--teal-primary)' : '#1a2e34',
+                            color: templateSource === src ? '#fff' : 'var(--text-secondary)',
+                            minHeight: 0,
+                          }}>
+                          {src === 'shared' ? '👨‍💼 Shared by Coach' : '📋 My Templates'}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Dropdown trigger */}
+                    <button type="button"
+                      onClick={() => setTemplateDropdownOpen(prev => !prev)}
+                      style={{
+                        width: '100%', background: '#0d1a1e', border: '1px solid #1a2e34',
+                        borderRadius: '0.5rem', padding: '0.7rem 1rem',
+                        color: selectedTemplate ? '#F2F2F2' : 'var(--text-secondary)',
+                        fontSize: '0.875rem', cursor: 'pointer', textAlign: 'left',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 0,
+                      }}>
+                      <span>{selectedTemplate ? selectedTemplate.title : 'Select a template...'}</span>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                        {templateDropdownOpen ? '▲' : '▼'}
+                      </span>
                     </button>
-                  ))}
+
+                    {/* Dropdown list */}
+                    {templateDropdownOpen && (
+                      <div style={{
+                        position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
+                        background: '#0d1a1e', border: '1px solid #1a2e34',
+                        borderRadius: '0.5rem', overflow: 'hidden', marginTop: '2px',
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.6)', maxHeight: '240px', overflowY: 'auto',
+                      }}>
+                        {/* Search inside dropdown */}
+                        <div style={{ padding: '0.5rem', borderBottom: '1px solid #1a2e34' }}>
+                          <input
+                            type="text"
+                            value={templateSearch}
+                            onChange={e => setTemplateSearch(e.target.value)}
+                            placeholder="Search templates..."
+                            style={{ width: '100%', background: '#111b20', border: '1px solid #1a2e34', borderRadius: '0.375rem', padding: '0.4rem 0.625rem', color: '#F2F2F2', fontSize: '0.8rem', outline: 'none' }}
+                            onClick={e => e.stopPropagation()}
+                          />
+                        </div>
+
+                        {/* Template list filtered by source + search */}
+                        {(templateSource === 'shared' ? sharedTemplates : myTemplates)
+                          .filter((t: any) => !templateSearch || t.title.toLowerCase().includes(templateSearch.toLowerCase()))
+                          .map((t: any) => (
+                            <button key={t.id} type="button"
+                              onClick={() => {
+                                setSelectedTemplate(t)
+                                setAssignForm(p => ({ ...p, title: t.title, type: t.type, description: t.description || p.description }))
+                                const exs = (t.workout_template_exercises || []).sort((a: any, b: any) => a.order_index - b.order_index)
+                                setPlanExercises(exs.length > 0 ? exs.map((ex: any) => ({
+                                  name: ex.name, sets: ex.sets?.toString() || '', reps: ex.reps?.toString() || '',
+                                  weight: ex.weight?.toString() || '', duration: ex.duration?.toString() || '',
+                                  distance: ex.distance?.toString() || '', notes: ex.notes || '',
+                                })) : [blankEx()])
+                                setTemplateDropdownOpen(false)
+                                setTemplateSearch('')
+                              }}
+                              style={{
+                                display: 'block', width: '100%', textAlign: 'left', background: 'none',
+                                border: 'none', padding: '0.7rem 1rem', color: '#F2F2F2',
+                                fontSize: '0.8rem', cursor: 'pointer', borderBottom: '1px solid #1a2e34',
+                              }}
+                              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(8,119,160,0.15)' }}
+                              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none' }}
+                            >
+                              <p style={{ fontWeight: 600 }}>{t.title}</p>
+                              <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>
+                                {t.type} · {t.workout_template_exercises?.length || 0} exercises
+                              </p>
+                            </button>
+                          ))
+                        }
+
+                        {/* Empty state */}
+                        {(templateSource === 'shared' ? sharedTemplates : myTemplates)
+                          .filter((t: any) => !templateSearch || t.title.toLowerCase().includes(templateSearch.toLowerCase()))
+                          .length === 0 && (
+                          <p style={{ padding: '1rem', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'center' }}>
+                            {templateSearch ? 'No templates match your search.' : templateSource === 'shared' ? 'No shared templates yet.' : 'No personal templates yet.'}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {selectedTemplate && (
+                    <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)', marginTop: '0.375rem' }}>
+                      ✓ Loaded: {selectedTemplate.title} — you can still customize
+                    </p>
+                  )}
                 </div>
-                {selectedTemplate && (
-                  <p style={{ fontSize: '0.75rem', marginTop: '0.5rem', color: 'var(--teal-secondary)' }}>✓ Template loaded — you can still customize before assigning</p>
-                )}
-              </div>
-            )}
+              )
+            })()}
 
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.5rem' }}>
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>ASSIGN WORKOUT PLAN</h2>
