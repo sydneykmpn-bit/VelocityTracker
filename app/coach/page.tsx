@@ -584,6 +584,9 @@ export default function CoachPage() {
   const [planStatusFilter, setPlanStatusFilter] = useState<'all'|'pending'|'completed'|'skipped'|'rescheduled'>('all')
   const [planMemberFilter, setPlanMemberFilter] = useState('all')
   const [expandedPlanMember, setExpandedPlanMember] = useState<string | null>(null)
+  const [planActionLoading, setPlanActionLoading] = useState<string | null>(null)
+  const [reschedulingPlan, setReschedulingPlan] = useState<string | null>(null)
+  const [reschedulePlanDate, setReschedulePlanDate] = useState('')
   const [planSearch, setPlanSearch] = useState('')
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<{id: string; name: string} | null>(null)
   const [memberSearch, setMemberSearch] = useState('')
@@ -695,7 +698,17 @@ export default function CoachPage() {
       .select('*, member:profiles!workout_plans_member_id_fkey(name), workout_plan_exercises(count)')
       .eq('coach_id', coachId)
       .order('scheduled_date', { ascending: false })
-    setAssignedPlans(data ?? [])
+
+    // Client-side catch-up only — a plan won't flip to 'skipped' until the coach next opens Assigned
+    // Plans, not on a schedule. Same limitation as the equivalent logic in dashboard/student pages.
+    const today = getLocalDateString()
+    const overdueIds = (data ?? []).filter((p: any) => p.status === 'pending' && p.scheduled_date < today).map((p: any) => p.id)
+    let finalPlans = data ?? []
+    if (overdueIds.length > 0) {
+      await supabase.from('workout_plans').update({ status: 'skipped' }).in('id', overdueIds)
+      finalPlans = finalPlans.map((p: any) => overdueIds.includes(p.id) ? { ...p, status: 'skipped' } : p)
+    }
+    setAssignedPlans(finalPlans)
   }
 
   const loadPrograms = async (coachId: string) => {
@@ -949,6 +962,34 @@ export default function CoachPage() {
     }
 
     if (userId) await loadAssignedPlans(userId)
+  }
+
+  const handleCompletePlan = async (planId: string) => {
+    if (!userId) return
+    setPlanActionLoading(planId)
+    await supabase.from('workout_plans').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', planId)
+    await loadAssignedPlans(userId)
+    setPlanActionLoading(null)
+  }
+
+  const handleUndoCompletePlan = async (planId: string) => {
+    if (!userId) return
+    setPlanActionLoading(planId)
+    await supabase.from('workout_plans').update({ status: 'pending', completed_at: null }).eq('id', planId)
+    await loadAssignedPlans(userId)
+    setPlanActionLoading(null)
+  }
+
+  const handleReschedulePlan = async (planId: string) => {
+    if (!userId || !reschedulePlanDate) return
+    setPlanActionLoading(planId)
+    await supabase.from('workout_plans').update({
+      status: 'pending', scheduled_date: reschedulePlanDate, rescheduled_date: reschedulePlanDate,
+    }).eq('id', planId)
+    setReschedulingPlan(null)
+    setReschedulePlanDate('')
+    await loadAssignedPlans(userId)
+    setPlanActionLoading(null)
   }
 
   const updatePlanEx = (idx: number, field: keyof PlanExercise, val: string) => {
@@ -1880,6 +1921,8 @@ export default function CoachPage() {
                               const tb = TYPE_BADGE[p.type] ?? TYPE_BADGE.both
                               const st = PLAN_STATUS[p.status ?? 'pending'] ?? PLAN_STATUS.pending
                               const isEditingThis = editingPlan === p.id
+                              const isReschedulingThis = reschedulingPlan === p.id
+                              const isActingThis = planActionLoading === p.id
                               return (
                                 <div key={p.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', overflow: 'hidden' }}>
                                   <div style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -1892,9 +1935,41 @@ export default function CoachPage() {
                                       <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                                         {p.member?.name} · {(p.workout_plan_exercises as any[])?.[0]?.count ?? 0} exercises
                                       </p>
+                                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
+                                        {new Date(p.scheduled_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                                      </p>
                                     </div>
                                   </div>
-                                  <div style={{ display: 'flex', gap: '0.5rem', padding: '0 1rem 0.875rem' }}>
+                                  <div style={{ display: 'flex', gap: '0.5rem', padding: '0 1rem 0.875rem', flexWrap: 'wrap' }}>
+                                    {p.status !== 'completed' ? (
+                                      <button
+                                        onClick={() => handleCompletePlan(p.id)}
+                                        disabled={isActingThis}
+                                        style={{ flex: '1 1 auto', background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.35)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: '#4ade80', fontSize: '0.75rem', cursor: isActingThis ? 'not-allowed' : 'pointer', minHeight: 0 }}
+                                      >
+                                        ✅ {isActingThis ? 'Saving…' : 'Complete'}
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleUndoCompletePlan(p.id)}
+                                        disabled={isActingThis}
+                                        style={{ flex: '1 1 auto', background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: 'var(--text-secondary)', fontSize: '0.75rem', cursor: isActingThis ? 'not-allowed' : 'pointer', minHeight: 0 }}
+                                      >
+                                        ↩️ {isActingThis ? 'Saving…' : 'Undo Completion'}
+                                      </button>
+                                    )}
+                                    {p.status !== 'completed' && (
+                                      <button
+                                        onClick={() => {
+                                          if (isReschedulingThis) { setReschedulingPlan(null); setReschedulePlanDate(''); return }
+                                          setReschedulePlanDate(p.scheduled_date)
+                                          setReschedulingPlan(p.id)
+                                        }}
+                                        style={{ flex: '1 1 auto', background: isReschedulingThis ? 'rgba(96,165,250,0.15)' : 'none', border: `1px solid ${isReschedulingThis ? '#60a5fa' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: isReschedulingThis ? '#60a5fa' : 'var(--text-secondary)', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}
+                                      >
+                                        📅 {isReschedulingThis ? 'Cancel' : 'Reschedule'}
+                                      </button>
+                                    )}
                                     <button onClick={async () => {
                                       if (isEditingThis) { setEditingPlan(null); return }
                                       const { data: exs } = await supabase.from('workout_plan_exercises').select('*').eq('plan_id', p.id).order('order_index')
@@ -1905,13 +1980,31 @@ export default function CoachPage() {
                                         distance: ex.distance?.toString() || '', notes: ex.notes || '',
                                       })))
                                       setEditingPlan(p.id)
-                                    }} style={{ flex: 1, background: isEditingThis ? 'rgba(8,119,160,0.15)' : 'none', border: `1px solid ${isEditingThis ? 'var(--teal-primary)' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: isEditingThis ? 'var(--teal-secondary)' : 'var(--text-secondary)', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
+                                    }} style={{ flex: '1 1 auto', background: isEditingThis ? 'rgba(8,119,160,0.15)' : 'none', border: `1px solid ${isEditingThis ? 'var(--teal-primary)' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: isEditingThis ? 'var(--teal-secondary)' : 'var(--text-secondary)', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
                                       ✏️ {isEditingThis ? 'Editing…' : 'Edit'}
                                     </button>
-                                    <button onClick={() => handleDeletePlan(p.id)} style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: '#f87171', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
+                                    <button onClick={() => handleDeletePlan(p.id)} style={{ flex: '1 1 auto', background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: '#f87171', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
                                       🗑️ Remove
                                     </button>
                                   </div>
+
+                                  {isReschedulingThis && (
+                                    <div style={{ padding: '0 1rem 0.875rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                      <input
+                                        type="date"
+                                        value={reschedulePlanDate}
+                                        onChange={e => setReschedulePlanDate(e.target.value)}
+                                        style={{ ...inputBase, flex: 1 }}
+                                      />
+                                      <button
+                                        onClick={() => handleReschedulePlan(p.id)}
+                                        disabled={isActingThis || !reschedulePlanDate}
+                                        style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.4rem 0.875rem', fontWeight: 700, fontSize: '0.75rem', cursor: (isActingThis || !reschedulePlanDate) ? 'not-allowed' : 'pointer', minHeight: 0 }}
+                                      >
+                                        {isActingThis ? 'Saving…' : 'Confirm'}
+                                      </button>
+                                    </div>
+                                  )}
 
                                   {isEditingThis && (
                                     <div style={{ borderTop: '1px solid var(--border)', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.875rem', background: '#0a1518' }}>
