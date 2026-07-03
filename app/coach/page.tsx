@@ -583,6 +583,7 @@ export default function CoachPage() {
   const [activePlanEditSuggestion, setActivePlanEditSuggestion] = useState<number | null>(null)
   const [planStatusFilter, setPlanStatusFilter] = useState<'all'|'pending'|'completed'|'skipped'|'rescheduled'>('all')
   const [planMemberFilter, setPlanMemberFilter] = useState('all')
+  const [expandedPlanMember, setExpandedPlanMember] = useState<string | null>(null)
   const [planSearch, setPlanSearch] = useState('')
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<{id: string; name: string} | null>(null)
   const [memberSearch, setMemberSearch] = useState('')
@@ -1816,150 +1817,195 @@ export default function CoachPage() {
               }
               const filtered = planStatusFilter === 'all' ? filteredAssignedPlans : filteredAssignedPlans.filter(p => p.status === planStatusFilter)
               if (filtered.length === 0) return <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No {planStatusFilter !== 'all' ? planStatusFilter : ''} plans yet.</p>
-              const grouped = filtered.reduce((acc: any, plan: any) => {
-                const date = plan.scheduled_date
-                if (!acc[date]) acc[date] = []
-                acc[date].push(plan)
+
+              const todayStr = getLocalDateString()
+              const byMember = filtered.reduce((acc: Record<string, any[]>, plan: any) => {
+                if (!acc[plan.member_id]) acc[plan.member_id] = []
+                acc[plan.member_id].push(plan)
                 return acc
               }, {})
-              return (
-                <div>
-                  {Object.entries(grouped)
-                    .sort(([a], [b]) => (b as string).localeCompare(a as string))
-                    .map(([date, plans]: [string, any]) => (
-                      <div key={date} style={{ marginBottom: '1.5rem' }}>
-                        <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.625rem', paddingBottom: '0.375rem', borderBottom: '1px solid var(--border)' }}>
-                          {new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-                        </p>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                          {(plans as any[]).map((p: any) => {
-                            const tb = TYPE_BADGE[p.type] ?? TYPE_BADGE.both
-                            const st = PLAN_STATUS[p.status ?? 'pending'] ?? PLAN_STATUS.pending
-                            const isEditingThis = editingPlan === p.id
-                            return (
-                              <div key={p.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', overflow: 'hidden' }}>
-                                <div style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                  <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
-                                      <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{p.title}</span>
-                                      <span style={{ ...tb, fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase' }}>{p.type}</span>
-                                      <span style={{ fontSize: '0.75rem', color: st.color }}>{st.label}</span>
-                                    </div>
-                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                                      {p.member?.name} · {(p.workout_plan_exercises as any[])?.[0]?.count ?? 0} exercises
-                                    </p>
-                                  </div>
-                                </div>
-                                <div style={{ display: 'flex', gap: '0.5rem', padding: '0 1rem 0.875rem' }}>
-                                  <button onClick={async () => {
-                                    if (isEditingThis) { setEditingPlan(null); return }
-                                    const { data: exs } = await supabase.from('workout_plan_exercises').select('*').eq('plan_id', p.id).order('order_index')
-                                    setEditPlanForm({ title: p.title, description: p.description || '', type: p.type, scheduled_date: p.scheduled_date, member_id: p.member_id })
-                                    setEditPlanExercises((exs || []).map(ex => ({
-                                      name: ex.name, sets: ex.sets?.toString() || '', reps: ex.reps?.toString() || '',
-                                      weight: ex.weight?.toString() || '', duration: ex.duration?.toString() || '',
-                                      distance: ex.distance?.toString() || '', notes: ex.notes || '',
-                                    })))
-                                    setEditingPlan(p.id)
-                                  }} style={{ flex: 1, background: isEditingThis ? 'rgba(8,119,160,0.15)' : 'none', border: `1px solid ${isEditingThis ? 'var(--teal-primary)' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: isEditingThis ? 'var(--teal-secondary)' : 'var(--text-secondary)', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
-                                    ✏️ {isEditingThis ? 'Editing…' : 'Edit'}
-                                  </button>
-                                  <button onClick={() => handleDeletePlan(p.id)} style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: '#f87171', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
-                                    🗑️ Remove
-                                  </button>
-                                </div>
 
-                      {isEditingThis && (
-                        <div style={{ borderTop: '1px solid var(--border)', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.875rem', background: '#0a1518' }}>
-                          <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--teal-secondary)' }}>EDIT PLAN</p>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                            <div>
-                              <label style={labelBase}>Title</label>
-                              <input type="text" value={editPlanForm.title || ''} onChange={e => setEditPlanForm((prev: any) => ({ ...prev, title: e.target.value }))} style={{ ...inputBase, width: '100%' }} />
+              const studentGroups = Object.entries(byMember).map(([memberId, plans]) => {
+                const memberName = (plans as any[])[0]?.member?.name ?? '—'
+                const pendingCount = (plans as any[]).filter(p => p.status === 'pending').length
+                const todayCount = (plans as any[]).filter(p => p.scheduled_date === todayStr).length
+                const skippedCount = (plans as any[]).filter(p => p.status === 'skipped').length
+                const priority = todayCount > 0 ? 0 : skippedCount > 0 ? 1 : 2
+                return {
+                  memberId, memberName, pendingCount, todayCount, skippedCount, priority,
+                  plans: (plans as any[]).sort((a, b) => (b.scheduled_date ?? '').localeCompare(a.scheduled_date ?? '')),
+                }
+              }).sort((a, b) => a.priority - b.priority || a.memberName.localeCompare(b.memberName))
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {studentGroups.map(sg => {
+                    const isExpanded = expandedPlanMember === sg.memberId
+                    return (
+                      <div key={sg.memberId} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', overflow: 'hidden' }}>
+                        <button
+                          onClick={() => setExpandedPlanMember(prev => prev === sg.memberId ? null : sg.memberId)}
+                          style={{ width: '100%', background: 'none', border: 'none', padding: '1rem 1.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', color: '#F2F2F2' }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
+                            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--teal-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.875rem', fontWeight: 700, flexShrink: 0 }}>
+                              {sg.memberName?.charAt(0)?.toUpperCase() || '?'}
                             </div>
-                            <div>
-                              <label style={labelBase}>Date</label>
-                              <input type="date" value={editPlanForm.scheduled_date || ''} onChange={e => setEditPlanForm((prev: any) => ({ ...prev, scheduled_date: e.target.value }))} style={{ ...inputBase, width: '100%' }} />
+                            <div style={{ textAlign: 'left', minWidth: 0 }}>
+                              <h3 style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.3rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sg.memberName}</h3>
+                              <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
+                                {sg.pendingCount > 0 && (
+                                  <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', background: 'var(--surface-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                                    {sg.pendingCount} pending
+                                  </span>
+                                )}
+                                {sg.todayCount > 0 && (
+                                  <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', background: 'rgba(8,119,160,0.15)', color: 'var(--teal-secondary)', border: '1px solid rgba(8,119,160,0.35)' }}>
+                                    {sg.todayCount} today
+                                  </span>
+                                )}
+                                {sg.skippedCount > 0 && (
+                                  <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.35)' }}>
+                                    {sg.skippedCount} skipped
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
-                          <div>
-                            <label style={labelBase}>Type</label>
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                              {(['conditioning', 'basketball', 'both'] as const).map(t => (
-                                <button key={t} type="button" onClick={() => setEditPlanForm((prev: any) => ({ ...prev, type: t }))} style={{
-                                  flex: 1, background: editPlanForm.type === t ? 'rgba(8,119,160,0.2)' : '#0d1a1e',
-                                  border: `1px solid ${editPlanForm.type === t ? 'var(--teal-primary)' : '#1a2e34'}`,
-                                  borderRadius: '0.375rem', padding: '0.4rem', color: editPlanForm.type === t ? 'var(--teal-secondary)' : 'var(--text-secondary)',
-                                  fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize', minHeight: 0,
-                                }}>{t === 'conditioning' ? '🏋️' : t === 'basketball' ? '🏀' : '💪'}</button>
-                              ))}
-                            </div>
-                          </div>
-                          <div>
-                            <label style={labelBase}>Description</label>
-                            <textarea value={editPlanForm.description || ''} onChange={e => setEditPlanForm((prev: any) => ({ ...prev, description: e.target.value }))} style={{ ...inputBase, width: '100%', minHeight: '50px', resize: 'vertical' }} />
-                          </div>
-                          <div>
-                            <label style={{ ...labelBase, marginBottom: '0.375rem' }}>Exercises</label>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                              {editPlanExercises.map((ex, idx) => {
-                                const sug = getSuggestions(ex.name, editPlanForm.type || 'conditioning')
-                                return (
-                                  <div key={idx} style={{ background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.375rem', padding: '0.625rem' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
-                                      <span style={{ fontSize: '0.65rem', color: 'var(--teal-secondary)', fontWeight: 700 }}>EX {idx + 1}</span>
-                                      {editPlanExercises.length > 1 && (
-                                        <button type="button" onClick={() => setEditPlanExercises(editPlanExercises.filter((_, i) => i !== idx))} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0 }}>
-                                          <Trash2 size={12} />
-                                        </button>
-                                      )}
+                          {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />}
+                        </button>
+                        {isExpanded && (
+                          <div style={{ borderTop: '1px solid var(--border)', padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            {sg.plans.map((p: any) => {
+                              const tb = TYPE_BADGE[p.type] ?? TYPE_BADGE.both
+                              const st = PLAN_STATUS[p.status ?? 'pending'] ?? PLAN_STATUS.pending
+                              const isEditingThis = editingPlan === p.id
+                              return (
+                                <div key={p.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', overflow: 'hidden' }}>
+                                  <div style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
+                                        <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{p.title}</span>
+                                        <span style={{ ...tb, fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase' }}>{p.type}</span>
+                                        <span style={{ fontSize: '0.75rem', color: st.color }}>{st.label}</span>
+                                      </div>
+                                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                        {p.member?.name} · {(p.workout_plan_exercises as any[])?.[0]?.count ?? 0} exercises
+                                      </p>
                                     </div>
-                                    <div style={{ position: 'relative', marginBottom: '0.375rem' }}>
-                                      <input type="text" value={ex.name} autoComplete="off" placeholder="Exercise name"
-                                        onChange={e => { updateEditPlanEx(idx, 'name', e.target.value); setActivePlanEditSuggestion(idx) }}
-                                        onFocus={() => ex.name.length > 0 && setActivePlanEditSuggestion(idx)}
-                                        onBlur={() => setTimeout(() => setActivePlanEditSuggestion(null), 150)}
-                                        style={{ ...inputBase, width: '100%' }}
-                                      />
-                                      {activePlanEditSuggestion === idx && sug.length > 0 && (
-                                        <div style={{ position: 'absolute', top: 'calc(100% - 1px)', left: 0, right: 0, zIndex: 20, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0 0 0.375rem 0.375rem', maxHeight: '140px', overflowY: 'auto' }}>
-                                          {sug.map(s => (
-                                            <button key={s} type="button"
-                                              onMouseDown={() => { updateEditPlanEx(idx, 'name', s); setActivePlanEditSuggestion(null) }}
-                                              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.4rem 0.75rem', background: 'none', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.04)', color: '#F2F2F2', fontSize: '0.8rem', cursor: 'pointer', minHeight: 30 }}
-                                            >{s}</button>
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '0.5rem', padding: '0 1rem 0.875rem' }}>
+                                    <button onClick={async () => {
+                                      if (isEditingThis) { setEditingPlan(null); return }
+                                      const { data: exs } = await supabase.from('workout_plan_exercises').select('*').eq('plan_id', p.id).order('order_index')
+                                      setEditPlanForm({ title: p.title, description: p.description || '', type: p.type, scheduled_date: p.scheduled_date, member_id: p.member_id })
+                                      setEditPlanExercises((exs || []).map(ex => ({
+                                        name: ex.name, sets: ex.sets?.toString() || '', reps: ex.reps?.toString() || '',
+                                        weight: ex.weight?.toString() || '', duration: ex.duration?.toString() || '',
+                                        distance: ex.distance?.toString() || '', notes: ex.notes || '',
+                                      })))
+                                      setEditingPlan(p.id)
+                                    }} style={{ flex: 1, background: isEditingThis ? 'rgba(8,119,160,0.15)' : 'none', border: `1px solid ${isEditingThis ? 'var(--teal-primary)' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: isEditingThis ? 'var(--teal-secondary)' : 'var(--text-secondary)', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
+                                      ✏️ {isEditingThis ? 'Editing…' : 'Edit'}
+                                    </button>
+                                    <button onClick={() => handleDeletePlan(p.id)} style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: '#f87171', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
+                                      🗑️ Remove
+                                    </button>
+                                  </div>
+
+                                  {isEditingThis && (
+                                    <div style={{ borderTop: '1px solid var(--border)', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.875rem', background: '#0a1518' }}>
+                                      <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--teal-secondary)' }}>EDIT PLAN</p>
+                                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                        <div>
+                                          <label style={labelBase}>Title</label>
+                                          <input type="text" value={editPlanForm.title || ''} onChange={e => setEditPlanForm((prev: any) => ({ ...prev, title: e.target.value }))} style={{ ...inputBase, width: '100%' }} />
+                                        </div>
+                                        <div>
+                                          <label style={labelBase}>Date</label>
+                                          <input type="date" value={editPlanForm.scheduled_date || ''} onChange={e => setEditPlanForm((prev: any) => ({ ...prev, scheduled_date: e.target.value }))} style={{ ...inputBase, width: '100%' }} />
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <label style={labelBase}>Type</label>
+                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                          {(['conditioning', 'basketball', 'both'] as const).map(t => (
+                                            <button key={t} type="button" onClick={() => setEditPlanForm((prev: any) => ({ ...prev, type: t }))} style={{
+                                              flex: 1, background: editPlanForm.type === t ? 'rgba(8,119,160,0.2)' : '#0d1a1e',
+                                              border: `1px solid ${editPlanForm.type === t ? 'var(--teal-primary)' : '#1a2e34'}`,
+                                              borderRadius: '0.375rem', padding: '0.4rem', color: editPlanForm.type === t ? 'var(--teal-secondary)' : 'var(--text-secondary)',
+                                              fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize', minHeight: 0,
+                                            }}>{t === 'conditioning' ? '🏋️' : t === 'basketball' ? '🏀' : '💪'}</button>
                                           ))}
                                         </div>
-                                      )}
+                                      </div>
+                                      <div>
+                                        <label style={labelBase}>Description</label>
+                                        <textarea value={editPlanForm.description || ''} onChange={e => setEditPlanForm((prev: any) => ({ ...prev, description: e.target.value }))} style={{ ...inputBase, width: '100%', minHeight: '50px', resize: 'vertical' }} />
+                                      </div>
+                                      <div>
+                                        <label style={{ ...labelBase, marginBottom: '0.375rem' }}>Exercises</label>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                                          {editPlanExercises.map((ex, idx) => {
+                                            const sug = getSuggestions(ex.name, editPlanForm.type || 'conditioning')
+                                            return (
+                                              <div key={idx} style={{ background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.375rem', padding: '0.625rem' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
+                                                  <span style={{ fontSize: '0.65rem', color: 'var(--teal-secondary)', fontWeight: 700 }}>EX {idx + 1}</span>
+                                                  {editPlanExercises.length > 1 && (
+                                                    <button type="button" onClick={() => setEditPlanExercises(editPlanExercises.filter((_, i) => i !== idx))} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0 }}>
+                                                      <Trash2 size={12} />
+                                                    </button>
+                                                  )}
+                                                </div>
+                                                <div style={{ position: 'relative', marginBottom: '0.375rem' }}>
+                                                  <input type="text" value={ex.name} autoComplete="off" placeholder="Exercise name"
+                                                    onChange={e => { updateEditPlanEx(idx, 'name', e.target.value); setActivePlanEditSuggestion(idx) }}
+                                                    onFocus={() => ex.name.length > 0 && setActivePlanEditSuggestion(idx)}
+                                                    onBlur={() => setTimeout(() => setActivePlanEditSuggestion(null), 150)}
+                                                    style={{ ...inputBase, width: '100%' }}
+                                                  />
+                                                  {activePlanEditSuggestion === idx && sug.length > 0 && (
+                                                    <div style={{ position: 'absolute', top: 'calc(100% - 1px)', left: 0, right: 0, zIndex: 20, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0 0 0.375rem 0.375rem', maxHeight: '140px', overflowY: 'auto' }}>
+                                                      {sug.map(s => (
+                                                        <button key={s} type="button"
+                                                          onMouseDown={() => { updateEditPlanEx(idx, 'name', s); setActivePlanEditSuggestion(null) }}
+                                                          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.4rem 0.75rem', background: 'none', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.04)', color: '#F2F2F2', fontSize: '0.8rem', cursor: 'pointer', minHeight: 30 }}
+                                                        >{s}</button>
+                                                      ))}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.375rem' }}>
+                                                  {(['sets', 'reps', 'weight'] as const).map(f => (
+                                                    <input key={f} type="number" value={ex[f]} onChange={e => updateEditPlanEx(idx, f, e.target.value)} style={{ ...inputBase, width: '100%' }} placeholder={f === 'weight' ? 'kg' : f === 'sets' ? 'Sets' : 'Reps'} min="0" />
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )
+                                          })}
+                                          <button type="button" onClick={() => setEditPlanExercises([...editPlanExercises, blankEx()])} style={{ background: 'transparent', border: '1px dashed #1a2e34', borderRadius: '0.375rem', padding: '0.4rem', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.75rem', minHeight: 0 }}>
+                                            + Add Exercise
+                                          </button>
+                                        </div>
+                                      </div>
+                                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <button type="button" onClick={handleSavePlanEdit} style={{ flex: 1, background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.625rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', minHeight: 0 }}>Save Changes</button>
+                                        <button type="button" onClick={() => setEditingPlan(null)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.625rem 0.875rem', color: 'var(--text-secondary)', fontSize: '0.875rem', cursor: 'pointer', minHeight: 0 }}>Cancel</button>
+                                      </div>
                                     </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.375rem' }}>
-                                      {(['sets', 'reps', 'weight'] as const).map(f => (
-                                        <input key={f} type="number" value={ex[f]} onChange={e => updateEditPlanEx(idx, f, e.target.value)} style={{ ...inputBase, width: '100%' }} placeholder={f === 'weight' ? 'kg' : f === 'sets' ? 'Sets' : 'Reps'} min="0" />
-                                      ))}
-                                    </div>
-                                  </div>
-                                )
-                              })}
-                              <button type="button" onClick={() => setEditPlanExercises([...editPlanExercises, blankEx()])} style={{ background: 'transparent', border: '1px dashed #1a2e34', borderRadius: '0.375rem', padding: '0.4rem', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.75rem', minHeight: 0 }}>
-                                + Add Exercise
-                              </button>
-                            </div>
+                                  )}
+                                </div>
+                              )
+                            })}
                           </div>
-                          <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <button type="button" onClick={handleSavePlanEdit} style={{ flex: 1, background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.625rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', minHeight: 0 }}>Save Changes</button>
-                            <button type="button" onClick={() => setEditingPlan(null)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.625rem 0.875rem', color: 'var(--text-secondary)', fontSize: '0.875rem', cursor: 'pointer', minHeight: 0 }}>Cancel</button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-                        </div>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                )
-              })()}
+                    )
+                  })}
+                </div>
+              )
+            })()}
           </div>
         )}
 
