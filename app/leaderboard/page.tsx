@@ -7,7 +7,7 @@ import { Trash2 } from 'lucide-react'
 import { debounce, getLocalDateString, normalizeToKg, sortRecords, LOWER_IS_BETTER } from '@/lib/utils'
 
 type LeaderTab = 'public' | 'mine'
-const UNITS = ['kg', 'lbs', 'reps', 'seconds', 'minutes', 'km/h', 'mph'] as const
+const UNITS = ['kg', 'lbs', 'reps', 'seconds', 'minutes', 'kmh', 'mph'] as const
 type Unit = typeof UNITS[number]
 
 const EXERCISE_LIST = [
@@ -37,10 +37,10 @@ const TIME_SPEED_KEYWORDS = ['Run', 'Sprint', 'Row', 'Bike', 'Jump Rope', 'Tread
 
 function getValidUnits(tab: LeaderTab, ex: string): Unit[] {
   if (tab === 'public') {
-    return ex === 'Sprint' ? ['seconds', 'minutes', 'km/h', 'mph'] : ['kg', 'lbs']
+    return ex === 'Sprint' ? ['seconds', 'minutes', 'kmh', 'mph'] : ['kg', 'lbs']
   }
   const isTimeSpeed = TIME_SPEED_KEYWORDS.some(k => ex.toLowerCase().includes(k.toLowerCase()))
-  return isTimeSpeed ? ['seconds', 'minutes', 'km/h', 'mph'] : [...UNITS]
+  return isTimeSpeed ? ['seconds', 'minutes', 'kmh', 'mph'] : [...UNITS]
 }
 
 function convertForDisplay(value: number, storedUnit: string, preferredUnit: 'kg' | 'lbs'): { value: number; unit: string } {
