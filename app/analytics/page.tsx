@@ -6,10 +6,10 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Trash2, Pencil, Check, X } from 'lucide-react'
 import {
-  normalizeToKg, sortRecords, LOWER_IS_BETTER, formatLocalDate,
+  normalizeToKg, sortRecords, LOWER_IS_BETTER,
 } from '@/lib/utils'
 
-type Tab = 'prtrends' | 'volume' | 'body'
+type Tab = 'prtrends' | 'body'
 const UNITS = ['kg', 'lbs', 'reps', 'seconds', 'minutes', 'km/h', 'mph'] as const
 
 const inputBase: React.CSSProperties = {
@@ -83,9 +83,6 @@ export default function AnalyticsPage() {
   const [prSaving, setPrSaving] = useState(false)
   const [prDeleting, setPrDeleting] = useState<string | null>(null)
 
-  // Volume
-  const [volumeWorkouts, setVolumeWorkouts] = useState<any[]>([])
-
   // Body
   const [bodyMeasurements, setBodyMeasurements] = useState<any[]>([])
   const [bodyForm, setBodyForm] = useState({
@@ -96,18 +93,12 @@ export default function AnalyticsPage() {
   const [bodyError, setBodyError] = useState('')
 
   const loadAll = async (uid: string) => {
-    const eightWeeksAgo = new Date()
-    eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 56)
-    const eightWeeksAgoStr = formatLocalDate(eightWeeksAgo)
-
-    const [{ data: prs }, { data: workouts }, { data: measurements }] = await Promise.all([
+    const [{ data: prs }, { data: measurements }] = await Promise.all([
       supabase.from('personal_records').select('*').eq('user_id', uid).order('recorded_at', { ascending: true }),
-      supabase.from('workouts').select('*, exercises(*)').eq('user_id', uid).gte('date', eightWeeksAgoStr).order('date', { ascending: true }),
       supabase.from('body_measurements').select('*').eq('user_id', uid).order('recorded_at', { ascending: true }),
     ])
 
     setAllPRs(prs ?? [])
-    setVolumeWorkouts(workouts ?? [])
     setBodyMeasurements(measurements ?? [])
 
     if (!selectedExercise && prs && prs.length > 0) {
@@ -142,7 +133,6 @@ export default function AnalyticsPage() {
 
   const tabs: { value: Tab; label: string }[] = [
     { value: 'prtrends', label: 'PR Trends' },
-    { value: 'volume', label: 'Volume' },
     { value: 'body', label: 'Body' },
   ]
 
@@ -180,37 +170,6 @@ export default function AnalyticsPage() {
     setPrDeleting(null)
     loadData()
   }
-
-  // ── Volume derived data ──
-  const startOfWeek = (dateStr: string) => {
-    // dateStr may be a plain 'YYYY-MM-DD' or a full ISO timestamp (workouts.date is stored as
-    // new Date(...).toISOString()) — take just the date portion before forcing local midnight.
-    const d = new Date(dateStr.slice(0, 10) + 'T00:00:00')
-    d.setDate(d.getDate() - d.getDay())
-    return formatLocalDate(d)
-  }
-  const weekMap = new Map<string, { tonnage: number; exerciseVolume: Record<string, number> }>()
-  for (const w of volumeWorkouts) {
-    const weekKey = startOfWeek(w.date)
-    if (!weekMap.has(weekKey)) weekMap.set(weekKey, { tonnage: 0, exerciseVolume: {} })
-    const entry = weekMap.get(weekKey)!
-    for (const ex of (w.exercises ?? [])) {
-      const vol = (ex.sets || 0) * (ex.reps || 0) * (ex.weight || 0)
-      entry.tonnage += vol
-      entry.exerciseVolume[ex.name] = (entry.exerciseVolume[ex.name] || 0) + vol
-    }
-  }
-  const weeks = Array.from(weekMap.keys()).sort()
-  const weekData = weeks.map(k => ({ week: k, ...weekMap.get(k)! }))
-  const maxTonnage = Math.max(1, ...weekData.map(w => w.tonnage))
-  const totalTonnage = weekData.reduce((sum, w) => sum + w.tonnage, 0)
-  const exerciseTotals: Record<string, number> = {}
-  for (const w of weekData) {
-    for (const [name, vol] of Object.entries(w.exerciseVolume)) {
-      exerciseTotals[name] = (exerciseTotals[name] || 0) + vol
-    }
-  }
-  const topExercises = Object.entries(exerciseTotals).sort((a, b) => b[1] - a[1]).slice(0, 3)
 
   // ── Body derived data ──
   const bodyChartPoints = bodyMeasurements.filter(m => m.weight_kg != null).map(m => ({ x: m.recorded_at, y: m.weight_kg }))
@@ -328,49 +287,6 @@ export default function AnalyticsPage() {
                       )}
                     </div>
                   ))}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* ── VOLUME ── */}
-        {activeTab === 'volume' && (
-          <div key="tab-volume">
-            {weekData.length === 0 ? (
-              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-                No workouts logged in the last 8 weeks.
-              </div>
-            ) : (
-              <>
-                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1rem' }}>
-                  <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.25rem' }}>Total Tonnage (8 weeks)</p>
-                  <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '2rem', color: 'var(--teal-secondary)', marginBottom: '1.25rem' }}>{totalTonnage.toLocaleString()} kg</p>
-                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.5rem', height: '160px' }}>
-                    {weekData.map(w => (
-                      <div key={w.week} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem', height: '100%', justifyContent: 'flex-end' }}>
-                        <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>{w.tonnage > 0 ? Math.round(w.tonnage).toLocaleString() : ''}</span>
-                        <div style={{
-                          width: '100%', height: `${Math.max(2, (w.tonnage / maxTonnage) * 100)}%`,
-                          background: 'var(--teal-primary)', borderRadius: '0.25rem 0.25rem 0 0',
-                        }} />
-                        <span style={{ fontSize: '0.6rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                          {new Date(w.week + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
-                  <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>Top Exercises by Volume</p>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    {topExercises.map(([name, vol], i) => (
-                      <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.625rem 0.875rem' }}>
-                        <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{i + 1}. {name}</span>
-                        <span style={{ fontSize: '0.875rem', color: 'var(--teal-secondary)', fontWeight: 700 }}>{Math.round(vol).toLocaleString()} kg</span>
-                      </div>
-                    ))}
-                  </div>
                 </div>
               </>
             )}

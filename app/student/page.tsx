@@ -8,7 +8,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 import { getLocalDateString, normalizeToKg } from '@/lib/utils'
 import { TodayPlanCard, SkippedPlansSection, typeBadge } from '@/components/PlanCards'
 
-type Tab = 'plans' | 'prs' | 'schedule' | 'progress' | 'metrics'
+type Tab = 'plans' | 'prs' | 'metrics'
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--surface)',
@@ -74,7 +74,6 @@ export default function StudentPage() {
   const router = useRouter()
   const [profile, setProfile] = useState<any>(null)
   const [assignedPlans, setAssignedPlans] = useState<any[]>([])
-  const [workoutHistory, setWorkoutHistory] = useState<any[]>([])
   const [coach, setCoach] = useState<any>(null)
   const [activeTab, setActiveTab] = useState<Tab>('plans')
   const [loading, setLoading] = useState(true)
@@ -83,19 +82,18 @@ export default function StudentPage() {
   const [editPRValue, setEditPRValue] = useState('')
   const [editPRUnit, setEditPRUnit] = useState('')
   const [prLoading, setPRLoading] = useState(false)
-  const [upcomingClasses, setUpcomingClasses] = useState<any[]>([])
   const [bodyMetrics, setBodyMetrics] = useState<any[]>([])
   const [metricWeight, setMetricWeight] = useState('')
   const [metricUnit, setMetricUnit] = useState<'kg' | 'lbs'>('kg')
   const [metricSaving, setMetricSaving] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
-  const [groupIds, setGroupIds] = useState<string[]>([])
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [reschedulingId, setReschedulingId] = useState<string | null>(null)
   const [rescheduleDate, setRescheduleDate] = useState('')
   const [loggingPlanId, setLoggingPlanId] = useState<string | null>(null)
   const [undoingId, setUndoingId] = useState<string | null>(null)
   const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null)
+  const [planSortAsc, setPlanSortAsc] = useState(true)
 
   const reloadPlans = async (uid: string) => {
     const { data: plans } = await supabase
@@ -221,14 +219,6 @@ export default function StudentPage() {
       }
       setAssignedPlans(finalPlans)
 
-      const { data: workouts } = await supabase
-        .from('workouts')
-        .select('id, title, type, date, duration')
-        .eq('user_id', user.id)
-        .order('date', { ascending: true })
-        .limit(30)
-      setWorkoutHistory(workouts || [])
-
       setUserId(user.id)
 
       // PRs
@@ -238,26 +228,6 @@ export default function StudentPage() {
         .eq('user_id', user.id)
         .order('value', { ascending: false })
       setPRs(prData || [])
-
-      // Group IDs for class schedule
-      const { data: memberships } = await supabase.from('group_members').select('group_id').eq('member_id', user.id)
-      const gIds = (memberships || []).map((m: any) => m.group_id)
-      setGroupIds(gIds)
-
-      // Upcoming classes (next 14 days) for member's groups
-      if (gIds.length > 0) {
-        const today = getLocalDateString()
-        const in14 = new Date(); in14.setDate(in14.getDate() + 14)
-        const in14Str = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(in14)
-        const { data: classes } = await supabase
-          .from('scheduled_classes')
-          .select('*, groups(name), profiles!scheduled_classes_coach_id_fkey(name), class_attendees(id, member_id, status)')
-          .in('group_id', gIds)
-          .gte('scheduled_date', today)
-          .lte('scheduled_date', in14Str)
-          .order('scheduled_date').order('start_time')
-        setUpcomingClasses(classes || [])
-      }
 
       // Body metrics
       const { data: metrics } = await supabase.from('body_measurements').select('*').eq('user_id', user.id).order('recorded_at', { ascending: false }).limit(30)
@@ -274,6 +244,11 @@ export default function StudentPage() {
   const skippedPlans = assignedPlans.filter(p => p.status === 'skipped')
   const todayPlans = pendingPlans.filter(p => p.scheduled_date === getLocalDateString())
   const nextPlan = [...pendingPlans].sort((a, b) => String(a.scheduled_date).localeCompare(String(b.scheduled_date)))[0]
+  const sortedPendingPlans = [...pendingPlans].sort((a, b) =>
+    planSortAsc
+      ? String(a.scheduled_date).localeCompare(String(b.scheduled_date))
+      : String(b.scheduled_date).localeCompare(String(a.scheduled_date))
+  )
   const planCompletionRate = assignedPlans.length > 0 ? Math.round((completedPlans.length / assignedPlans.length) * 100) : 0
   const firstName = profile?.name?.split(' ')[0] ?? 'Athlete'
 
@@ -292,8 +267,6 @@ export default function StudentPage() {
   const tabs: { value: Tab; label: string }[] = [
     { value: 'plans', label: 'Assigned Plans' },
     { value: 'prs', label: 'My PRs' },
-    { value: 'schedule', label: 'Class Schedule' },
-    { value: 'progress', label: 'Progress' },
     { value: 'metrics', label: 'Body Metrics' },
   ]
 
@@ -399,14 +372,37 @@ export default function StudentPage() {
 
         {activeTab === 'plans' && (
           <div>
+            {skippedPlans.length > 0 && (
+              <div style={{ marginBottom: '1.5rem' }}>
+                <SkippedPlansSection
+                  plans={skippedPlans}
+                  userId={userId}
+                  supabase={supabase}
+                  onUpdate={async () => {
+                    if (!userId) return
+                    await reloadPlans(userId)
+                  }}
+                />
+              </div>
+            )}
             {pendingPlans.length === 0 && completedPlans.length === 0 ? (
               <div style={{ ...cardStyle, padding: '3rem', textAlign: 'center' }}>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No workout plans assigned yet.</p>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {pendingPlans.length > 0 && <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)' }}>Upcoming / Pending</p>}
-                {pendingPlans.map(plan => {
+                {pendingPlans.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
+                    <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)' }}>Upcoming / Pending</p>
+                    <button
+                      onClick={() => setPlanSortAsc(prev => !prev)}
+                      style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 0 }}
+                    >
+                      Sort: Date {planSortAsc ? '↑' : '↓'}
+                    </button>
+                  </div>
+                )}
+                {sortedPendingPlans.map(plan => {
                   const isExpandedOnMobile = expandedPlanId === plan.id
                   const tb = typeBadge(plan.type)
                   return (
@@ -460,19 +456,6 @@ export default function StudentPage() {
                 {completedPlans.length > 0 && (
                   <CompletedPlansCollapse plans={completedPlans} onUndo={handleUndoCompletion} undoingId={undoingId} />
                 )}
-              </div>
-            )}
-            {skippedPlans.length > 0 && (
-              <div style={{ marginTop: '1.5rem' }}>
-                <SkippedPlansSection
-                  plans={skippedPlans}
-                  userId={userId}
-                  supabase={supabase}
-                  onUpdate={async () => {
-                    if (!userId) return
-                    await reloadPlans(userId)
-                  }}
-                />
               </div>
             )}
           </div>
@@ -608,101 +591,6 @@ export default function StudentPage() {
                   </div>
                 )
               })
-            )}
-          </div>
-        )}
-
-        {activeTab === 'schedule' && (
-          <div key="tab-schedule">
-            {upcomingClasses.length === 0 ? (
-              <div style={{ ...cardStyle, padding: '3rem', textAlign: 'center' }}>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No upcoming classes in the next 14 days.</p>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {upcomingClasses.map(cls => {
-                  const myAttendance = (cls.class_attendees || []).find((a: any) => a.member_id === userId)
-                  return (
-                    <div key={cls.id} style={{ ...cardStyle, padding: '1.25rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontWeight: 600, fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cls.title}</p>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-                          📅 {new Date(cls.scheduled_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                          {cls.start_time ? ` · 🕐 ${cls.start_time.slice(0, 5)}` : ''}
-                          {cls.location ? ` · 📍 ${cls.location}` : ''}
-                        </p>
-                        {cls.profiles?.name && (
-                          <p style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', marginTop: '0.15rem' }}>Coach {cls.profiles.name}</p>
-                        )}
-                        {cls.groups?.name && (
-                          <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>👥 {cls.groups.name}</p>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem', flexShrink: 0 }}>
-                        {myAttendance ? (
-                          <span style={{
-                            fontSize: '0.7rem', fontWeight: 700, padding: '0.25rem 0.625rem', borderRadius: '999px',
-                            background: myAttendance.status === 'attended' ? 'rgba(34,197,94,0.15)' : myAttendance.status === 'scheduled' ? 'rgba(8,119,160,0.15)' : 'rgba(239,68,68,0.1)',
-                            color: myAttendance.status === 'attended' ? '#4ade80' : myAttendance.status === 'scheduled' ? 'var(--teal-secondary)' : '#f87171',
-                            border: `1px solid ${myAttendance.status === 'attended' ? 'rgba(34,197,94,0.3)' : myAttendance.status === 'scheduled' ? 'rgba(8,119,160,0.3)' : 'rgba(239,68,68,0.3)'}`,
-                            textTransform: 'capitalize' as const,
-                          }}>
-                            {myAttendance.status === 'scheduled' ? '✓ RSVPed' : myAttendance.status}
-                          </span>
-                        ) : (
-                          <button
-                            onClick={async () => {
-                              if (!userId) return
-                              await supabase.from('class_attendees').insert({ class_id: cls.id, member_id: userId, status: 'scheduled' })
-                              // Refresh upcoming classes
-                              if (groupIds.length > 0) {
-                                const today = getLocalDateString()
-                                const in14 = new Date(); in14.setDate(in14.getDate() + 14)
-                                const in14Str = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(in14)
-                                const { data: classes } = await supabase
-                                  .from('scheduled_classes')
-                                  .select('*, groups(name), profiles!scheduled_classes_coach_id_fkey(name), class_attendees(id, member_id, status)')
-                                  .in('group_id', groupIds).gte('scheduled_date', today).lte('scheduled_date', in14Str)
-                                  .order('scheduled_date').order('start_time')
-                                setUpcomingClasses(classes || [])
-                              }
-                            }}
-                            style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
-                          >
-                            RSVP
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'progress' && (
-          <div>
-            <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>Workout Frequency (Last 30)</p>
-            {workoutHistory.length === 0 ? (
-              <div style={{ ...cardStyle, padding: '3rem', textAlign: 'center' }}>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No workouts logged yet.</p>
-              </div>
-            ) : (
-              <div style={{ ...cardStyle, padding: '1.25rem', marginBottom: '1rem' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '100px' }}>
-                  {workoutHistory.map(w => {
-                    const height = w.duration ? Math.min((w.duration / 120) * 100, 100) : 25
-                    const bg = w.type === 'basketball' ? 'rgba(96,165,250,0.7)' : w.type === 'both' ? 'rgba(192,132,252,0.7)' : 'rgba(8,119,160,0.7)'
-                    return <div key={w.id} style={{ flex: 1, borderRadius: '2px 2px 0 0', background: bg, height: `${height}%`, minHeight: '6px' }} />
-                  })}
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
-                  <span>{workoutHistory[0] && new Date(workoutHistory[0].date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                  <span>Last 30 sessions</span>
-                  <span>{workoutHistory[workoutHistory.length - 1] && new Date(workoutHistory[workoutHistory.length - 1].date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                </div>
-              </div>
             )}
           </div>
         )}

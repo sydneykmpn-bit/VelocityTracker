@@ -42,7 +42,7 @@ Auth model (important — changed from email-based to username-based):
 Database Tables:
 
 Core (documented in detail — keep this section accurate):
-	•	profiles (id, name, email, username, role, gender, age, weight_kg, weight_unit, city, contact_number, medical_info, profile_completed, approved, created_at)
+	•	profiles (id, name, email, username, role, gender, age, weight_kg, weight_unit, preferred_weight_unit, city, contact_number, medical_info, profile_completed, approved, created_at)
 	•	workouts (id, user_id, title, type, notes, duration, date, created_at)
 	•	exercises (id, workout_id, name, sets, reps, weight, duration, distance, notes)
 	•	workout_plans (id, coach_id, member_id, title, description, type, scheduled_date, status, rescheduled_date, completed_at, auto_logged_workout_id, template_id, created_at)
@@ -113,3 +113,7 @@ When I ask for code changes:
 Recent Changes:
 
 	•	Profile page (/profile): added a "Change Password" section — verifies current password via signInWithPassword, then calls supabase.auth.updateUser({ password }) to set the new one
+	•	profiles gained preferred_weight_unit (text, default 'kg') — a separate toggle in /profile, distinct from weight_unit (body weight). Phase 1: stored/displayed only, not yet read by any weight-rendering component (PRs, exercise logs, plan exercises)
+	•	Student Panel (/student): removed Class Schedule and Progress tabs (and their now-dead upcomingClasses/groupIds/workoutHistory state+queries); Assigned Plans tab now shows Missed above Upcoming/Pending with a Date ↑/↓ sort toggle, and pending plan cards collapse to a compact row on mobile (accordion, one expanded at a time)
+	•	Dashboard (/dashboard): reordered sections to Header → Coach Note → Missed plans → Upcoming This Week → Today's Plan → This Week stats → rest unchanged
+	•	components/ClassDetailModal.tsx: member "Mark Done" now shows an Undo action once a plan is completed (previously had none), matching the auto-log/undo pattern used in dashboard, student, and coach pages

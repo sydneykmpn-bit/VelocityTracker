@@ -518,88 +518,140 @@ export default function ClassDetailModal({
                 {planActionError}
               </div>
             )}
-            <div style={{ marginBottom: '0.75rem' }}>
-              <label style={labelBase}>Duration (minutes) — optional</label>
-              <input
-                type="number" min="0" style={inputBase}
-                value={completeDurationMinutes}
-                onChange={e => setCompleteDurationMinutes(e.target.value)}
-                placeholder="e.g. 45"
-              />
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <button
-                onClick={async () => {
-                  setPlanActionLoading(true)
-                  setPlanActionError('')
 
-                  const { data: newWorkout, error: workoutErr } = await supabase.from('workouts').insert({
-                    user_id: cls.member_id,
-                    title: cls.title,
-                    type: cls.type,
-                    notes: `Auto-logged from assigned plan. ${cls.description || ''}`.trim(),
-                    duration: completeDurationMinutes ? Number(completeDurationMinutes) : null,
-                    date: new Date().toISOString(),
-                  }).select().single()
+            {cls.status === 'completed' ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
+                <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#4ade80' }}>✅ Completed</span>
+                <button
+                  onClick={async () => {
+                    setPlanActionLoading(true)
+                    setPlanActionError('')
 
-                  if (workoutErr) {
-                    console.error('Mark Done: workouts insert failed', workoutErr)
-                    setPlanActionError(workoutErr.message)
-                    setPlanActionLoading(false)
-                    return
-                  }
+                    if (cls.auto_logged_workout_id) {
+                      const { error: exDelErr } = await supabase.from('exercises').delete().eq('workout_id', cls.auto_logged_workout_id)
+                      if (exDelErr) {
+                        console.error('Undo Mark Done: exercises delete failed', exDelErr)
+                        setPlanActionError(exDelErr.message)
+                        setPlanActionLoading(false)
+                        return
+                      }
+                      const { error: workoutDelErr } = await supabase.from('workouts').delete().eq('id', cls.auto_logged_workout_id)
+                      if (workoutDelErr) {
+                        console.error('Undo Mark Done: workouts delete failed', workoutDelErr)
+                        setPlanActionError(workoutDelErr.message)
+                        setPlanActionLoading(false)
+                        return
+                      }
+                    }
 
-                  if (newWorkout && planExercises.length > 0) {
-                    const { error: exError } = await supabase.from('exercises').insert(
-                      planExercises.map((ex: any) => ({
-                        workout_id: newWorkout.id,
-                        name: ex.name, sets: ex.sets, reps: ex.reps,
-                        weight: ex.weight, duration: ex.duration,
-                        distance: ex.distance, notes: ex.notes,
-                      }))
-                    )
-                    if (exError) {
-                      console.error('Mark Done: exercises insert failed', exError)
-                      setPlanActionError(exError.message)
+                    const { error: updateErr } = await supabase.from('workout_plans').update({
+                      status: 'pending',
+                      completed_at: null,
+                      auto_logged_workout_id: null,
+                    }).eq('id', cls.id)
+
+                    if (updateErr) {
+                      console.error('Undo Mark Done: workout_plans update failed', updateErr)
+                      setPlanActionError(updateErr.message)
                       setPlanActionLoading(false)
                       return
                     }
-                  }
 
-                  const { error: updateErr } = await supabase.from('workout_plans').update({
-                    status: 'completed',
-                    completed_at: new Date().toISOString(),
-                    auto_logged_workout_id: newWorkout?.id ?? null,
-                  }).eq('id', cls.id)
-
-                  if (updateErr) {
-                    console.error('Mark Done: workout_plans update failed', updateErr)
-                    setPlanActionError(updateErr.message)
                     setPlanActionLoading(false)
-                    return
-                  }
+                    onClose(); onUpdate()
+                  }}
+                  disabled={planActionLoading}
+                  style={{ background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.4rem 0.875rem', fontSize: '0.8rem', fontWeight: 700, cursor: planActionLoading ? 'not-allowed' : 'pointer', opacity: planActionLoading ? 0.7 : 1 }}
+                >
+                  {planActionLoading ? 'Undoing…' : '↩ Undo'}
+                </button>
+              </div>
+            ) : (
+              <>
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <label style={labelBase}>Duration (minutes) — optional</label>
+                  <input
+                    type="number" min="0" style={inputBase}
+                    value={completeDurationMinutes}
+                    onChange={e => setCompleteDurationMinutes(e.target.value)}
+                    placeholder="e.g. 45"
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={async () => {
+                      setPlanActionLoading(true)
+                      setPlanActionError('')
 
-                  setPlanActionLoading(false)
-                  onClose(); onUpdate()
-                }}
-                disabled={planActionLoading}
-                style={{ flex: 1, background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.75rem', fontWeight: 700, fontSize: '0.875rem', cursor: planActionLoading ? 'not-allowed' : 'pointer', opacity: planActionLoading ? 0.7 : 1 }}
-              >
-                ✅ Mark Done
-              </button>
-              <button
-                onClick={async () => {
-                  setPlanActionLoading(true)
-                  await supabase.from('workout_plans').update({ status: 'skipped' }).eq('id', cls.id)
-                  setPlanActionLoading(false)
-                  onClose(); onUpdate()
-                }}
-                disabled={planActionLoading}
-                style={{ background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.75rem 1rem', fontSize: '0.875rem', cursor: 'pointer' }}
-              >
-                ⏭️ Skip
-              </button>
-            </div>
+                      const { data: newWorkout, error: workoutErr } = await supabase.from('workouts').insert({
+                        user_id: cls.member_id,
+                        title: cls.title,
+                        type: cls.type,
+                        notes: `Auto-logged from assigned plan. ${cls.description || ''}`.trim(),
+                        duration: completeDurationMinutes ? Number(completeDurationMinutes) : null,
+                        date: new Date().toISOString(),
+                      }).select().single()
+
+                      if (workoutErr) {
+                        console.error('Mark Done: workouts insert failed', workoutErr)
+                        setPlanActionError(workoutErr.message)
+                        setPlanActionLoading(false)
+                        return
+                      }
+
+                      if (newWorkout && planExercises.length > 0) {
+                        const { error: exError } = await supabase.from('exercises').insert(
+                          planExercises.map((ex: any) => ({
+                            workout_id: newWorkout.id,
+                            name: ex.name, sets: ex.sets, reps: ex.reps,
+                            weight: ex.weight, duration: ex.duration,
+                            distance: ex.distance, notes: ex.notes,
+                          }))
+                        )
+                        if (exError) {
+                          console.error('Mark Done: exercises insert failed', exError)
+                          setPlanActionError(exError.message)
+                          setPlanActionLoading(false)
+                          return
+                        }
+                      }
+
+                      const { error: updateErr } = await supabase.from('workout_plans').update({
+                        status: 'completed',
+                        completed_at: new Date().toISOString(),
+                        auto_logged_workout_id: newWorkout?.id ?? null,
+                      }).eq('id', cls.id)
+
+                      if (updateErr) {
+                        console.error('Mark Done: workout_plans update failed', updateErr)
+                        setPlanActionError(updateErr.message)
+                        setPlanActionLoading(false)
+                        return
+                      }
+
+                      setPlanActionLoading(false)
+                      onClose(); onUpdate()
+                    }}
+                    disabled={planActionLoading}
+                    style={{ flex: 1, background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.75rem', fontWeight: 700, fontSize: '0.875rem', cursor: planActionLoading ? 'not-allowed' : 'pointer', opacity: planActionLoading ? 0.7 : 1 }}
+                  >
+                    ✅ Mark Done
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setPlanActionLoading(true)
+                      await supabase.from('workout_plans').update({ status: 'skipped' }).eq('id', cls.id)
+                      setPlanActionLoading(false)
+                      onClose(); onUpdate()
+                    }}
+                    disabled={planActionLoading}
+                    style={{ background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.75rem 1rem', fontSize: '0.875rem', cursor: 'pointer' }}
+                  >
+                    ⏭️ Skip
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
 

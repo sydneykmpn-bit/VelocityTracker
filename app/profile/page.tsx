@@ -30,7 +30,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<any>(null)
   const [form, setForm] = useState({
     name: '', gender: '', age: '', weight_kg: '', weight_unit: 'kg',
-    city: '', contact_number: '', medical_info: '', goals: '',
+    city: '', contact_number: '', medical_info: '', goals: '', preferred_weight_unit: 'kg',
   })
 
   const [passwordOpen, setPasswordOpen] = useState(false)
@@ -64,6 +64,7 @@ export default function ProfilePage() {
           contact_number: data.contact_number || '',
           medical_info: data.medical_info || '',
           goals: data.goals || '',
+          preferred_weight_unit: data.preferred_weight_unit || 'kg',
         })
       }
       setLoading(false)
@@ -86,6 +87,7 @@ export default function ProfilePage() {
       contact_number: form.contact_number.trim() || null,
       medical_info: form.medical_info.trim() || null,
       goals: form.goals.trim() || null,
+      preferred_weight_unit: form.preferred_weight_unit,
     }).eq('id', user.id)
     if (err) setError(err.message)
     else setSuccess(true)
@@ -249,6 +251,24 @@ export default function ProfilePage() {
                 ))}
               </div>
             </div>
+          </div>
+
+          {/* Preferred unit for workout weights */}
+          <div>
+            <label style={labelBase}>Preferred unit for workout weights</label>
+            <div style={{ display: 'flex', borderRadius: '0.5rem', overflow: 'hidden', border: '1px solid var(--border)', width: 'fit-content' }}>
+              {['kg', 'lbs'].map(u => (
+                <button key={u} type="button" onClick={() => setForm({ ...form, preferred_weight_unit: u })} style={{
+                  padding: '0.6rem 1rem', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', border: 'none',
+                  background: form.preferred_weight_unit === u ? 'var(--teal-primary)' : '#0d1a1e',
+                  color: form.preferred_weight_unit === u ? '#fff' : 'var(--text-secondary)',
+                  minHeight: 0,
+                }}>{u}</button>
+              ))}
+            </div>
+            <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
+              Used for displaying workout weights (PRs, exercise logs, plan exercises) once that support is added.
+            </p>
           </div>
 
           {/* Medical / Injury Info */}

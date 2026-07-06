@@ -352,13 +352,6 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── SKIPPED PLANS ── */}
-        {skippedPlans.length > 0 && (
-          <section style={{ marginBottom: '1.75rem' }}>
-            <SkippedPlansSection plans={skippedPlans} userId={userId} supabase={supabase} onUpdate={loadData} />
-          </section>
-        )}
-
         {/* ── COACH NOTE ── */}
         {coachNote && (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderLeft: '3px solid var(--teal-primary)', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
@@ -370,6 +363,56 @@ export default function DashboardPage() {
               {new Date(coachNote.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
             </p>
           </div>
+        )}
+
+        {/* ── SKIPPED PLANS ── */}
+        {skippedPlans.length > 0 && (
+          <section style={{ marginBottom: '1.75rem' }}>
+            <SkippedPlansSection plans={skippedPlans} userId={userId} supabase={supabase} onUpdate={loadData} />
+          </section>
+        )}
+
+        {/* ── UPCOMING PLANS ── */}
+        {upcomingPlans.length > 0 && (
+          <section style={{ marginBottom: '1.75rem' }}>
+            <h2 className="font-display" style={{ fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '0.875rem' }}>UPCOMING THIS WEEK</h2>
+            <div className="snap-carousel">
+              {upcomingPlans.map(p => {
+                const tb = typeBadge(p.type)
+                const isActing = quickActionLoading === p.id
+                return (
+                  <div key={p.id} className="card-vel" style={{ padding: '1rem', width: '200px' }}>
+                    <p style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', fontWeight: 700, marginBottom: '0.25rem' }}>
+                      {new Date(p.scheduled_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                    </p>
+                    <p style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.25rem' }}>{p.title}</p>
+                    <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: '0.375rem' }}>
+                      {(p.workout_plan_exercises as any[])?.[0]?.count ?? 0} exercises
+                    </p>
+                    <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase' as const, background: tb.bg, color: tb.color, border: `1px solid ${tb.border}`, display: 'inline-block', marginBottom: '0.625rem' }}>
+                      {p.type}
+                    </span>
+                    <div style={{ display: 'flex', gap: '0.375rem' }}>
+                      <button
+                        onClick={() => handleQuickPlanAction(p, 'completed')}
+                        disabled={isActing}
+                        style={{ flex: 1, minHeight: '44px', background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.3rem 0.25rem', fontSize: '0.75rem', fontWeight: 700, color: '#4ade80', cursor: isActing ? 'not-allowed' : 'pointer' }}
+                      >
+                        ✅ Done
+                      </button>
+                      <button
+                        onClick={() => handleQuickPlanAction(p, 'skipped')}
+                        disabled={isActing}
+                        style={{ flex: 1, minHeight: '44px', background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.3rem 0.25rem', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', cursor: isActing ? 'not-allowed' : 'pointer' }}
+                      >
+                        ⏭️ Skip
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
         )}
 
         {/* ── TODAY'S PLAN ── */}
@@ -458,49 +501,6 @@ export default function DashboardPage() {
             </div>
           </div>
         </section>
-
-        {/* ── UPCOMING PLANS ── */}
-        {upcomingPlans.length > 0 && (
-          <section style={{ marginBottom: '1.75rem' }}>
-            <h2 className="font-display" style={{ fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '0.875rem' }}>UPCOMING THIS WEEK</h2>
-            <div className="snap-carousel">
-              {upcomingPlans.map(p => {
-                const tb = typeBadge(p.type)
-                const isActing = quickActionLoading === p.id
-                return (
-                  <div key={p.id} className="card-vel" style={{ padding: '1rem', width: '200px' }}>
-                    <p style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', fontWeight: 700, marginBottom: '0.25rem' }}>
-                      {new Date(p.scheduled_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                    </p>
-                    <p style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.25rem' }}>{p.title}</p>
-                    <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: '0.375rem' }}>
-                      {(p.workout_plan_exercises as any[])?.[0]?.count ?? 0} exercises
-                    </p>
-                    <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase' as const, background: tb.bg, color: tb.color, border: `1px solid ${tb.border}`, display: 'inline-block', marginBottom: '0.625rem' }}>
-                      {p.type}
-                    </span>
-                    <div style={{ display: 'flex', gap: '0.375rem' }}>
-                      <button
-                        onClick={() => handleQuickPlanAction(p, 'completed')}
-                        disabled={isActing}
-                        style={{ flex: 1, minHeight: '44px', background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.3rem 0.25rem', fontSize: '0.75rem', fontWeight: 700, color: '#4ade80', cursor: isActing ? 'not-allowed' : 'pointer' }}
-                      >
-                        ✅ Done
-                      </button>
-                      <button
-                        onClick={() => handleQuickPlanAction(p, 'skipped')}
-                        disabled={isActing}
-                        style={{ flex: 1, minHeight: '44px', background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.3rem 0.25rem', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', cursor: isActing ? 'not-allowed' : 'pointer' }}
-                      >
-                        ⏭️ Skip
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </section>
-        )}
 
         {/* ── COACH: Classes I'm coaching ── */}
         {userRole === 'coach' && upcomingCoachClasses.length > 0 && (
