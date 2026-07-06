@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { getLocalDateString } from '@/lib/utils'
-import { TodayPlanCard, SkippedPlansSection } from '@/components/PlanCards'
+import { ChevronDown, ChevronUp } from 'lucide-react'
+import { getLocalDateString, normalizeToKg } from '@/lib/utils'
+import { TodayPlanCard, SkippedPlansSection, typeBadge } from '@/components/PlanCards'
 
 type Tab = 'plans' | 'prs' | 'schedule' | 'progress' | 'metrics'
 
@@ -94,6 +95,7 @@ export default function StudentPage() {
   const [rescheduleDate, setRescheduleDate] = useState('')
   const [loggingPlanId, setLoggingPlanId] = useState<string | null>(null)
   const [undoingId, setUndoingId] = useState<string | null>(null)
+  const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null)
 
   const reloadPlans = async (uid: string) => {
     const { data: plans } = await supabase
@@ -258,7 +260,7 @@ export default function StudentPage() {
       }
 
       // Body metrics
-      const { data: metrics } = await supabase.from('body_metrics').select('*').eq('user_id', user.id).order('recorded_at', { ascending: false }).limit(30)
+      const { data: metrics } = await supabase.from('body_measurements').select('*').eq('user_id', user.id).order('recorded_at', { ascending: false }).limit(30)
       setBodyMetrics(metrics || [])
 
       setLoading(false)
@@ -404,16 +406,57 @@ export default function StudentPage() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 {pendingPlans.length > 0 && <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)' }}>Upcoming / Pending</p>}
-                {pendingPlans.map(plan => (
-                  <TodayPlanCard
-                    key={plan.id}
-                    plan={plan}
-                    onUpdate={async () => {
-                      if (!userId) return
-                      await reloadPlans(userId)
-                    }}
-                  />
-                ))}
+                {pendingPlans.map(plan => {
+                  const isExpandedOnMobile = expandedPlanId === plan.id
+                  const tb = typeBadge(plan.type)
+                  return (
+                    <div key={plan.id}>
+                      <div
+                        className="plan-collapsed-row"
+                        onClick={() => setExpandedPlanId(prev => prev === plan.id ? null : plan.id)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedPlanId(prev => prev === plan.id ? null : plan.id) } }}
+                        style={{
+                          ...(isExpandedOnMobile ? { display: 'none' } : {}),
+                          alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem',
+                          background: 'var(--surface)', border: '1px solid var(--border)', borderLeft: '3px solid var(--teal-primary)',
+                          borderRadius: '0.75rem', padding: '0.875rem 1rem', cursor: 'pointer', marginBottom: '0.75rem',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', minWidth: 0, flex: 1 }}>
+                          <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase' as const, background: tb.bg, color: tb.color, border: `1px solid ${tb.border}`, flexShrink: 0 }}>
+                            {plan.type}
+                          </span>
+                          <p style={{ fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{plan.title}</p>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{formatDate(plan.scheduled_date)}</span>
+                          <ChevronDown size={16} style={{ color: 'var(--text-secondary)' }} />
+                        </div>
+                      </div>
+
+                      <div className="plan-full-card" style={isExpandedOnMobile ? { display: 'block' } : {}}>
+                        {isExpandedOnMobile && (
+                          <button
+                            onClick={() => setExpandedPlanId(null)}
+                            className="plan-collapse-btn"
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '0.75rem', cursor: 'pointer', padding: '0 0 0.5rem', minHeight: 0 }}
+                          >
+                            <ChevronUp size={14} /> Collapse
+                          </button>
+                        )}
+                        <TodayPlanCard
+                          plan={plan}
+                          onUpdate={async () => {
+                            if (!userId) return
+                            await reloadPlans(userId)
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
                 {completedPlans.length > 0 && (
                   <CompletedPlansCollapse plans={completedPlans} onUndo={handleUndoCompletion} undoingId={undoingId} />
                 )}
@@ -599,18 +642,18 @@ export default function StudentPage() {
                         {myAttendance ? (
                           <span style={{
                             fontSize: '0.7rem', fontWeight: 700, padding: '0.25rem 0.625rem', borderRadius: '999px',
-                            background: myAttendance.status === 'attended' ? 'rgba(34,197,94,0.15)' : myAttendance.status === 'rsvp' ? 'rgba(8,119,160,0.15)' : 'rgba(239,68,68,0.1)',
-                            color: myAttendance.status === 'attended' ? '#4ade80' : myAttendance.status === 'rsvp' ? 'var(--teal-secondary)' : '#f87171',
-                            border: `1px solid ${myAttendance.status === 'attended' ? 'rgba(34,197,94,0.3)' : myAttendance.status === 'rsvp' ? 'rgba(8,119,160,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                            background: myAttendance.status === 'attended' ? 'rgba(34,197,94,0.15)' : myAttendance.status === 'scheduled' ? 'rgba(8,119,160,0.15)' : 'rgba(239,68,68,0.1)',
+                            color: myAttendance.status === 'attended' ? '#4ade80' : myAttendance.status === 'scheduled' ? 'var(--teal-secondary)' : '#f87171',
+                            border: `1px solid ${myAttendance.status === 'attended' ? 'rgba(34,197,94,0.3)' : myAttendance.status === 'scheduled' ? 'rgba(8,119,160,0.3)' : 'rgba(239,68,68,0.3)'}`,
                             textTransform: 'capitalize' as const,
                           }}>
-                            {myAttendance.status === 'rsvp' ? '✓ RSVPed' : myAttendance.status}
+                            {myAttendance.status === 'scheduled' ? '✓ RSVPed' : myAttendance.status}
                           </span>
                         ) : (
                           <button
                             onClick={async () => {
                               if (!userId) return
-                              await supabase.from('class_attendees').insert({ class_id: cls.id, member_id: userId, status: 'rsvp' })
+                              await supabase.from('class_attendees').insert({ class_id: cls.id, member_id: userId, status: 'scheduled' })
                               // Refresh upcoming classes
                               if (groupIds.length > 0) {
                                 const today = getLocalDateString()
@@ -674,13 +717,11 @@ export default function StudentPage() {
                   e.preventDefault()
                   if (!metricWeight || !userId) return
                   setMetricSaving(true)
-                  await supabase.from('body_metrics').insert({
+                  await supabase.from('body_measurements').insert({
                     user_id: userId,
-                    weight: parseFloat(metricWeight),
-                    unit: metricUnit,
-                    recorded_at: new Date().toISOString(),
+                    weight_kg: normalizeToKg(parseFloat(metricWeight), metricUnit),
                   })
-                  const { data } = await supabase.from('body_metrics').select('*').eq('user_id', userId).order('recorded_at', { ascending: false }).limit(30)
+                  const { data } = await supabase.from('body_measurements').select('*').eq('user_id', userId).order('recorded_at', { ascending: false }).limit(30)
                   setBodyMetrics(data || [])
                   setMetricWeight('')
                   setMetricSaving(false)
@@ -722,7 +763,7 @@ export default function StudentPage() {
             {/* Weight chart */}
             {bodyMetrics.length > 0 && (() => {
               const reversed = [...bodyMetrics].reverse()
-              const weights = reversed.map(m => m.unit === 'lbs' ? m.weight * 0.453592 : m.weight)
+              const weights = reversed.map(m => m.weight_kg)
               const minW = Math.min(...weights) - 2
               const maxW = Math.max(...weights) + 2
               const range = maxW - minW || 1
@@ -775,7 +816,7 @@ export default function StudentPage() {
                     {new Date(m.recorded_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
                   </p>
                   <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', color: 'var(--teal-secondary)' }}>
-                    {m.weight} <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{m.unit}</span>
+                    {m.weight_kg} <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>kg</span>
                   </p>
                 </div>
               ))}
@@ -794,6 +835,13 @@ export default function StudentPage() {
       <style>{`
         @media (max-width: 760px) {
           .student-overview { grid-template-columns: 1fr !important; }
+        }
+        .plan-collapsed-row { display: flex; }
+        .plan-full-card { display: none; }
+        @media (min-width: 641px) {
+          .plan-collapsed-row { display: none !important; }
+          .plan-full-card { display: block !important; }
+          .plan-collapse-btn { display: none !important; }
         }
       `}</style>
     </div>

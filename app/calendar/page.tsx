@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import ClassDetailModal, { classTypeColor } from '@/components/ClassDetailModal'
+import CalendarGrid, { CalendarEntry } from '@/components/CalendarGrid'
 import { getLocalDateString } from '@/lib/utils'
 
 const inputBase: React.CSSProperties = {
@@ -15,9 +16,6 @@ const labelBase: React.CSSProperties = {
   display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)',
   textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.375rem',
 }
-
-const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
-const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 
 function parseLocalDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number)
@@ -106,7 +104,6 @@ export default function CalendarPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [classes, setClasses] = useState<any[]>([])
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
-  const [selectedDateClasses, setSelectedDateClasses] = useState<any[]>([])
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [userRole, setUserRole] = useState('')
   const [userId, setUserId] = useState<string | null>(null)
@@ -201,9 +198,6 @@ export default function CalendarPage() {
       ...normalizedPlans,
     ]
     setClasses(allData)
-    if (selectedDate) {
-      setSelectedDateClasses(allData.filter((c: any) => c.scheduled_date === selectedDate))
-    }
   }
 
   useEffect(() => {
@@ -243,9 +237,8 @@ export default function CalendarPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentMonth, loading])
 
-  const handleDateClick = (dateStr: string) => {
+  const handleSelectDate = (dateStr: string) => {
     setSelectedDate(dateStr)
-    setSelectedDateClasses(classes.filter(c => c.scheduled_date === dateStr))
     if (userRole === 'admin' || userRole === 'coach') {
       setCreateForm(p => ({ ...p, scheduled_date: dateStr }))
     }
@@ -365,15 +358,7 @@ export default function CalendarPage() {
     )
   }
 
-  const year = currentMonth.getFullYear()
-  const month = currentMonth.getMonth()
-  const firstDay = new Date(year, month, 1).getDay()
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
-  const today = getLocalDateString()
-
-  const cells: (number | null)[] = []
-  for (let i = 0; i < firstDay; i++) cells.push(null)
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+  const entries: CalendarEntry[] = classes.map(c => ({ ...c, date: c.scheduled_date }))
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
@@ -394,82 +379,39 @@ export default function CalendarPage() {
           )}
         </div>
 
-        <div className="cal-grid-layout">
-          {/* Calendar grid */}
-          <div style={{ minWidth: 0 }}>
-            {/* Month nav */}
-            <div className="cal-month-header">
-              <button className="cal-nav-btn" onClick={() => setCurrentMonth(new Date(year, month - 1))} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.5rem 0.875rem', color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', minHeight: 0 }}>
-                <ChevronLeft size={18} />
-              </button>
-              <h2 className="cal-month-title">
-                {MONTH_NAMES[month]} {year}
-              </h2>
-              <button className="cal-nav-btn" onClick={() => setCurrentMonth(new Date(year, month + 1))} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.5rem 0.875rem', color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', minHeight: 0 }}>
-                <ChevronRight size={18} />
-              </button>
-            </div>
-
-            {/* Day headers */}
-            <div className="cal-day-headers">
-              {DAY_NAMES.map(d => (
-                <div key={d} className="cal-day-header-label" style={{ textAlign: 'center', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', padding: '0.375rem 0' }}>
-                  <span className="cal-day-full">{d}</span>
-                  <span className="cal-day-abbr">{d.charAt(0)}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Day cells */}
-            <div className="cal-day-grid">
-              {cells.map((day, i) => {
-                if (!day) return <div key={`e-${i}`} />
-                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-                const dayClasses = classes.filter(c => c.scheduled_date === dateStr)
-                const isToday = dateStr === today
-                const isSelected = dateStr === selectedDate
+        <CalendarGrid
+          month={currentMonth}
+          onMonthChange={setCurrentMonth}
+          entries={entries}
+          selectedDate={selectedDate}
+          onSelectDate={handleSelectDate}
+          renderDayCellContent={(dayEntries) => (
+            <>
+              {dayEntries.slice(0, 2).map(c => {
+                if (c.isPlan) {
+                  return (
+                    <div key={c.id} onClick={e => { e.stopPropagation(); setSelectedClass(c) }} style={{ background: 'rgba(8,119,160,0.25)', color: '#34bac2', border: '1px dashed rgba(8,119,160,0.5)', borderRadius: '0.2rem', fontSize: '0.6rem', padding: '0.1rem 0.3rem', marginBottom: '0.15rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', cursor: 'pointer' }}>
+                      {c.title}
+                    </div>
+                  )
+                }
+                const tc = classTypeColor(c.type)
                 return (
-                  <div
-                    key={dateStr}
-                    className="cal-day-cell"
-                    onClick={() => handleDateClick(dateStr)}
-                    style={{
-                      borderRadius: '0.5rem', padding: '0.375rem', minHeight: '60px', cursor: 'pointer', transition: 'all 0.15s',
-                      background: isSelected ? 'rgba(8,119,160,0.2)' : isToday ? 'rgba(8,119,160,0.1)' : 'var(--surface)',
-                      border: `1px solid ${isSelected ? 'var(--teal-primary)' : isToday ? 'rgba(8,119,160,0.4)' : 'var(--border)'}`,
-                    }}
-                  >
-                    <p style={{ fontSize: '0.7rem', fontWeight: 600, textAlign: 'right', color: isToday ? 'var(--teal-secondary)' : 'var(--text-secondary)', marginBottom: '0.2rem' }}>{day}</p>
-                    {dayClasses.slice(0, 2).map(c => {
-                      if (c.isPlan) {
-                        return (
-                          <div key={c.id} onClick={e => { e.stopPropagation(); setSelectedClass(c) }} style={{ background: 'rgba(8,119,160,0.25)', color: '#34bac2', border: '1px dashed rgba(8,119,160,0.5)', borderRadius: '0.2rem', fontSize: '0.6rem', padding: '0.1rem 0.3rem', marginBottom: '0.15rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', cursor: 'pointer' }}>
-                            {c.title}
-                          </div>
-                        )
-                      }
-                      const tc = classTypeColor(c.type)
-                      return (
-                        <div key={c.id} onClick={e => { e.stopPropagation(); setSelectedClass(c) }} style={{ ...tc, borderRadius: '0.2rem', fontSize: '0.6rem', padding: '0.1rem 0.3rem', marginBottom: '0.15rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', cursor: 'pointer' }}>
-                          {c.start_time?.slice(0, 5)} {c.title}
-                        </div>
-                      )
-                    })}
-                    {dayClasses.length > 2 && <p style={{ fontSize: '0.6rem', color: 'var(--text-secondary)' }}>+{dayClasses.length - 2} more</p>}
+                  <div key={c.id} onClick={e => { e.stopPropagation(); setSelectedClass(c) }} style={{ ...tc, borderRadius: '0.2rem', fontSize: '0.6rem', padding: '0.1rem 0.3rem', marginBottom: '0.15rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', cursor: 'pointer' }}>
+                    {c.start_time?.slice(0, 5)} {c.title}
                   </div>
                 )
               })}
-            </div>
-          </div>
-
-          {/* Side panel */}
-          <div style={{ minWidth: 0 }}>
-            {selectedDate ? (
+              {dayEntries.length > 2 && <p style={{ fontSize: '0.6rem', color: 'var(--text-secondary)' }}>+{dayEntries.length - 2} more</p>}
+            </>
+          )}
+          renderDetailPanel={(selDate, selEntries) => (
+            selDate ? (
               <div>
                 <h3 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', marginBottom: '1rem', letterSpacing: '0.03em' }}>
-                  {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                  {new Date(selDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                 </h3>
-                {selectedDateClasses.length === 0 ? (
+                {selEntries.length === 0 ? (
                   <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center' }}>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No classes or plans scheduled.</p>
                     {(userRole === 'admin' || userRole === 'coach') && (
@@ -481,10 +423,10 @@ export default function CalendarPage() {
                 ) : (
                   <>
                     {/* Assigned Plans */}
-                    {selectedDateClasses.filter(c => c.isPlan).length > 0 && (
+                    {selEntries.filter(c => c.isPlan).length > 0 && (
                       <div style={{ marginBottom: '1rem' }}>
                         <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--teal-secondary)', marginBottom: '0.5rem' }}>Assigned Plans</p>
-                        {selectedDateClasses.filter(c => c.isPlan).map(plan => {
+                        {selEntries.filter(c => c.isPlan).map(plan => {
                           const memberName = plan.member?.name
                           const coachName = plan.coach?.name
                           const tb = plan.type === 'basketball' ? { bg: 'rgba(8,119,160,0.2)', color: '#34bac2' } : plan.type === 'both' ? { bg: 'rgba(168,85,247,0.15)', color: '#c084fc' } : { bg: 'rgba(34,197,94,0.15)', color: '#4ade80' }
@@ -502,10 +444,10 @@ export default function CalendarPage() {
                       </div>
                     )}
                     {/* Scheduled Classes */}
-                    {selectedDateClasses.filter(c => !c.isPlan).length > 0 && (
+                    {selEntries.filter(c => !c.isPlan).length > 0 && (
                       <div>
                         <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Scheduled Classes</p>
-                        {selectedDateClasses.filter(c => !c.isPlan).map(cls => (
+                        {selEntries.filter(c => !c.isPlan).map(cls => (
                           <div key={cls.id} onClick={() => setSelectedClass(cls)} style={{ cursor: 'pointer' }}>
                             <ClassCard cls={cls} userRole={userRole} />
                           </div>
@@ -519,9 +461,9 @@ export default function CalendarPage() {
               <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center' }}>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Click a date to see scheduled classes.</p>
               </div>
-            )}
-          </div>
-        </div>
+            )
+          )}
+        />
       </main>
 
       {selectedClass && (
@@ -670,57 +612,6 @@ export default function CalendarPage() {
           </div>
         </div>
       )}
-
-      <style>{`
-        .cal-grid-layout {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 1.5rem;
-        }
-        .cal-month-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 0.5rem;
-          margin-bottom: 1.25rem;
-        }
-        .cal-nav-btn { flex-shrink: 0; }
-        .cal-month-title {
-          font-family: var(--font-bebas);
-          font-size: 1.75rem;
-          letter-spacing: 0.03em;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          text-align: center;
-          flex: 1;
-          min-width: 0;
-        }
-        .cal-day-headers, .cal-day-grid {
-          display: grid;
-          grid-template-columns: repeat(7, minmax(0, 1fr));
-          box-sizing: border-box;
-        }
-        .cal-day-headers { gap: 2px; margin-bottom: 0.375rem; }
-        .cal-day-grid { gap: 3px; }
-        .cal-day-cell {
-          box-sizing: border-box;
-          min-height: 44px;
-          overflow: hidden;
-        }
-        .cal-day-abbr { display: none; }
-        @media (max-width: 480px) {
-          .cal-month-title { font-size: 1.15rem; }
-          .cal-day-header-label { font-size: 0.65rem; letter-spacing: 0; padding: 0.25rem 0 !important; }
-          .cal-day-full { display: none; }
-          .cal-day-abbr { display: inline; }
-        }
-        @media (min-width: 1024px) {
-          .cal-grid-layout {
-            grid-template-columns: minmax(0, 2fr) 280px;
-          }
-        }
-      `}</style>
     </div>
   )
 }

@@ -352,6 +352,13 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* ── SKIPPED PLANS ── */}
+        {skippedPlans.length > 0 && (
+          <section style={{ marginBottom: '1.75rem' }}>
+            <SkippedPlansSection plans={skippedPlans} userId={userId} supabase={supabase} onUpdate={loadData} />
+          </section>
+        )}
+
         {/* ── COACH NOTE ── */}
         {coachNote && (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderLeft: '3px solid var(--teal-primary)', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
@@ -516,13 +523,6 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
-          </section>
-        )}
-
-        {/* ── SKIPPED PLANS ── */}
-        {skippedPlans.length > 0 && (
-          <section style={{ marginBottom: '1.75rem' }}>
-            <SkippedPlansSection plans={skippedPlans} userId={userId} supabase={supabase} onUpdate={loadData} />
           </section>
         )}
 
