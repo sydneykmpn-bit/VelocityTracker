@@ -7,10 +7,9 @@ import { createClient } from '@/lib/supabase/client'
 import { Trash2, Pencil, Check, X } from 'lucide-react'
 import {
   normalizeToKg, sortRecords, LOWER_IS_BETTER, formatLocalDate,
-  STRENGTH_STANDARDS, STRENGTH_LEVELS, getStrengthLevel,
 } from '@/lib/utils'
 
-type Tab = 'prtrends' | 'volume' | 'body' | 'standards'
+type Tab = 'prtrends' | 'volume' | 'body'
 const UNITS = ['kg', 'lbs', 'reps', 'seconds', 'minutes', 'km/h', 'mph'] as const
 
 const inputBase: React.CSSProperties = {
@@ -74,7 +73,6 @@ export default function AnalyticsPage() {
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
-  const [profile, setProfile] = useState<any>(null)
   const [activeTab, setActiveTab] = useState<Tab>('prtrends')
 
   // PR Trends
@@ -102,14 +100,12 @@ export default function AnalyticsPage() {
     eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 56)
     const eightWeeksAgoStr = formatLocalDate(eightWeeksAgo)
 
-    const [{ data: prof }, { data: prs }, { data: workouts }, { data: measurements }] = await Promise.all([
-      supabase.from('profiles').select('*').eq('id', uid).single(),
+    const [{ data: prs }, { data: workouts }, { data: measurements }] = await Promise.all([
       supabase.from('personal_records').select('*').eq('user_id', uid).order('recorded_at', { ascending: true }),
       supabase.from('workouts').select('*, exercises(*)').eq('user_id', uid).gte('date', eightWeeksAgoStr).order('date', { ascending: true }),
       supabase.from('body_measurements').select('*').eq('user_id', uid).order('recorded_at', { ascending: true }),
     ])
 
-    setProfile(prof)
     setAllPRs(prs ?? [])
     setVolumeWorkouts(workouts ?? [])
     setBodyMeasurements(measurements ?? [])
@@ -148,7 +144,6 @@ export default function AnalyticsPage() {
     { value: 'prtrends', label: 'PR Trends' },
     { value: 'volume', label: 'Volume' },
     { value: 'body', label: 'Body' },
-    { value: 'standards', label: 'Standards' },
   ]
 
   // ── PR Trends derived data ──
@@ -245,20 +240,6 @@ export default function AnalyticsPage() {
     await supabase.from('body_measurements').delete().eq('id', id)
     setBodyDeleting(null)
     loadData()
-  }
-
-  // ── Standards derived data ──
-  const bodyweightKg = bodyMeasurements.length > 0
-    ? bodyMeasurements[bodyMeasurements.length - 1].weight_kg
-    : profile?.weight_kg
-  const STANDARD_LIFTS = Object.keys(STRENGTH_STANDARDS)
-  const LEVEL_COLORS: Record<string, string> = {
-    'Untrained': 'var(--text-secondary)',
-    'Beginner': '#94a3b8',
-    'Novice': '#60a5fa',
-    'Intermediate': 'var(--teal-secondary)',
-    'Advanced': '#c084fc',
-    'Elite': '#FFD700',
   }
 
   return (
@@ -455,58 +436,6 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        {/* ── STANDARDS ── */}
-        {activeTab === 'standards' && (
-          <div key="tab-standards">
-            {!bodyweightKg ? (
-              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '3rem', textAlign: 'center' }}>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>Log your bodyweight to see strength standards.</p>
-                <button onClick={() => setActiveTab('body')} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>
-                  Go to Body Tab
-                </button>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Based on bodyweight of {bodyweightKg}kg{!profile?.gender && ' · set your gender in Profile for accurate standards'}</p>
-                {STANDARD_LIFTS.map(lift => {
-                  const liftPRs = allPRs.filter(p => p.exercise_name === lift)
-                  const bestKg = liftPRs.length ? Math.max(...liftPRs.map(p => normalizeToKg(p.value, p.unit))) : null
-                  const result = bestKg !== null ? getStrengthLevel(lift, bestKg, bodyweightKg, profile?.gender) : null
-                  return (
-                    <div key={lift} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                        <div>
-                          <p style={{ fontWeight: 700, fontSize: '1rem' }}>{lift}</p>
-                          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{bestKg !== null ? `Best: ${bestKg.toFixed(1)}kg` : 'No PR yet'}</p>
-                        </div>
-                        {result && (
-                          <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.3rem 0.7rem', borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.04em', color: LEVEL_COLORS[result.level], border: `1px solid ${LEVEL_COLORS[result.level]}` }}>
-                            {result.level}
-                          </span>
-                        )}
-                      </div>
-                      {result && (
-                        <>
-                          <div style={{ display: 'flex', gap: '3px', marginBottom: '0.5rem' }}>
-                            {STRENGTH_LEVELS.map((lvl, i) => {
-                              const filled = i <= result.levelIndex
-                              return <div key={lvl} style={{ flex: 1, height: '8px', borderRadius: '4px', background: filled ? LEVEL_COLORS[lvl] : 'var(--border)' }} />
-                            })}
-                          </div>
-                          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                            {result.nextLevel && result.nextTargetKg
-                              ? `Next: ${result.nextTargetKg.toFixed(1)}kg for ${result.nextLevel}`
-                              : 'Max level reached 🎉'}
-                          </p>
-                        </>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )}
       </main>
     </div>
   )

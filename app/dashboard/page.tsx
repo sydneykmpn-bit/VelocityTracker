@@ -15,7 +15,6 @@ export default function DashboardPage() {
   const [profile, setProfile] = useState<any>(null)
   const [userRole, setUserRole] = useState('')
   const [allWorkoutsList, setAllWorkoutsList] = useState<any[]>([])
-  const [prs, setPrs] = useState<any[]>([])
   const [coachNote, setCoachNote] = useState<any>(null)
   const [todayPlans, setTodayPlans] = useState<any[]>([])
   const [completedToday, setCompletedToday] = useState<any[]>([])
@@ -51,7 +50,6 @@ export default function DashboardPage() {
     const [
       { data: prof },
       { data: workoutsData },
-      { data: prData },
       { data: todayP },
       { data: completedP },
       { data: upcomingP },
@@ -60,7 +58,6 @@ export default function DashboardPage() {
     ] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', uid).single(),
       supabase.from('workouts').select('id, title, type, date, created_at, duration, exercises(count)').eq('user_id', uid).order('date', { ascending: false }),
-      supabase.from('personal_records').select('*').eq('user_id', uid).order('recorded_at', { ascending: false }).limit(5),
       supabase.from('workout_plans').select('*, workout_plan_exercises(*), profiles!workout_plans_coach_id_fkey(name)').eq('member_id', uid).or(`scheduled_date.eq.${today},rescheduled_date.eq.${today}`).in('status', ['pending', 'rescheduled']).order('scheduled_date'),
       supabase.from('workout_plans').select('*, workout_plan_exercises(*)').eq('member_id', uid).or(`scheduled_date.eq.${today},rescheduled_date.eq.${today}`).eq('status', 'completed'),
       supabase.from('workout_plans').select('*, workout_plan_exercises(count), profiles!workout_plans_coach_id_fkey(name)').eq('member_id', uid).in('status', ['pending', 'rescheduled']).gte('scheduled_date', tomorrow.toISOString().split('T')[0]).lte('scheduled_date', nextWeek.toISOString().split('T')[0]).order('scheduled_date'),
@@ -71,7 +68,6 @@ export default function DashboardPage() {
     setProfile(prof)
     setUserRole(prof?.role || 'member')
     setAllWorkoutsList(workoutsData ?? [])
-    setPrs(prData ?? [])
     setTodayPlans(todayP ?? [])
     setCompletedToday(completedP ?? [])
     setUpcomingPlans(upcomingP ?? [])
@@ -448,102 +444,12 @@ export default function DashboardPage() {
           </section>
         )}
 
-        {/* ── PRs + RECENT WORKOUTS GRID ── */}
-        <div className="dashboard-grid" style={{ display: 'grid', gap: '2rem', alignItems: 'start' }}>
-
-          {/* Sidebar: PRs + Skipped */}
-          <div className="dash-col-side" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {/* PRs */}
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                <h2 className="font-display" style={{ fontSize: '1.25rem', letterSpacing: '0.03em' }}>🏆 MY RECENT PRs</h2>
-                <Link href="/leaderboard" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontSize: '0.75rem', minHeight: 0, display: 'inline' }}>Board →</Link>
-              </div>
-              {prs.length === 0 ? (
-                <div className="card-vel" style={{ padding: '1.5rem', textAlign: 'center' }}>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>No PRs yet.</p>
-                  <Link href="/leaderboard" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontSize: '0.8rem', minHeight: 0, display: 'inline' }}>Submit your first PR →</Link>
-                </div>
-              ) : (
-                <>
-                  <div className="snap-carousel pr-carousel">
-                    {prs.map(pr => (
-                      <div key={pr.id} className="card-vel pr-card" style={{ padding: '0.875rem', width: '160px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', minWidth: 0 }}>
-                          <span style={{ fontSize: '0.75rem', flexShrink: 0 }}>{pr.is_public ? '🌐' : '🔒'}</span>
-                          <span style={{ fontSize: '0.8rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.exercise_name ?? pr.exercise}</span>
-                        </div>
-                        <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.75rem', color: 'var(--teal-secondary)', lineHeight: 1.1, marginTop: '0.25rem' }}>
-                          {pr.value} <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{pr.unit}</span>
-                        </p>
-                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-                          {new Date(pr.date ?? pr.recorded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.625rem' }}>
-                    <Link href="/leaderboard" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontSize: '0.8rem', minHeight: 0 }}>
-                      Board →
-                    </Link>
-                    <Link href="/leaderboard" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontSize: '0.8rem', minHeight: 0 }}>
-                      + Submit PR
-                    </Link>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Skipped */}
-            {skippedPlans.length > 0 && (
-              <SkippedPlansSection plans={skippedPlans} userId={userId} supabase={supabase} onUpdate={loadData} />
-            )}
-          </div>
-
-          {/* Workouts */}
-          <div className="dash-col-main">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
-              <h2 className="font-display" style={{ fontSize: '1.5rem', letterSpacing: '0.03em' }}>MY RECENT WORKOUTS</h2>
-              <Link href="/workouts" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', fontSize: '0.8rem', minHeight: 0, display: 'inline' }}>View all →</Link>
-            </div>
-            {allWorkoutsList.length === 0 ? (
-              <div className="card-vel" style={{ padding: '3rem', textAlign: 'center' }}>
-                <p style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>💪</p>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>No workouts yet. Let&apos;s get started!</p>
-                <Link href="/workouts/new" className="btn-primary" style={{ display: 'inline-flex' }}>+ Log your first workout</Link>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {allWorkoutsList.slice(0, 3).map(w => {
-                  const badge = typeBadge(w.type)
-                  return (
-                    <Link key={w.id} href={`/workouts/${w.id}`} style={{ textDecoration: 'none' }}>
-                      <div className="card-interactive" style={{ padding: '1rem 1.25rem', minHeight: '56px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: 1 }}>
-                            <span style={{ fontSize: '1.25rem', flexShrink: 0 }}>{badge.icon}</span>
-                            <div style={{ minWidth: 0 }}>
-                              <h3 style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.2rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.title}</h3>
-                              <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-                                {new Date(w.date ?? w.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                {w.duration ? ` · ${w.duration} min` : ''}
-                                {(w.exercises as any[])?.[0]?.count ? ` · ${(w.exercises as any[])[0].count} exercises` : ''}
-                              </p>
-                            </div>
-                          </div>
-                          <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.25rem 0.625rem', borderRadius: '999px', textTransform: 'uppercase' as const, letterSpacing: '0.07em', background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`, flexShrink: 0 }}>
-                            {w.type}
-                          </span>
-                        </div>
-                      </div>
-                    </Link>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
-        </div>
+        {/* ── SKIPPED PLANS ── */}
+        {skippedPlans.length > 0 && (
+          <section style={{ marginBottom: '1.75rem' }}>
+            <SkippedPlansSection plans={skippedPlans} userId={userId} supabase={supabase} onUpdate={loadData} />
+          </section>
+        )}
 
       </main>
 
@@ -559,15 +465,7 @@ export default function DashboardPage() {
       )}
 
       <style>{`
-        .dashboard-grid { grid-template-columns: minmax(0, 1fr); }
-        .dash-col-side { order: 0; }
-        .dash-col-main { order: 1; }
         @media (min-width: 768px) {
-          .dashboard-grid { grid-template-columns: minmax(0, 1fr) 280px !important; }
-          .dash-col-main { order: 0; }
-          .dash-col-side { order: 1; }
-          .pr-carousel { flex-direction: column; overflow-x: visible; scroll-snap-type: none; }
-          .pr-card { width: 100% !important; }
           .md-show-flex { display: inline-flex !important; }
         }
       `}</style>
