@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Trash2, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
 import { getLocalDateString } from '@/lib/utils'
 
-type AdminTab = 'overview' | 'members' | 'coaches' | 'groups' | 'settings'
+type AdminTab = 'members' | 'coaches' | 'groups' | 'settings'
 type Role = 'member' | 'coach' | 'admin'
 
 const inputBase: React.CSSProperties = {
@@ -367,7 +367,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
 export default function AdminPage() {
   const router = useRouter()
   const supabase = createClient()
-  const [activeTab, setActiveTab] = useState<AdminTab>('overview')
+  const [activeTab, setActiveTab] = useState<AdminTab>('members')
   const [loading, setLoading] = useState(true)
 
   // Members tab
@@ -395,9 +395,7 @@ export default function AdminPage() {
   // Leaderboard (still used by Settings tab PR management)
   const [allPRs, setAllPRs] = useState<any[]>([])
 
-  // Overview/Coaches state
-  const [monthlyWorkoutCount, setMonthlyWorkoutCount] = useState(0)
-  const [monthlyPRCount, setMonthlyPRCount] = useState(0)
+  // Coaches state
   const [coachStats, setCoachStats] = useState<Record<string, { groups: number; students: number; plansAssigned: number }>>({})
   const [settings, setSettings] = useState({ require_approval: true, instagram_handle: '', public_pr_exercises: [] as string[] })
   const [settingsSaved, setSettingsSaved] = useState(false)
@@ -451,13 +449,6 @@ export default function AdminPage() {
         loadGroups(),
         supabase.from('personal_records').select('*, profiles(name, gender)').order('value', { ascending: false }).then(({ data }) => setAllPRs(data ?? [])),
       ])
-
-      // Monthly stats
-      const thisMonth = getLocalDateString().slice(0, 7)
-      const { count: mwCount } = await supabase.from('workouts').select('id', { count: 'exact', head: true }).gte('date', thisMonth + '-01')
-      const { count: mpCount } = await supabase.from('personal_records').select('id', { count: 'exact', head: true }).gte('recorded_at', thisMonth + '-01')
-      setMonthlyWorkoutCount(mwCount || 0)
-      setMonthlyPRCount(mpCount || 0)
 
       // Coach stats
       const coachUsers = (allResult.data || []).filter((u: any) => u.role === 'coach')
@@ -624,7 +615,6 @@ export default function AdminPage() {
   }
 
   const adminTabs: { value: AdminTab; label: string }[] = [
-    { value: 'overview', label: '📊 Overview' },
     { value: 'members', label: '👥 Members' },
     { value: 'coaches', label: '👨‍💼 Coaches' },
     { value: 'groups', label: '🏢 Groups & Classes' },
@@ -674,41 +664,6 @@ export default function AdminPage() {
             </button>
           ))}
         </div>
-
-        {/* ── OVERVIEW TAB ── */}
-        {activeTab === 'overview' && (
-          <div key="tab-overview" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {pendingUsers.length > 0 && (
-              <div style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.4)', borderRadius: '0.75rem', padding: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-                <div>
-                  <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.75rem', color: '#f59e0b', letterSpacing: '0.03em' }}>
-                    {pendingUsers.length} PENDING APPROVAL{pendingUsers.length > 1 ? 'S' : ''}
-                  </p>
-                  <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>New members waiting for access</p>
-                </div>
-                <button onClick={() => setActiveTab('members')} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.625rem 1.25rem', fontSize: '0.875rem', fontWeight: 700, cursor: 'pointer' }}>
-                  Review Now
-                </button>
-              </div>
-            )}
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem' }}>
-              {[
-                { label: 'Total Members', value: allUsers.filter(u => u.role === 'member').length, icon: '👥' },
-                { label: 'Total Coaches', value: allUsers.filter(u => u.role === 'coach').length, icon: '👨‍💼' },
-                { label: 'Workouts This Month', value: monthlyWorkoutCount, icon: '🏋️' },
-                { label: 'PRs This Month', value: monthlyPRCount, icon: '🏆' },
-              ].map(s => (
-                <div key={s.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center' }}>
-                  <p style={{ fontSize: '1.75rem', marginBottom: '0.5rem' }}>{s.icon}</p>
-                  <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '2.5rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{s.value}</p>
-                  <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>{s.label}</p>
-                </div>
-              ))}
-            </div>
-
-          </div>
-        )}
 
         {/* ── MEMBERS TAB ── */}
         {activeTab === 'members' && (

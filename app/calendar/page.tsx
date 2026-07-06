@@ -81,12 +81,12 @@ function ClassCard({ cls, userRole }: { cls: any; userRole: string }) {
         <div>
           <h4 style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.25rem' }}>{cls.title}</h4>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-            🕐 {cls.start_time?.slice(0, 5)}{cls.end_time ? ` – ${cls.end_time?.slice(0, 5)}` : ''}
-            {cls.location ? ` · 📍 ${cls.location}` : ''}
+            {cls.start_time?.slice(0, 5)}{cls.end_time ? ` – ${cls.end_time?.slice(0, 5)}` : ''}
+            {cls.location ? ` · ${cls.location}` : ''}
           </p>
-          {cls.groups && <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)', marginTop: '0.15rem' }}>👥 {cls.groups.name}</p>}
+          {cls.groups && <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)', marginTop: '0.15rem' }}>{cls.groups.name}</p>}
           {cls.profiles && <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>Coach: {cls.profiles.name}</p>}
-          {cls.is_recurring && <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>🔁 Recurring {cls.recurrence_rule}</p>}
+          {cls.is_recurring && <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>Recurring {cls.recurrence_rule}</p>}
         </div>
         <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.25rem 0.5rem', borderRadius: '999px', textTransform: 'uppercase', background: tc.bg, color: tc.color, whiteSpace: 'nowrap', flexShrink: 0 }}>
           {cls.type}
@@ -444,7 +444,7 @@ export default function CalendarPage() {
                       if (c.isPlan) {
                         return (
                           <div key={c.id} onClick={e => { e.stopPropagation(); setSelectedClass(c) }} style={{ background: 'rgba(8,119,160,0.25)', color: '#34bac2', border: '1px dashed rgba(8,119,160,0.5)', borderRadius: '0.2rem', fontSize: '0.6rem', padding: '0.1rem 0.3rem', marginBottom: '0.15rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', cursor: 'pointer' }}>
-                            📋 {c.title}
+                            {c.title}
                           </div>
                         )
                       }
@@ -471,7 +471,6 @@ export default function CalendarPage() {
                 </h3>
                 {selectedDateClasses.length === 0 ? (
                   <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center' }}>
-                    <p style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>📅</p>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No classes or plans scheduled.</p>
                     {(userRole === 'admin' || userRole === 'coach') && (
                       <button onClick={() => setShowCreateModal(true)} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', marginTop: '0.75rem' }}>
@@ -484,7 +483,7 @@ export default function CalendarPage() {
                     {/* Assigned Plans */}
                     {selectedDateClasses.filter(c => c.isPlan).length > 0 && (
                       <div style={{ marginBottom: '1rem' }}>
-                        <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--teal-secondary)', marginBottom: '0.5rem' }}>📋 Assigned Plans</p>
+                        <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--teal-secondary)', marginBottom: '0.5rem' }}>Assigned Plans</p>
                         {selectedDateClasses.filter(c => c.isPlan).map(plan => {
                           const memberName = plan.member?.name
                           const coachName = plan.coach?.name
@@ -505,7 +504,7 @@ export default function CalendarPage() {
                     {/* Scheduled Classes */}
                     {selectedDateClasses.filter(c => !c.isPlan).length > 0 && (
                       <div>
-                        <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>🏋️ Scheduled Classes</p>
+                        <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Scheduled Classes</p>
                         {selectedDateClasses.filter(c => !c.isPlan).map(cls => (
                           <div key={cls.id} onClick={() => setSelectedClass(cls)} style={{ cursor: 'pointer' }}>
                             <ClassCard cls={cls} userRole={userRole} />
@@ -518,7 +517,6 @@ export default function CalendarPage() {
               </div>
             ) : (
               <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center' }}>
-                <p style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>👆</p>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Click a date to see scheduled classes.</p>
               </div>
             )}
@@ -549,7 +547,7 @@ export default function CalendarPage() {
 
             {createError && (
               <div style={{ background: 'rgba(127,29,29,0.4)', color: '#fca5a5', border: '1px solid #7f1d1d', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
-                ⚠️ {createError}
+                {createError}
               </div>
             )}
 
@@ -569,7 +567,7 @@ export default function CalendarPage() {
                       background: createForm.type === t ? 'rgba(8,119,160,0.2)' : '#0d1a1e',
                       color: createForm.type === t ? 'var(--teal-secondary)' : 'var(--text-secondary)',
                       fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize', minHeight: 0,
-                    }}>{t === 'conditioning' ? '🏋️ Cond.' : t === 'basketball' ? '🏀 Ball' : '💪 Both'}</button>
+                    }}>{t === 'conditioning' ? 'Cond.' : t === 'basketball' ? 'Ball' : 'Both'}</button>
                   ))}
                 </div>
               </div>
@@ -666,7 +664,7 @@ export default function CalendarPage() {
               )}
 
               <button type="submit" disabled={saving} style={{ background: saving ? '#0d1a1e' : 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.875rem', fontWeight: 700, fontSize: '1rem', cursor: saving ? 'not-allowed' : 'pointer', marginTop: '0.5rem' }}>
-                {saving ? 'Scheduling…' : '📅 Schedule Class'}
+                {saving ? 'Scheduling…' : 'Schedule Class'}
               </button>
             </form>
           </div>
