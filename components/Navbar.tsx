@@ -33,23 +33,26 @@ export default function Navbar() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const [profileResult, membershipResult, workoutPlansResult, programAssignmentsResult] = await Promise.all([
+      const [profileResult, membershipResult, workoutPlansResult, programAssignmentsResult, coachStudentsResult] = await Promise.all([
         supabase.from('profiles').select('role, name').eq('id', user.id).single(),
         supabase.from('group_members').select('id').eq('member_id', user.id).limit(1),
         supabase.from('workout_plans').select('id').eq('member_id', user.id).limit(1),
         supabase.from('program_assignments').select('id').eq('member_id', user.id).limit(1),
+        supabase.from('coach_students').select('id').eq('member_id', user.id).limit(1),
       ])
 
       const profile = profileResult.data
       const membership = membershipResult.data
       const workoutPlans = workoutPlansResult.data
       const programAssignments = programAssignmentsResult.data
+      const coachStudents = coachStudentsResult.data
       if (!profile) return
 
       const studentStatus = profile.role === 'member' && (
         (membership?.length || 0) > 0 ||
         (workoutPlans?.length || 0) > 0 ||
-        (programAssignments?.length || 0) > 0
+        (programAssignments?.length || 0) > 0 ||
+        (coachStudents?.length || 0) > 0
       )
 
       let pending = 0

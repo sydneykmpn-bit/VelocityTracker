@@ -100,6 +100,7 @@ export default function ClassDetailModal({
       .from('class_attendees')
       .select('*, profiles(name, email, gender)')
       .eq('class_id', attendanceClassId)
+      .eq('occurrence_date', cls.scheduled_date)
     setAttendees(data || [])
     const mine = (data || []).find((a: any) => a.member_id === userId)
     setMyAttendance(mine || null)
@@ -109,7 +110,7 @@ export default function ClassDetailModal({
   useEffect(() => {
     loadAttendees()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cls.id, cls.parent_class_id, cls.is_dynamic, userId])
+  }, [cls.id, cls.parent_class_id, cls.is_dynamic, cls.scheduled_date, userId])
 
   const handleRSVP = async () => {
     setRsvpLoading(true)
@@ -145,6 +146,7 @@ export default function ClassDetailModal({
         .from('class_attendees')
         .select('id')
         .eq('class_id', attendanceClassId)
+        .eq('occurrence_date', cls.scheduled_date)
         .eq('member_id', userId)
         .maybeSingle()
 
@@ -155,6 +157,7 @@ export default function ClassDetailModal({
           .from('class_attendees')
           .insert({
             class_id: attendanceClassId,
+            occurrence_date: cls.scheduled_date,
             member_id: userId,
             status: 'scheduled',
           })
@@ -190,6 +193,7 @@ export default function ClassDetailModal({
       .from('class_attendees')
       .select('id')
       .eq('class_id', attendanceClassId)
+      .eq('occurrence_date', cls.scheduled_date)
       .eq('member_id', memberId)
       .maybeSingle()
 
@@ -198,6 +202,7 @@ export default function ClassDetailModal({
         .from('class_attendees')
         .insert({
           class_id: attendanceClassId,
+          occurrence_date: cls.scheduled_date,
           member_id: memberId,
           status: 'scheduled',
         })

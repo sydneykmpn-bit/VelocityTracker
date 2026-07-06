@@ -212,15 +212,17 @@ export default function CalendarPage() {
 
       // Client-side catch-up only — an RSVP won't flip to 'absent' until this user next opens their
       // calendar, not on a schedule. Only touches this user's own attendee rows (member_id = user.id),
-      // since RLS only allows updating your own attendance.
+      // since RLS only allows updating your own attendance. Uses each attendee row's own
+      // occurrence_date (not scheduled_classes.scheduled_date) so recurring-instance attendance is
+      // compared against its own specific date, not the parent's base date.
       const today = getLocalDateString()
       const { data: myAttendance } = await supabase
         .from('class_attendees')
-        .select('id, scheduled_classes(scheduled_date)')
+        .select('id, occurrence_date')
         .eq('member_id', user.id)
         .eq('status', 'scheduled')
       const overdueAttendeeIds = (myAttendance || [])
-        .filter((a: any) => a.scheduled_classes?.scheduled_date && a.scheduled_classes.scheduled_date < today)
+        .filter((a: any) => a.occurrence_date && a.occurrence_date < today)
         .map((a: any) => a.id)
       if (overdueAttendeeIds.length > 0) {
         await supabase.from('class_attendees').update({ status: 'absent' }).in('id', overdueAttendeeIds)

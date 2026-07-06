@@ -35,15 +35,17 @@ export default function BottomNav() {
       sessionStorage.setItem('vel_role', profile.role)
 
       if (profile.role === 'member' || profile.role === 'admin' || profile.role === 'coach') {
-        const [membershipResult, workoutPlansResult, programAssignmentsResult] = await Promise.all([
+        const [membershipResult, workoutPlansResult, programAssignmentsResult, coachStudentsResult] = await Promise.all([
           supabase.from('group_members').select('id').eq('member_id', user.id).limit(1),
           supabase.from('workout_plans').select('id').eq('member_id', user.id).limit(1),
           supabase.from('program_assignments').select('id').eq('member_id', user.id).limit(1),
+          supabase.from('coach_students').select('id').eq('member_id', user.id).limit(1),
         ])
         const studentStatus = (
           (membershipResult.data?.length || 0) > 0 ||
           (workoutPlansResult.data?.length || 0) > 0 ||
-          (programAssignmentsResult.data?.length || 0) > 0
+          (programAssignmentsResult.data?.length || 0) > 0 ||
+          (coachStudentsResult.data?.length || 0) > 0
         )
         setIsStudent(studentStatus)
         sessionStorage.setItem('vel_is_student', String(studentStatus))

@@ -574,6 +574,9 @@ export default function CoachPage() {
   const [myMembers, setMyMembers] = useState<any[]>([])
   const [expandedMember, setExpandedMember] = useState<string | null>(null)
   const [memberWorkouts, setMemberWorkouts] = useState<Record<string, any[]>>({})
+  const [showAddStudent, setShowAddStudent] = useState(false)
+  const [addStudentSearch, setAddStudentSearch] = useState('')
+  const [addingStudentId, setAddingStudentId] = useState<string | null>(null)
 
   // Groups
   const [myGroups, setMyGroups] = useState<any[]>([])
@@ -689,6 +692,11 @@ export default function CoachPage() {
       if (assignErr) console.error('loadMyMembers: program_assignments query failed', assignErr)
       for (const a of assignData ?? []) memberIds.add(a.member_id)
     }
+
+    // d) members explicitly added via coach_students (e.g. through "+ Add Student")
+    const { data: csData, error: csErr } = await supabase.from('coach_students').select('member_id').eq('coach_id', coachId)
+    if (csErr) console.error('loadMyMembers: coach_students query failed', csErr)
+    for (const cs of csData ?? []) memberIds.add(cs.member_id)
 
     if (memberIds.size === 0) { setMyMembers([]); return }
 
@@ -930,8 +938,31 @@ export default function CoachPage() {
       if (assignErr) { setError(assignErr.message); return }
     }
 
+    // d) Remove from this coach's explicit add-list (coach_students)
+    const { error: csErr } = await supabase
+      .from('coach_students')
+      .delete()
+      .eq('coach_id', userId)
+      .eq('member_id', studentId)
+    if (csErr) { setError(csErr.message); return }
+
     await loadMyMembers(userId)
     setSuccess(`${studentName} has been removed as your student.`)
+  }
+
+  const handleAddStudent = async (memberId: string) => {
+    if (!userId) return
+    setAddingStudentId(memberId)
+    setError('')
+    const { error: err } = await supabase.from('coach_students').insert({ coach_id: userId, member_id: memberId })
+    if (err) {
+      setError(err.message)
+    } else {
+      await loadMyMembers(userId)
+      setShowAddStudent(false)
+      setAddStudentSearch('')
+    }
+    setAddingStudentId(null)
   }
 
   const handleAssignPlan = async (e: React.FormEvent) => {
@@ -1512,7 +1543,59 @@ export default function CoachPage() {
                 <option value="least-active">Sort: Least Active</option>
                 <option value="last-workout">Sort: Last Workout</option>
               </select>
+              <button
+                onClick={() => setShowAddStudent(prev => !prev)}
+                style={{
+                  background: showAddStudent ? 'var(--surface)' : 'var(--teal-primary)',
+                  color: showAddStudent ? 'var(--text-primary)' : '#fff',
+                  border: showAddStudent ? '1px solid var(--border)' : 'none',
+                  borderRadius: '0.5rem', padding: '0.6rem 1rem', fontSize: '0.875rem', fontWeight: 700, cursor: 'pointer', minHeight: 0, whiteSpace: 'nowrap',
+                }}
+              >
+                {showAddStudent ? 'Cancel' : '+ Add Student'}
+              </button>
             </div>
+
+            {showAddStudent && (
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', marginBottom: '1rem' }}>
+                <input
+                  type="text" placeholder="Search members by name…" value={addStudentSearch}
+                  onChange={e => setAddStudentSearch(e.target.value)}
+                  style={{ ...inputBase, width: '100%', marginBottom: '0.75rem' }}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', maxHeight: '240px', overflowY: 'auto' }}>
+                  {(() => {
+                    const myMemberIds = new Set(myMembers.map(m => m.id))
+                    const candidates = allMembers.filter(m =>
+                      !myMemberIds.has(m.id) &&
+                      (!addStudentSearch.trim() || m.name?.toLowerCase().includes(addStudentSearch.toLowerCase()))
+                    )
+                    if (candidates.length === 0) {
+                      return <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No matching members found.</p>
+                    }
+                    return candidates.map(m => (
+                      <button
+                        key={m.id}
+                        onClick={() => handleAddStudent(m.id)}
+                        disabled={addingStudentId === m.id}
+                        style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '0.5rem',
+                          padding: '0.5rem 0.75rem', cursor: addingStudentId === m.id ? 'not-allowed' : 'pointer',
+                          color: 'var(--text-primary)', fontSize: '0.875rem', textAlign: 'left', minHeight: 0,
+                          opacity: addingStudentId === m.id ? 0.6 : 1,
+                        }}
+                      >
+                        <span>{m.name}</span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', fontWeight: 700 }}>
+                          {addingStudentId === m.id ? 'Adding…' : '+ Add'}
+                        </span>
+                      </button>
+                    ))
+                  })()}
+                </div>
+              </div>
+            )}
 
             {myMembers.length === 0 ? (
               <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '3rem', textAlign: 'center' }}>

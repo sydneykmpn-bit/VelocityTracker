@@ -52,7 +52,8 @@ Core (documented in detail — keep this section accurate):
 	•	group_members (id, group_id, member_id, joined_at)
 	•	coach_notes (id, coach_id, member_id, note, created_at, updated_at)
 	•	scheduled_classes (id, title, description, type, group_id, coach_id, scheduled_date, start_time, end_time, location, is_recurring, recurrence_rule, recurrence_days, recurrence_end_date, parent_class_id, created_by, created_at)
-	•	class_attendees (id, class_id, member_id, status)
+	•	class_attendees (id, class_id, member_id, status, occurrence_date) — occurrence_date scopes attendance to one specific date of a recurring class series, not the whole series
+	•	coach_students (coach_id, member_id) — explicit coach-adds-student link, independent of groups/plans/programs; feeds My Students (myMembers) and Student Panel access (isStudent)
 
 Additional feature tables (exist and are in active use — ask before making schema assumptions about these, details not fully spec'd here):
 	•	body_measurements — weight/body-fat/circumference tracking over time, feeds /analytics "body" tab
@@ -117,4 +118,7 @@ Recent Changes:
 	•	Student Panel (/student): removed Class Schedule and Progress tabs (and their now-dead upcomingClasses/groupIds/workoutHistory state+queries); Assigned Plans tab now shows Missed above Upcoming/Pending with a Date ↑/↓ sort toggle, and pending plan cards collapse to a compact row on mobile (accordion, one expanded at a time)
 	•	Dashboard (/dashboard): reordered sections to Header → Coach Note → Missed plans → Upcoming This Week → Today's Plan → This Week stats → rest unchanged
 	•	components/ClassDetailModal.tsx: member "Mark Done" now shows an Undo action once a plan is completed (previously had none), matching the auto-log/undo pattern used in dashboard, student, and coach pages
-	•	Leaderboard (/leaderboard): PR weights now convert to the viewer's preferred_weight_unit at display time only (Public Leaderboard + My PRs), non-weight units (reps/time/speed) are left untouched; Submit PR form's exercise buttons no longer show emoji icons; Unit dropdown is now filtered to units valid for the selected exercise (kg/lbs for lifts, seconds/minutes for Sprint on Public tab, keyword-based time/speed filtering on Personal tab)
+	•	Leaderboard (/leaderboard): PR weights now convert to the viewer's preferred_weight_unit at display time only (Public Leaderboard + My PRs), non-weight units (reps/time/speed) are left untouched; Submit PR form's exercise buttons no longer show emoji icons; Unit dropdown is now filtered to units valid for the selected exercise (kg/lbs for lifts, seconds/minutes/kmh/mph for Sprint on Public tab, keyword-based time/speed filtering on Personal tab)
+	•	Coach Panel (/coach) My Students tab: added "+ Add Student" search picker (any role='member' not already a student) that inserts into coach_students; loadMyMembers now unions in coach_students alongside the existing group/plan/program-derived sources; Remove Student now also deletes the matching coach_students row
+	•	Student Panel access (isStudent, components/Navbar.tsx + BottomNav.tsx) now also grants access via coach_students (member_id = current user), alongside the existing group/plan/program checks
+	•	Recurring class attendance (components/ClassDetailModal.tsx, app/calendar/page.tsx): all class_attendees queries/inserts now scope on class_id + occurrence_date (the specific instance's date) instead of class_id alone, so RSVPs/add-attendee no longer leak across all occurrences of a recurring class; calendar's auto-miss catch-up now reads occurrence_date directly off class_attendees instead of joining scheduled_classes.scheduled_date
