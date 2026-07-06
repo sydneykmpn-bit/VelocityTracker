@@ -267,7 +267,7 @@ export default function ProfilePage() {
               ))}
             </div>
             <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
-              Used for displaying workout weights (PRs, exercise logs, plan exercises) once that support is added.
+              Used for displaying workout weights (PRs, exercise logs, plan exercises).
             </p>
           </div>
 
