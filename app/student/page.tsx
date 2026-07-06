@@ -128,6 +128,11 @@ export default function StudentPage() {
 
   const handleLogWorkoutFromPlan = async (plan: any) => {
     if (!userId) return
+
+    const durationInput = window.prompt('Duration in minutes (optional):')
+    const durationMinutes = durationInput && !isNaN(Number(durationInput)) && Number(durationInput) > 0
+      ? Number(durationInput) : null
+
     setLoggingPlanId(plan.id)
 
     const { data: newWorkout } = await supabase.from('workouts').insert({
@@ -135,7 +140,7 @@ export default function StudentPage() {
       title: plan.title,
       type: plan.type,
       notes: `Auto-logged from assigned plan. ${plan.description || ''}`.trim(),
-      duration: null,
+      duration: durationMinutes,
       date: new Date().toISOString(),
     }).select().single()
 

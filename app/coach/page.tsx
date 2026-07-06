@@ -617,6 +617,8 @@ export default function CoachPage() {
   const [planActionLoading, setPlanActionLoading] = useState<string | null>(null)
   const [reschedulingPlan, setReschedulingPlan] = useState<string | null>(null)
   const [reschedulePlanDate, setReschedulePlanDate] = useState('')
+  const [completingPlan, setCompletingPlan] = useState<string | null>(null)
+  const [completePlanDuration, setCompletePlanDuration] = useState('')
   const [planSearch, setPlanSearch] = useState('')
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<{id: string; name: string} | null>(null)
   const [memberSearch, setMemberSearch] = useState('')
@@ -994,7 +996,7 @@ export default function CoachPage() {
     if (userId) await loadAssignedPlans(userId)
   }
 
-  const handleCompletePlan = async (plan: any) => {
+  const handleCompletePlan = async (plan: any, durationMinutes: number | null = null) => {
     if (!userId) return
     setPlanActionLoading(plan.id)
     setError('')
@@ -1017,7 +1019,7 @@ export default function CoachPage() {
       title: plan.title,
       type: plan.type,
       notes: `Auto-logged from assigned plan. ${plan.description || ''}`.trim(),
-      duration: null,
+      duration: durationMinutes,
       date: new Date().toISOString(),
     }).select().single()
 
@@ -1059,6 +1061,8 @@ export default function CoachPage() {
       return
     }
 
+    setCompletingPlan(null)
+    setCompletePlanDuration('')
     await loadAssignedPlans(userId)
     setPlanActionLoading(null)
   }
@@ -2141,6 +2145,7 @@ export default function CoachPage() {
                               const isEditingThis = editingPlan === p.id
                               const isReschedulingThis = reschedulingPlan === p.id
                               const isActingThis = planActionLoading === p.id
+                              const isCompletingThis = completingPlan === p.id
                               return (
                                 <div key={p.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', overflow: 'hidden' }}>
                                   <div style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -2161,11 +2166,15 @@ export default function CoachPage() {
                                   <div style={{ display: 'flex', gap: '0.5rem', padding: '0 1rem 0.875rem', flexWrap: 'wrap' }}>
                                     {p.status !== 'completed' ? (
                                       <button
-                                        onClick={() => handleCompletePlan(p)}
+                                        onClick={() => {
+                                          if (isCompletingThis) { setCompletingPlan(null); setCompletePlanDuration(''); return }
+                                          setCompletePlanDuration('')
+                                          setCompletingPlan(p.id)
+                                        }}
                                         disabled={isActingThis}
                                         style={{ flex: '1 1 auto', background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.35)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: '#4ade80', fontSize: '0.75rem', cursor: isActingThis ? 'not-allowed' : 'pointer', minHeight: 0 }}
                                       >
-                                        ✅ {isActingThis ? 'Saving…' : 'Complete'}
+                                        ✅ {isActingThis ? 'Saving…' : isCompletingThis ? 'Cancel' : 'Complete'}
                                       </button>
                                     ) : (
                                       <button
@@ -2218,6 +2227,24 @@ export default function CoachPage() {
                                         onClick={() => handleReschedulePlan(p.id)}
                                         disabled={isActingThis || !reschedulePlanDate}
                                         style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.4rem 0.875rem', fontWeight: 700, fontSize: '0.75rem', cursor: (isActingThis || !reschedulePlanDate) ? 'not-allowed' : 'pointer', minHeight: 0 }}
+                                      >
+                                        {isActingThis ? 'Saving…' : 'Confirm'}
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {isCompletingThis && (
+                                    <div style={{ padding: '0 1rem 0.875rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                      <input
+                                        type="number" min="0" placeholder="Duration (minutes) — optional"
+                                        value={completePlanDuration}
+                                        onChange={e => setCompletePlanDuration(e.target.value)}
+                                        style={{ ...inputBase, flex: 1 }}
+                                      />
+                                      <button
+                                        onClick={() => handleCompletePlan(p, completePlanDuration ? Number(completePlanDuration) : null)}
+                                        disabled={isActingThis}
+                                        style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.4rem 0.875rem', fontWeight: 700, fontSize: '0.75rem', cursor: isActingThis ? 'not-allowed' : 'pointer', minHeight: 0 }}
                                       >
                                         {isActingThis ? 'Saving…' : 'Confirm'}
                                       </button>

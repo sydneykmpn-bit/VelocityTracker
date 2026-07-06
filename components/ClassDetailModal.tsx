@@ -43,8 +43,28 @@ export default function ClassDetailModal({
   const [addAttendeeLoading, setAddAttendeeLoading] = useState(false)
   const [addAttendeeError, setAddAttendeeError] = useState('')
   const [rsvpError, setRsvpError] = useState('')
+  const [planExercises, setPlanExercises] = useState<any[]>([])
+  const [loadingPlanExercises, setLoadingPlanExercises] = useState(false)
+  const [completeDurationMinutes, setCompleteDurationMinutes] = useState('')
+  const [planActionError, setPlanActionError] = useState('')
 
   const classId = cls.is_dynamic ? cls.parent_class_id : cls.id
+
+  // Fetch exercise breakdown for plan entries
+  useEffect(() => {
+    if (!cls.isPlan) return
+    setLoadingPlanExercises(true)
+    supabase
+      .from('workout_plan_exercises')
+      .select('*')
+      .eq('plan_id', cls.id)
+      .order('order_index')
+      .then(({ data }) => {
+        setPlanExercises(data || [])
+        setLoadingPlanExercises(false)
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cls.id, cls.isPlan])
 
   // Fetch coaches on mount
   useEffect(() => {
@@ -445,33 +465,123 @@ export default function ClassDetailModal({
           </div>
         )}
 
+        {/* Exercise breakdown for plan entries */}
+        {cls.isPlan && (
+          <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
+            <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>Exercises</p>
+            {loadingPlanExercises ? (
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Loading…</p>
+            ) : planExercises.length === 0 ? (
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No exercises listed for this plan.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {planExercises.map(ex => (
+                  <div key={ex.id} style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem' }}>
+                    <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>{ex.name}</p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.2rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      {ex.sets != null && ex.reps != null && <span>{ex.sets}×{ex.reps} reps</span>}
+                      {ex.weight != null && <span>{ex.weight}kg</span>}
+                      {ex.duration != null && <span>{ex.duration}min</span>}
+                      {ex.distance != null && <span>{ex.distance}km</span>}
+                      {ex.notes && <span style={{ fontStyle: 'italic' }}>{ex.notes}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Plan actions for members */}
         {cls.isPlan && userRole === 'member' && (
-          <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <button
-              onClick={async () => {
-                setPlanActionLoading(true)
-                await supabase.from('workout_plans').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', cls.id)
-                setPlanActionLoading(false)
-                onClose(); onUpdate()
-              }}
-              disabled={planActionLoading}
-              style={{ flex: 1, background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.75rem', fontWeight: 700, fontSize: '0.875rem', cursor: planActionLoading ? 'not-allowed' : 'pointer', opacity: planActionLoading ? 0.7 : 1 }}
-            >
-              ✅ Mark Done
-            </button>
-            <button
-              onClick={async () => {
-                setPlanActionLoading(true)
-                await supabase.from('workout_plans').update({ status: 'skipped' }).eq('id', cls.id)
-                setPlanActionLoading(false)
-                onClose(); onUpdate()
-              }}
-              disabled={planActionLoading}
-              style={{ background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.75rem 1rem', fontSize: '0.875rem', cursor: 'pointer' }}
-            >
-              ⏭️ Skip
-            </button>
+          <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
+            {planActionError && (
+              <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.375rem', padding: '0.5rem 0.625rem', color: '#f87171', fontSize: '0.75rem', marginBottom: '0.5rem' }}>
+                {planActionError}
+              </div>
+            )}
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label style={labelBase}>Duration (minutes) — optional</label>
+              <input
+                type="number" min="0" style={inputBase}
+                value={completeDurationMinutes}
+                onChange={e => setCompleteDurationMinutes(e.target.value)}
+                placeholder="e.g. 45"
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button
+                onClick={async () => {
+                  setPlanActionLoading(true)
+                  setPlanActionError('')
+
+                  const { data: newWorkout, error: workoutErr } = await supabase.from('workouts').insert({
+                    user_id: cls.member_id,
+                    title: cls.title,
+                    type: cls.type,
+                    notes: `Auto-logged from assigned plan. ${cls.description || ''}`.trim(),
+                    duration: completeDurationMinutes ? Number(completeDurationMinutes) : null,
+                    date: new Date().toISOString(),
+                  }).select().single()
+
+                  if (workoutErr) {
+                    console.error('Mark Done: workouts insert failed', workoutErr)
+                    setPlanActionError(workoutErr.message)
+                    setPlanActionLoading(false)
+                    return
+                  }
+
+                  if (newWorkout && planExercises.length > 0) {
+                    const { error: exError } = await supabase.from('exercises').insert(
+                      planExercises.map((ex: any) => ({
+                        workout_id: newWorkout.id,
+                        name: ex.name, sets: ex.sets, reps: ex.reps,
+                        weight: ex.weight, duration: ex.duration,
+                        distance: ex.distance, notes: ex.notes,
+                      }))
+                    )
+                    if (exError) {
+                      console.error('Mark Done: exercises insert failed', exError)
+                      setPlanActionError(exError.message)
+                      setPlanActionLoading(false)
+                      return
+                    }
+                  }
+
+                  const { error: updateErr } = await supabase.from('workout_plans').update({
+                    status: 'completed',
+                    completed_at: new Date().toISOString(),
+                    auto_logged_workout_id: newWorkout?.id ?? null,
+                  }).eq('id', cls.id)
+
+                  if (updateErr) {
+                    console.error('Mark Done: workout_plans update failed', updateErr)
+                    setPlanActionError(updateErr.message)
+                    setPlanActionLoading(false)
+                    return
+                  }
+
+                  setPlanActionLoading(false)
+                  onClose(); onUpdate()
+                }}
+                disabled={planActionLoading}
+                style={{ flex: 1, background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.75rem', fontWeight: 700, fontSize: '0.875rem', cursor: planActionLoading ? 'not-allowed' : 'pointer', opacity: planActionLoading ? 0.7 : 1 }}
+              >
+                ✅ Mark Done
+              </button>
+              <button
+                onClick={async () => {
+                  setPlanActionLoading(true)
+                  await supabase.from('workout_plans').update({ status: 'skipped' }).eq('id', cls.id)
+                  setPlanActionLoading(false)
+                  onClose(); onUpdate()
+                }}
+                disabled={planActionLoading}
+                style={{ background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.75rem 1rem', fontSize: '0.875rem', cursor: 'pointer' }}
+              >
+                ⏭️ Skip
+              </button>
+            </div>
           </div>
         )}
 

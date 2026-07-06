@@ -24,6 +24,8 @@ export function TodayPlanCard({ plan, onUpdate }: { plan: any; onUpdate: () => v
   const [newDate, setNewDate] = useState('')
   const [loading, setLoading] = useState(false)
   const [justCompleted, setJustCompleted] = useState(false)
+  const [showDurationInput, setShowDurationInput] = useState(false)
+  const [durationMinutes, setDurationMinutes] = useState('')
 
   const handleComplete = async () => {
     setLoading(true)
@@ -35,7 +37,7 @@ export function TodayPlanCard({ plan, onUpdate }: { plan: any; onUpdate: () => v
       title: plan.title,
       type: plan.type,
       notes: `Auto-logged from assigned plan. ${plan.description || ''}`.trim(),
-      duration: null,
+      duration: durationMinutes ? Number(durationMinutes) : null,
       date: new Date().toISOString(),
     }).select().single()
 
@@ -60,6 +62,8 @@ export function TodayPlanCard({ plan, onUpdate }: { plan: any; onUpdate: () => v
 
     setJustCompleted(true)
     setTimeout(() => setJustCompleted(false), 3000)
+    setShowDurationInput(false)
+    setDurationMinutes('')
     onUpdate()
     setLoading(false)
   }
@@ -127,6 +131,18 @@ export function TodayPlanCard({ plan, onUpdate }: { plan: any; onUpdate: () => v
         </div>
       )}
 
+      {showDurationInput && (
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+          <input
+            type="number" min="0" placeholder="Duration (minutes) — optional"
+            value={durationMinutes} onChange={e => setDurationMinutes(e.target.value)}
+            style={{ ...inputBase, flex: 1 }}
+          />
+          <button onClick={handleComplete} disabled={loading} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.875rem', fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', minHeight: 0 }}>Confirm</button>
+          <button onClick={() => { setShowDurationInput(false); setDurationMinutes('') }} disabled={loading} style={{ background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.875rem', cursor: 'pointer', minHeight: 0 }}>Cancel</button>
+        </div>
+      )}
+
       {justCompleted && (
         <div style={{ background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.75rem', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
           ✅ Workout logged automatically to your workout history!
@@ -134,7 +150,7 @@ export function TodayPlanCard({ plan, onUpdate }: { plan: any; onUpdate: () => v
       )}
 
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-        <button onClick={handleComplete} disabled={loading} style={{ flex: 1, background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.65rem', fontSize: '0.875rem', fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
+        <button onClick={() => setShowDurationInput(v => !v)} disabled={loading} style={{ flex: 1, background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.65rem', fontSize: '0.875rem', fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
           ✅ Mark Done
         </button>
         <button onClick={() => setShowReschedule(!showReschedule)} disabled={loading} style={{ background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.65rem 0.875rem', fontSize: '0.875rem', cursor: 'pointer' }}>

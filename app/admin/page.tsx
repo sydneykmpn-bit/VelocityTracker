@@ -833,17 +833,43 @@ export default function AdminPage() {
                     </div>
                   </div>
                 </button>
-                <button
-                  onClick={async () => {
-                    if (!confirm(`Demote ${coach.name} to member?`)) return
-                    await supabase.from('profiles').update({ role: 'member' }).eq('id', coach.id)
-                    const { data: fresh } = await supabase.from('profiles').select('*').eq('approved', true).order('created_at', { ascending: false })
-                    setAllUsers(fresh || [])
-                  }}
-                  style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0 }}
-                >
-                  Demote
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`Demote ${coach.name} to member?`)) return
+                      await supabase.from('profiles').update({ role: 'member' }).eq('id', coach.id)
+                      const { data: fresh } = await supabase.from('profiles').select('*').eq('approved', true).order('created_at', { ascending: false })
+                      setAllUsers(fresh || [])
+                    }}
+                    style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    Demote
+                  </button>
+                  <select
+                    value={coach.role}
+                    onChange={async e => {
+                      const newRole = e.target.value
+                      await supabase.from('profiles').update({ role: newRole }).eq('id', coach.id)
+                      setAllUsers(prev => prev.map(p => p.id === coach.id ? { ...p, role: newRole } : p))
+                    }}
+                    style={{ ...inputBase, padding: '0.25rem 0.5rem', fontSize: '0.75rem', cursor: 'pointer',
+                      color: coach.role === 'admin' ? '#c084fc' : coach.role === 'coach' ? '#34bac2' : 'var(--text-secondary)' }}
+                  >
+                    <option value="member">member</option>
+                    <option value="coach">coach</option>
+                    <option value="admin">admin</option>
+                  </select>
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`Remove ${coach.name} from Velocity Tracker? This cannot be undone.`)) return
+                      const ok = await handleDeleteUser(coach.id)
+                      if (ok) setAllUsers(prev => prev.filter(p => p.id !== coach.id))
+                    }}
+                    style={{ width: '28px', height: '28px', borderRadius: '0.375rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', flexShrink: 0 }}
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
             ))}
           </div>
