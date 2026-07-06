@@ -128,6 +128,16 @@ export default function Navbar() {
   const navLinks = getNavLinks()
   const isActive = (href: string) => pathname === href || (href !== '/dashboard' && pathname.startsWith(href + '/'))
 
+  // Exclude whatever BottomNav (mobile) is currently showing so links aren't duplicated on mobile.
+  // BottomNav always shows /dashboard, /workouts/new, /calendar, plus a role/student-dependent
+  // second and fourth tab — mirror that logic exactly (see components/BottomNav.tsx).
+  const bottomNavHrefs = new Set<string>(['/dashboard', '/workouts/new', '/calendar'])
+  if (userRole === 'admin') bottomNavHrefs.add('/admin')
+  else if (userRole === 'coach') bottomNavHrefs.add('/coach')
+  else if (isStudent) { bottomNavHrefs.add('/student'); bottomNavHrefs.add('/workouts') }
+  else { bottomNavHrefs.add('/workouts'); bottomNavHrefs.add('/leaderboard') }
+  const hamburgerLinks = navLinks.filter(link => !bottomNavHrefs.has(link.href))
+
   return (
     <>
       <nav style={{
@@ -279,7 +289,7 @@ export default function Navbar() {
                 <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)', textTransform: 'capitalize' }}>{userRole}</p>
               </div>
             )}
-            {navLinks.map(link => (
+            {hamburgerLinks.map(link => (
               <Link
                 key={link.href}
                 href={link.href}
