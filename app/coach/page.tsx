@@ -386,6 +386,8 @@ function AssignProgramModal({ program, members, groups, supabase, onClose }: { p
         continue
       }
 
+      await supabase.from('coach_students').upsert({ coach_id: program.coach_id, member_id: memberId }, { onConflict: 'coach_id,member_id' })
+
       for (const w of workouts ?? []) {
         const offsetDays = (w.week_number - 1) * 7 + w.day_of_week
         const d = new Date(startDate + 'T00:00:00')
@@ -638,7 +640,11 @@ export default function CoachPage() {
   const [calendarWorkouts, setCalendarWorkouts] = useState<any[]>([])
   const [expandedCalWorkout, setExpandedCalWorkout] = useState<string | null>(null)
   const [memberFilter, setMemberFilter] = useState('all')
+  const [calendarMemberSearch, setCalendarMemberSearch] = useState('')
   const [calLoading, setCalLoading] = useState(false)
+  const [expandedCalendarPlanId, setExpandedCalendarPlanId] = useState<string | null>(null)
+  const [calendarPlanExercises, setCalendarPlanExercises] = useState<Record<string, any[]>>({})
+  const [loadingCalendarPlanExercises, setLoadingCalendarPlanExercises] = useState<string | null>(null)
   const [calendarMonth, setCalendarMonth] = useState(new Date())
   const [calendarSelectedDate, setCalendarSelectedDate] = useState<string | null>(null)
 
@@ -666,37 +672,14 @@ export default function CoachPage() {
   const [assigningProgram, setAssigningProgram] = useState<any | null>(null)
 
   const loadMyMembers = async (coachId: string) => {
-    const memberIds = new Set<string>()
-
-    // a) members in any group where groups.coach_id = coachId
-    const { data: groupData, error: groupErr } = await supabase.from('groups').select('id').eq('coach_id', coachId)
-    if (groupErr) console.error('loadMyMembers: groups query failed', groupErr)
-    const groupIds = (groupData ?? []).map((g: any) => g.id)
-    if (groupIds.length > 0) {
-      const { data: gmData, error: gmErr } = await supabase.from('group_members').select('member_id').in('group_id', groupIds)
-      if (gmErr) console.error('loadMyMembers: group_members query failed', gmErr)
-      for (const gm of gmData ?? []) memberIds.add(gm.member_id)
-    }
-
-    // b) members with any workout_plans row assigned by this coach
-    const { data: planData, error: planErr } = await supabase.from('workout_plans').select('member_id').eq('coach_id', coachId)
-    if (planErr) console.error('loadMyMembers: workout_plans query failed', planErr)
-    for (const p of planData ?? []) memberIds.add(p.member_id)
-
-    // c) members assigned to any program owned by this coach
-    const { data: myPrograms, error: programsErr } = await supabase.from('programs').select('id').eq('coach_id', coachId)
-    if (programsErr) console.error('loadMyMembers: programs query failed', programsErr)
-    const programIds = (myPrograms ?? []).map((p: any) => p.id)
-    if (programIds.length > 0) {
-      const { data: assignData, error: assignErr } = await supabase.from('program_assignments').select('member_id').in('program_id', programIds)
-      if (assignErr) console.error('loadMyMembers: program_assignments query failed', assignErr)
-      for (const a of assignData ?? []) memberIds.add(a.member_id)
-    }
-
-    // d) members explicitly added via coach_students (e.g. through "+ Add Student")
+    // coach_students is the authoritative source of "is this my current student" — every place a
+    // coach first interacts with a member (add to group, assign plan, assign program, or the
+    // explicit "+ Add Student" picker) upserts a row here. This means removing a student actually
+    // removes them, instead of historical workout_plans/group_members/program_assignments rows
+    // permanently re-qualifying them after removal.
     const { data: csData, error: csErr } = await supabase.from('coach_students').select('member_id').eq('coach_id', coachId)
     if (csErr) console.error('loadMyMembers: coach_students query failed', csErr)
-    for (const cs of csData ?? []) memberIds.add(cs.member_id)
+    const memberIds = new Set<string>((csData ?? []).map((cs: any) => cs.member_id))
 
     if (memberIds.size === 0) { setMyMembers([]); return }
 
@@ -883,6 +866,7 @@ export default function CoachPage() {
       // Optimistic update for instant feedback — reloads below reconcile with the server
       setGroupMembers(prev => ({ ...prev, [groupId]: [...(prev[groupId] ?? []), data] }))
     }
+    await supabase.from('coach_students').upsert({ coach_id: userId, member_id: memberId }, { onConflict: 'coach_id,member_id' })
     await loadGroupMembers(groupId)
     await loadMyGroups(userId)
     await loadMyMembers(userId)
@@ -993,11 +977,35 @@ export default function CoachPage() {
         }))
       )
     }
+    await supabase.from('coach_students').upsert({ coach_id: userId, member_id: assignForm.member_id }, { onConflict: 'coach_id,member_id' })
     setSuccess('Plan assigned!')
     setAssignForm({ member_id: '', title: '', description: '', type: 'conditioning', scheduled_date: getLocalDateString() })
     setPlanExercises([blankEx()])
     await loadAssignedPlans(userId)
+    await loadMyMembers(userId)
     setPlanSaving(false)
+  }
+
+  const toggleCalendarPlanExpand = async (planId: string) => {
+    if (expandedCalendarPlanId === planId) { setExpandedCalendarPlanId(null); return }
+    setExpandedCalendarPlanId(planId)
+    if (!calendarPlanExercises[planId]) {
+      setLoadingCalendarPlanExercises(planId)
+      const { data } = await supabase.from('workout_plan_exercises').select('*').eq('plan_id', planId).order('order_index')
+      setCalendarPlanExercises(prev => ({ ...prev, [planId]: data || [] }))
+      setLoadingCalendarPlanExercises(null)
+    }
+  }
+
+  const openPlanEdit = async (p: any) => {
+    const { data: exs } = await supabase.from('workout_plan_exercises').select('*').eq('plan_id', p.id).order('order_index')
+    setEditPlanForm({ title: p.title, description: p.description || '', type: p.type, scheduled_date: p.scheduled_date, member_id: p.member_id })
+    setEditPlanExercises((exs || []).map(ex => ({
+      name: ex.name, sets: ex.sets?.toString() || '', reps: ex.reps?.toString() || '',
+      weight: ex.weight?.toString() || '', duration: ex.duration?.toString() || '',
+      distance: ex.distance?.toString() || '', notes: ex.notes || '',
+    })))
+    setEditingPlan(p.id)
   }
 
   const handleDeletePlan = async (planId: string) => {
@@ -2279,17 +2287,7 @@ export default function CoachPage() {
                                         📅 {isReschedulingThis ? 'Cancel' : 'Reschedule'}
                                       </button>
                                     )}
-                                    <button onClick={async () => {
-                                      if (isEditingThis) { setEditingPlan(null); return }
-                                      const { data: exs } = await supabase.from('workout_plan_exercises').select('*').eq('plan_id', p.id).order('order_index')
-                                      setEditPlanForm({ title: p.title, description: p.description || '', type: p.type, scheduled_date: p.scheduled_date, member_id: p.member_id })
-                                      setEditPlanExercises((exs || []).map(ex => ({
-                                        name: ex.name, sets: ex.sets?.toString() || '', reps: ex.reps?.toString() || '',
-                                        weight: ex.weight?.toString() || '', duration: ex.duration?.toString() || '',
-                                        distance: ex.distance?.toString() || '', notes: ex.notes || '',
-                                      })))
-                                      setEditingPlan(p.id)
-                                    }} style={{ flex: '1 1 auto', background: isEditingThis ? 'rgba(8,119,160,0.15)' : 'none', border: `1px solid ${isEditingThis ? 'var(--teal-primary)' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: isEditingThis ? 'var(--teal-secondary)' : 'var(--text-secondary)', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
+                                    <button onClick={() => { if (isEditingThis) { setEditingPlan(null); return }; openPlanEdit(p) }} style={{ flex: '1 1 auto', background: isEditingThis ? 'rgba(8,119,160,0.15)' : 'none', border: `1px solid ${isEditingThis ? 'var(--teal-primary)' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: isEditingThis ? 'var(--teal-secondary)' : 'var(--text-secondary)', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
                                       ✏️ {isEditingThis ? 'Editing…' : 'Edit'}
                                     </button>
                                     <button onClick={() => handleDeletePlan(p.id)} style={{ flex: '1 1 auto', background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: '#f87171', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
@@ -2439,11 +2437,22 @@ export default function CoachPage() {
               selectedDate={calendarSelectedDate}
               onSelectDate={setCalendarSelectedDate}
               headerExtra={
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-                  <button onClick={() => setMemberFilter('all')} style={{ padding: '0.375rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, background: memberFilter === 'all' ? 'var(--teal-primary)' : 'var(--surface)', color: memberFilter === 'all' ? '#fff' : 'var(--text-secondary)', border: `1px solid ${memberFilter === 'all' ? 'var(--teal-primary)' : 'var(--border)'}`, cursor: 'pointer', minHeight: 0 }}>All Students</button>
-                  {myMembers.map((m: any) => (
-                    <button key={m.id} onClick={() => setMemberFilter(m.id)} style={{ padding: '0.375rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, background: memberFilter === m.id ? 'var(--teal-primary)' : 'var(--surface)', color: memberFilter === m.id ? '#fff' : 'var(--text-secondary)', border: `1px solid ${memberFilter === m.id ? 'var(--teal-primary)' : 'var(--border)'}`, cursor: 'pointer', minHeight: 0 }}>{m.name}</button>
-                  ))}
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <input
+                    type="text" placeholder="Search students…" value={calendarMemberSearch}
+                    onChange={e => setCalendarMemberSearch(e.target.value)}
+                    style={{ flex: 1, minWidth: '160px', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none' }}
+                  />
+                  <select
+                    value={memberFilter}
+                    onChange={e => setMemberFilter(e.target.value)}
+                    style={{ background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', cursor: 'pointer' }}
+                  >
+                    <option value="all">All Students</option>
+                    {myMembers
+                      .filter((m: any) => !calendarMemberSearch.trim() || m.name?.toLowerCase().includes(calendarMemberSearch.toLowerCase()))
+                      .map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
                 </div>
               }
               renderDayCellContent={(dayEntries) => (
@@ -2482,17 +2491,71 @@ export default function CoachPage() {
                       ) : selEntries.map((w: any) => {
                         if (w.isPlan) {
                           const isSkipped = w.status === 'skipped'
+                          const isCompleted = w.status === 'completed'
                           const tb = TYPE_BADGE[w.type] ?? TYPE_BADGE.both
+                          const isExpanded = expandedCalendarPlanId === w.id
+                          const exs = calendarPlanExercises[w.id] ?? []
                           return (
-                            <div key={w.id} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderLeft: `2px dashed ${isSkipped ? '#ef4444' : 'var(--teal-primary)'}`, borderRadius: '0.75rem', padding: '1rem', opacity: isSkipped ? 0.7 : 1 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
-                                <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', ...tb }}>{w.type}</span>
-                                <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', background: isSkipped ? 'rgba(239,68,68,0.15)' : 'rgba(8,119,160,0.15)', color: isSkipped ? '#ef4444' : 'var(--teal-secondary)' }}>
-                                  {isSkipped ? '❌ Missed' : '📋 Assigned'}
-                                </span>
+                            <div key={w.id} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderLeft: `2px dashed ${isSkipped ? '#ef4444' : 'var(--teal-primary)'}`, borderRadius: '0.75rem', overflow: 'hidden', opacity: isSkipped ? 0.7 : 1 }}>
+                              <div onClick={() => toggleCalendarPlanExpand(w.id)} style={{ padding: '1rem', cursor: 'pointer' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
+                                  <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', ...tb }}>{w.type}</span>
+                                  <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', background: isSkipped ? 'rgba(239,68,68,0.15)' : isCompleted ? 'rgba(34,197,94,0.15)' : 'rgba(8,119,160,0.15)', color: isSkipped ? '#ef4444' : isCompleted ? '#4ade80' : 'var(--teal-secondary)' }}>
+                                    {isSkipped ? '❌ Missed' : isCompleted ? '✅ Completed' : '📋 Assigned'}
+                                  </span>
+                                </div>
+                                <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>{w.title}</p>
+                                <p style={{ fontSize: '0.7rem', marginTop: '0.15rem', color: 'var(--text-secondary)' }}>{w.member_name ?? '—'}</p>
                               </div>
-                              <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>{w.title}</p>
-                              <p style={{ fontSize: '0.7rem', marginTop: '0.15rem', color: 'var(--text-secondary)' }}>{w.member_name ?? '—'}</p>
+                              {isExpanded && (
+                                <div style={{ borderTop: '1px solid var(--border)', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                  <div>
+                                    <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Exercises</p>
+                                    {loadingCalendarPlanExercises === w.id ? (
+                                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Loading…</p>
+                                    ) : exs.length === 0 ? (
+                                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No exercises listed for this plan.</p>
+                                    ) : (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                                        {exs.map((ex: any) => (
+                                          <div key={ex.id} style={{ background: 'var(--surface)', borderRadius: '0.5rem', padding: '0.5rem 0.625rem' }}>
+                                            <p style={{ fontSize: '0.8rem', fontWeight: 600 }}>{ex.name}</p>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.15rem', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                                              {ex.sets != null && ex.reps != null && <span>{ex.sets}×{ex.reps} reps</span>}
+                                              {ex.weight != null && <span>{ex.weight}kg</span>}
+                                              {ex.duration != null && <span>{ex.duration}min</span>}
+                                              {ex.distance != null && <span>{ex.distance}km</span>}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                    {!isCompleted && !isSkipped && (
+                                      <button
+                                        onClick={e => { e.stopPropagation(); handleCompletePlan(w, null).then(() => loadCalendarWorkouts()) }}
+                                        disabled={planActionLoading === w.id}
+                                        style={{ flex: '1 1 auto', background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.35)', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', color: '#4ade80', fontSize: '0.75rem', fontWeight: 700, cursor: planActionLoading === w.id ? 'not-allowed' : 'pointer', minHeight: 0 }}
+                                      >
+                                        ✅ {planActionLoading === w.id ? 'Saving…' : 'Mark Done'}
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={e => { e.stopPropagation(); openPlanEdit(w); switchTab('assigned') }}
+                                      style={{ flex: '1 1 auto', background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
+                                    >
+                                      ✏️ Edit
+                                    </button>
+                                    <button
+                                      onClick={e => { e.stopPropagation(); handleDeletePlan(w.id).then(() => loadCalendarWorkouts()) }}
+                                      style={{ flex: '1 1 auto', background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', color: '#f87171', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
+                                    >
+                                      🗑️ Remove
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )
                         }

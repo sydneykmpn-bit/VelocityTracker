@@ -21,8 +21,7 @@ export default function DashboardPage() {
   const [upcomingPlans, setUpcomingPlans] = useState<any[]>([])
   const [skippedPlans, setSkippedPlans] = useState<any[]>([])
   const [todayClasses, setTodayClasses] = useState<any[]>([])
-  const [studentActivityToday, setStudentActivityToday] = useState<{ count: number; total: number } | null>(null)
-  const [pendingCompletions, setPendingCompletions] = useState<any[]>([])
+  const [studentsScheduledToday, setStudentsScheduledToday] = useState<{ count: number; total: number } | null>(null)
   const [upcomingCoachClasses, setUpcomingCoachClasses] = useState<any[]>([])
   const [pendingApprovals, setPendingApprovals] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -91,17 +90,16 @@ export default function DashboardPage() {
         const { data: memberIds } = await supabase.from('group_members').select('member_id').in('group_id', groupIds)
         const ids = memberIds?.map((m: any) => m.member_id) || []
         if (ids.length > 0) {
-          const { count } = await supabase.from('workouts').select('id', { count: 'exact', head: true }).in('user_id', ids).gte('date', today)
-          setStudentActivityToday({ count: count || 0, total: ids.length })
+          const { data: scheduledTodayPlans } = await supabase
+            .from('workout_plans')
+            .select('member_id')
+            .eq('coach_id', uid)
+            .eq('scheduled_date', today)
+            .in('status', ['pending', 'rescheduled'])
+          const scheduledCount = new Set((scheduledTodayPlans ?? []).map((p: any) => p.member_id)).size
+          setStudentsScheduledToday({ count: scheduledCount, total: ids.length })
         }
       }
-      const { data: completedRecently } = await supabase
-        .from('workout_plans')
-        .select('*, profiles!workout_plans_member_id_fkey(name)')
-        .eq('coach_id', uid).eq('status', 'completed')
-        .gte('completed_at', new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString())
-        .order('completed_at', { ascending: false }).limit(5)
-      setPendingCompletions(completedRecently || [])
 
       const { data: coachClasses } = await supabase
         .from('scheduled_classes').select('*, groups(name)').eq('coach_id', uid)
@@ -288,35 +286,21 @@ export default function DashboardPage() {
           </Link>
         )}
 
-        {/* ── COACH: Student activity + completions ── */}
-        {userRole === 'coach' && (studentActivityToday || pendingCompletions.length > 0) && (
+        {/* ── COACH: Students scheduled today ── */}
+        {userRole === 'coach' && studentsScheduledToday && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
-            {studentActivityToday && (
-              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
-                <span style={{ fontSize: '1.5rem' }}>👥</span>
-                <div>
-                  <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>
-                    <span style={{ color: 'var(--teal-secondary)' }}>{studentActivityToday.count}</span>
-                    <span style={{ color: 'var(--text-secondary)' }}> / {studentActivityToday.total} students trained today</span>
-                  </p>
-                  <Link href="/coach" style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)', textDecoration: 'none', display: 'inline', minHeight: 0 }}>
-                    View Coach Panel →
-                  </Link>
-                </div>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+              <span style={{ fontSize: '1.5rem' }}>👥</span>
+              <div>
+                <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>
+                  <span style={{ color: 'var(--teal-secondary)' }}>{studentsScheduledToday.count}</span>
+                  <span style={{ color: 'var(--text-secondary)' }}> / {studentsScheduledToday.total} students have a workout scheduled today</span>
+                </p>
+                <Link href="/coach" style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)', textDecoration: 'none', display: 'inline', minHeight: 0 }}>
+                  View Coach Panel →
+                </Link>
               </div>
-            )}
-            {pendingCompletions.length > 0 && (
-              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem' }}>
-                <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#4ade80', marginBottom: '0.5rem' }}>🎉 Recent Completions</p>
-                {pendingCompletions.slice(0, 2).map((p: any) => (
-                  <p key={p.id} style={{ fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>
-                    <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{p['profiles!workout_plans_member_id_fkey']?.name}</span>
-                    {' completed '}
-                    <span style={{ color: 'var(--teal-secondary)' }}>{p.title}</span>
-                  </p>
-                ))}
-              </div>
-            )}
+            </div>
           </div>
         )}
 
