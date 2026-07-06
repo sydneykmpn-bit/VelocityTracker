@@ -34,7 +34,7 @@ export default function BottomNav() {
       setRole(profile.role)
       sessionStorage.setItem('vel_role', profile.role)
 
-      if (profile.role === 'member') {
+      if (profile.role === 'member' || profile.role === 'admin' || profile.role === 'coach') {
         const [membershipResult, workoutPlansResult, programAssignmentsResult] = await Promise.all([
           supabase.from('group_members').select('id').eq('member_id', user.id).limit(1),
           supabase.from('workout_plans').select('id').eq('member_id', user.id).limit(1),
@@ -65,6 +65,10 @@ export default function BottomNav() {
 
   const fourth = showStudentTabs
     ? { href: '/workouts', label: 'Workouts', icon: Dumbbell }
+    : role === 'admin'
+    ? (isStudent
+        ? { href: '/student', label: 'Student', icon: GraduationCap }
+        : { href: '/workouts', label: 'Workouts', icon: Dumbbell })
     : { href: '/leaderboard', label: 'Board', icon: Trophy }
   const FourthIcon = fourth.icon
 

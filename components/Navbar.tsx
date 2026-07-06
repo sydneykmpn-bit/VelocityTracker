@@ -132,10 +132,19 @@ export default function Navbar() {
   // BottomNav always shows /dashboard, /workouts/new, /calendar, plus a role/student-dependent
   // second and fourth tab — mirror that logic exactly (see components/BottomNav.tsx).
   const bottomNavHrefs = new Set<string>(['/dashboard', '/workouts/new', '/calendar'])
-  if (userRole === 'admin') bottomNavHrefs.add('/admin')
-  else if (userRole === 'coach') bottomNavHrefs.add('/coach')
-  else if (isStudent) { bottomNavHrefs.add('/student'); bottomNavHrefs.add('/workouts') }
-  else { bottomNavHrefs.add('/workouts'); bottomNavHrefs.add('/leaderboard') }
+  if (userRole === 'admin') {
+    bottomNavHrefs.add('/admin')
+    bottomNavHrefs.add(isStudent ? '/student' : '/workouts')
+  } else if (userRole === 'coach') {
+    bottomNavHrefs.add('/coach')
+    bottomNavHrefs.add('/leaderboard')
+  } else if (isStudent) {
+    bottomNavHrefs.add('/student')
+    bottomNavHrefs.add('/workouts')
+  } else {
+    bottomNavHrefs.add('/workouts')
+    bottomNavHrefs.add('/leaderboard')
+  }
   const hamburgerLinks = navLinks.filter(link => !bottomNavHrefs.has(link.href))
 
   return (
