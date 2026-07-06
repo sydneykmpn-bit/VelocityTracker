@@ -37,7 +37,7 @@ const TIME_SPEED_KEYWORDS = ['Run', 'Sprint', 'Row', 'Bike', 'Jump Rope', 'Tread
 
 function getValidUnits(tab: LeaderTab, ex: string): Unit[] {
   if (tab === 'public') {
-    return ex === 'Sprint' ? ['seconds', 'minutes'] : ['kg', 'lbs']
+    return ex === 'Sprint' ? ['seconds', 'minutes', 'km/h', 'mph'] : ['kg', 'lbs']
   }
   const isTimeSpeed = TIME_SPEED_KEYWORDS.some(k => ex.toLowerCase().includes(k.toLowerCase()))
   return isTimeSpeed ? ['seconds', 'minutes', 'km/h', 'mph'] : [...UNITS]
