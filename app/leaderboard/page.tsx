@@ -27,11 +27,28 @@ const FEATURED_EXERCISES = [
 ]
 
 const PUBLIC_PR_EXERCISES = [
-  { name: 'Back Squat', icon: '🏋️', unit: 'kg' },
-  { name: 'Deadlift', icon: '💀', unit: 'kg' },
-  { name: 'Overhead Press', icon: '☝️', unit: 'kg' },
-  { name: 'Sprint', icon: '💨', unit: 'seconds' },
+  { name: 'Back Squat', unit: 'kg' },
+  { name: 'Deadlift', unit: 'kg' },
+  { name: 'Overhead Press', unit: 'kg' },
+  { name: 'Sprint', unit: 'seconds' },
 ]
+
+const TIME_SPEED_KEYWORDS = ['Run', 'Sprint', 'Row', 'Bike', 'Jump Rope', 'Treadmill']
+
+function getValidUnits(tab: LeaderTab, ex: string): Unit[] {
+  if (tab === 'public') {
+    return ex === 'Sprint' ? ['seconds', 'minutes'] : ['kg', 'lbs']
+  }
+  const isTimeSpeed = TIME_SPEED_KEYWORDS.some(k => ex.toLowerCase().includes(k.toLowerCase()))
+  return isTimeSpeed ? ['seconds', 'minutes', 'km/h', 'mph'] : [...UNITS]
+}
+
+function convertForDisplay(value: number, storedUnit: string, preferredUnit: 'kg' | 'lbs'): { value: number; unit: string } {
+  if (storedUnit !== 'kg' && storedUnit !== 'lbs') return { value, unit: storedUnit }
+  if (storedUnit === preferredUnit) return { value, unit: storedUnit }
+  const converted = storedUnit === 'kg' ? value * 2.20462 : value / 2.20462
+  return { value: Math.round(converted * 10) / 10, unit: preferredUnit }
+}
 
 const GENDER_FILTERS = [
   { key: 'all', label: 'All' },
@@ -91,6 +108,7 @@ export default function LeaderboardPage() {
   const router = useRouter()
   const supabase = createClient()
   const [userId, setUserId] = useState<string | null>(null)
+  const [preferredWeightUnit, setPreferredWeightUnit] = useState<'kg' | 'lbs'>('kg')
   const [activeTab, setActiveTab] = useState<LeaderTab>('public')
   const [publicRecords, setPublicRecords] = useState<any[]>([])
   const [myRecords, setMyRecords] = useState<any[]>([])
@@ -231,6 +249,9 @@ export default function LeaderboardPage() {
       if (!user) { router.push('/login'); return }
       setUserId(user.id)
 
+      const { data: profile } = await supabase.from('profiles').select('preferred_weight_unit').eq('id', user.id).single()
+      setPreferredWeightUnit((profile?.preferred_weight_unit as 'kg' | 'lbs') || 'kg')
+
       const { error: archiveError } = await supabase.rpc('archive_old_leaderboard_records')
       if (archiveError) console.error('archive_old_leaderboard_records failed:', archiveError)
 
@@ -245,6 +266,12 @@ export default function LeaderboardPage() {
     if (userId) loadLeaderboard().then(recs => loadSocial(recs.map(r => r.id), userId))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [featuredFilter, genderFilter, memberSearch])
+
+  useEffect(() => {
+    const validUnits = getValidUnits(activeTab, exercise)
+    if (!validUnits.includes(unit)) setUnit(validUnits[0])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, exercise])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -352,7 +379,6 @@ export default function LeaderboardPage() {
                           color: '#F2F2F2',
                         }}
                       >
-                        <span style={{ fontSize: '1.25rem' }}>{ex.icon}</span>
                         <div>
                           <p style={{ fontWeight: 600, fontSize: '0.8rem', color: exercise === ex.name ? 'var(--teal-secondary)' : '#F2F2F2' }}>{ex.name}</p>
                           <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{ex.unit}</p>
@@ -391,7 +417,7 @@ export default function LeaderboardPage() {
               <div>
                 <label style={labelBase}>Unit</label>
                 <select value={unit} onChange={e => setUnit(e.target.value as Unit)} style={{ ...inputBase, width: '100%', cursor: 'pointer' }}>
-                  {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                  {getValidUnits(activeTab, exercise).map(u => <option key={u} value={u}>{u}</option>)}
                 </select>
               </div>
               <div>
@@ -508,6 +534,7 @@ export default function LeaderboardPage() {
                   const profile = r.profiles as { id: string; name: string; gender: string } | null
                   const reactions = reactionsByPR[r.id] ?? []
                   const comments = commentsByPR[r.id] ?? []
+                  const displayed = convertForDisplay(r.value, r.unit, preferredWeightUnit)
                   return (
                     <div key={r.id} className="card-vel" style={{ padding: '0.875rem 1rem', background: medal ? `${medal.color}08` : 'var(--surface)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -523,10 +550,7 @@ export default function LeaderboardPage() {
                           <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.exercise_name ?? r.exercise}</p>
                         </div>
                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.2rem', color: 'var(--teal-secondary)' }}>{r.value} <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{r.unit}</span></p>
-                          {r.unit === 'lbs' && (
-                            <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>≈ {(r.value * 0.453592).toFixed(1)}kg</p>
-                          )}
+                          <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.2rem', color: 'var(--teal-secondary)' }}>{displayed.value} <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{displayed.unit}</span></p>
                           {LOWER_IS_BETTER.includes(r.exercise_name) && (
                             <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>lower = better</p>
                           )}
@@ -602,7 +626,9 @@ export default function LeaderboardPage() {
                 No PRs yet. Submit your first one above.
               </div>
             ) : (
-              myRecords.map(r => (
+              myRecords.map(r => {
+                const displayed = convertForDisplay(r.value, r.unit, preferredWeightUnit)
+                return (
                 <div key={r.id} className="card-vel" style={{ padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{r.exercise_name ?? r.exercise}</p>
@@ -611,7 +637,7 @@ export default function LeaderboardPage() {
                     </p>
                   </div>
                   <span style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.2rem', color: 'var(--teal-secondary)', flexShrink: 0 }}>
-                    {r.value} <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{r.unit}</span>
+                    {displayed.value} <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{displayed.unit}</span>
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0, opacity: updating === r.id ? 0.5 : 1 }}>
                     <Toggle on={r.is_public ?? false} onToggle={() => updating === null && handleTogglePublic(r)} />
@@ -627,7 +653,8 @@ export default function LeaderboardPage() {
                     <Trash2 size={15} />
                   </button>
                 </div>
-              ))
+                )
+              })
             )}
           </div>
         )}
