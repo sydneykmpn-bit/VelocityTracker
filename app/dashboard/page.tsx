@@ -29,6 +29,7 @@ export default function DashboardPage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [selectedClass, setSelectedClass] = useState<any>(null)
   const [quickActionLoading, setQuickActionLoading] = useState<string | null>(null)
+  const [error, setError] = useState('')
 
   const today = getLocalDateString()
 
@@ -132,13 +133,81 @@ export default function DashboardPage() {
   }
   const loadData = () => { if (userId) loadAll(userId) }
 
-  const handleQuickPlanAction = async (planId: string, action: 'completed' | 'skipped') => {
-    setQuickActionLoading(planId)
-    if (action === 'completed') {
-      await supabase.from('workout_plans').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', planId)
-    } else {
-      await supabase.from('workout_plans').update({ status: 'skipped' }).eq('id', planId)
+  const handleQuickPlanAction = async (plan: any, action: 'completed' | 'skipped') => {
+    setQuickActionLoading(plan.id)
+    setError('')
+
+    if (action === 'skipped') {
+      const { error: updateErr } = await supabase.from('workout_plans').update({ status: 'skipped' }).eq('id', plan.id)
+      if (updateErr) {
+        console.error('handleQuickPlanAction: workout_plans update failed', updateErr)
+        setError(updateErr.message)
+      }
+      setQuickActionLoading(null)
+      handlePlanUpdate()
+      return
     }
+
+    const { data: planExercises, error: planExError } = await supabase
+      .from('workout_plan_exercises')
+      .select('*')
+      .eq('plan_id', plan.id)
+      .order('order_index')
+
+    if (planExError) {
+      console.error('handleQuickPlanAction: workout_plan_exercises fetch failed', planExError)
+      setError(planExError.message)
+      setQuickActionLoading(null)
+      return
+    }
+
+    const { data: newWorkout, error: workoutErr } = await supabase.from('workouts').insert({
+      user_id: userId,
+      title: plan.title,
+      type: plan.type,
+      notes: `Auto-logged from assigned plan. ${plan.description || ''}`.trim(),
+      duration: null,
+      date: new Date().toISOString(),
+    }).select().single()
+
+    if (workoutErr) {
+      console.error('handleQuickPlanAction: workouts insert failed', workoutErr)
+      setError(workoutErr.message)
+      setQuickActionLoading(null)
+      return
+    }
+
+    if (newWorkout && planExercises && planExercises.length > 0) {
+      const { error: exError } = await supabase.from('exercises').insert(
+        planExercises.map((ex: any) => ({
+          workout_id: newWorkout.id,
+          name: ex.name, sets: ex.sets, reps: ex.reps,
+          weight: ex.weight, duration: ex.duration,
+          distance: ex.distance, notes: ex.notes,
+        }))
+      )
+
+      if (exError) {
+        console.error('handleQuickPlanAction: exercises insert failed', exError)
+        setError(exError.message)
+        setQuickActionLoading(null)
+        return
+      }
+    }
+
+    const { error: updateErr } = await supabase.from('workout_plans').update({
+      status: 'completed',
+      completed_at: new Date().toISOString(),
+      auto_logged_workout_id: newWorkout?.id ?? null,
+    }).eq('id', plan.id)
+
+    if (updateErr) {
+      console.error('handleQuickPlanAction: workout_plans update failed', updateErr)
+      setError(updateErr.message)
+      setQuickActionLoading(null)
+      return
+    }
+
     setQuickActionLoading(null)
     handlePlanUpdate()
   }
@@ -277,6 +346,12 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {error && (
+          <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1.5rem', color: '#f87171', fontSize: '0.875rem' }}>
+            {error}
+          </div>
+        )}
+
         {/* ── COACH NOTE ── */}
         {coachNote && (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderLeft: '3px solid var(--teal-primary)', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
@@ -399,14 +474,14 @@ export default function DashboardPage() {
                     </span>
                     <div style={{ display: 'flex', gap: '0.375rem' }}>
                       <button
-                        onClick={() => handleQuickPlanAction(p.id, 'completed')}
+                        onClick={() => handleQuickPlanAction(p, 'completed')}
                         disabled={isActing}
                         style={{ flex: 1, minHeight: '44px', background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.3rem 0.25rem', fontSize: '0.75rem', fontWeight: 700, color: '#4ade80', cursor: isActing ? 'not-allowed' : 'pointer' }}
                       >
                         ✅ Done
                       </button>
                       <button
-                        onClick={() => handleQuickPlanAction(p.id, 'skipped')}
+                        onClick={() => handleQuickPlanAction(p, 'skipped')}
                         disabled={isActing}
                         style={{ flex: 1, minHeight: '44px', background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.3rem 0.25rem', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', cursor: isActing ? 'not-allowed' : 'pointer' }}
                       >
