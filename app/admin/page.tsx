@@ -397,6 +397,7 @@ export default function AdminPage() {
 
   // Coaches state
   const [coachStats, setCoachStats] = useState<Record<string, { groups: number; students: number; plansAssigned: number }>>({})
+  const [classesThisMonthCount, setClassesThisMonthCount] = useState(0)
   const [settings, setSettings] = useState({ require_approval: true, instagram_handle: '', public_pr_exercises: [] as string[] })
   const [settingsSaved, setSettingsSaved] = useState(false)
 
@@ -449,6 +450,17 @@ export default function AdminPage() {
         loadGroups(),
         supabase.from('personal_records').select('*, profiles(name, gender)').order('value', { ascending: false }).then(({ data }) => setAllPRs(data ?? [])),
       ])
+
+      // Classes this month
+      const now = new Date()
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
+      const { count: classesCount } = await supabase
+        .from('scheduled_classes')
+        .select('id', { count: 'exact', head: true })
+        .gte('scheduled_date', startOfMonth)
+        .lte('scheduled_date', endOfMonth)
+      setClassesThisMonthCount(classesCount || 0)
 
       // Coach stats
       const coachUsers = (allResult.data || []).filter((u: any) => u.role === 'coach')
@@ -630,7 +642,7 @@ export default function AdminPage() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
           {[
-            { label: 'Pending Approvals', value: pendingUsers.length, color: pendingUsers.length > 0 ? '#f59e0b' : '#4ade80', tab: 'members' as AdminTab },
+            { label: 'Classes This Month', value: classesThisMonthCount, color: 'var(--teal-secondary)', tab: 'groups' as AdminTab },
             { label: 'Active Members', value: members.length, color: 'var(--teal-secondary)', tab: 'members' as AdminTab },
             { label: 'Coaches', value: coaches.length, color: '#60a5fa', tab: 'coaches' as AdminTab },
             { label: 'Groups', value: groups.length, color: '#c084fc', tab: 'groups' as AdminTab },
