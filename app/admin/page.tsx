@@ -140,7 +140,6 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
             </div>
             <div>
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>{memberName}</h2>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{profile?.email}</p>
               <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem', fontSize: '0.7rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
                 {profile?.gender && <span>{profile.gender === 'male' ? '♂ Male' : profile.gender === 'female' ? '♀ Female' : profile.gender}</span>}
                 {profile?.age && <span>Age {profile.age}</span>}
@@ -723,7 +722,6 @@ export default function AdminPage() {
                     >
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <p style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>{u.name}</p>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.15rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</p>
                         <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
                           Registered {new Date(u.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                         </p>
@@ -774,7 +772,6 @@ export default function AdminPage() {
                       </div>
                       <div style={{ minWidth: 0 }}>
                         <p style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>{u.name}</p>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</p>
                       </div>
                     </button>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
@@ -825,7 +822,6 @@ export default function AdminPage() {
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <p style={{ fontWeight: 600, fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{coach.name}</p>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{coach.email}</p>
                     <div style={{ display: 'flex', gap: '0.875rem', marginTop: '0.375rem', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
                       <span>{coachStats[coach.id]?.groups ?? 0} groups</span>
                       <span>{coachStats[coach.id]?.students ?? 0} students</span>
@@ -964,7 +960,6 @@ export default function AdminPage() {
                                         onClick={() => gm.profiles?.name && setSelectedMemberProfile({ id: gm.member_id, name: gm.profiles.name })}
                                         style={{ fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(52,186,194,0.4)', textUnderlineOffset: '2px' }}
                                       >{gm.profiles?.name}</span>
-                                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginLeft: '0.5rem' }}>{gm.profiles?.email}</span>
                                     </div>
                                     <button onClick={() => handleRemoveFromGroup(g.id, gm.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', display: 'flex' }}>
                                       <Trash2 size={14} />

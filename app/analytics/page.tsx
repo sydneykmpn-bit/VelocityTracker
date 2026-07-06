@@ -188,7 +188,9 @@ export default function AnalyticsPage() {
 
   // ── Volume derived data ──
   const startOfWeek = (dateStr: string) => {
-    const d = new Date(dateStr + 'T00:00:00')
+    // dateStr may be a plain 'YYYY-MM-DD' or a full ISO timestamp (workouts.date is stored as
+    // new Date(...).toISOString()) — take just the date portion before forcing local midnight.
+    const d = new Date(dateStr.slice(0, 10) + 'T00:00:00')
     d.setDate(d.getDate() - d.getDay())
     return formatLocalDate(d)
   }

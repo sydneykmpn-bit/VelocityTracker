@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { Trash2 } from 'lucide-react'
 
 export function classTypeColor(type: string): { bg: string; color: string } {
   if (type === 'basketball') return { bg: 'rgba(30,58,95,0.8)', color: '#60a5fa' }
@@ -43,6 +44,7 @@ export default function ClassDetailModal({
   const [addAttendeeLoading, setAddAttendeeLoading] = useState(false)
   const [addAttendeeError, setAddAttendeeError] = useState('')
   const [rsvpError, setRsvpError] = useState('')
+  const [attendeeActionError, setAttendeeActionError] = useState('')
   const [planExercises, setPlanExercises] = useState<any[]>([])
   const [loadingPlanExercises, setLoadingPlanExercises] = useState(false)
   const [completeDurationMinutes, setCompleteDurationMinutes] = useState('')
@@ -216,6 +218,22 @@ export default function ClassDetailModal({
 
     setAddAttendeeSearch('')
     setAddAttendeeLoading(false)
+    onUpdate()
+  }
+
+  const handleRemoveAttendee = async (attendee: any) => {
+    if (!confirm(`Remove ${attendee.profiles?.name} from this class?`)) return
+
+    setAttendeeActionError('')
+    const { error } = await supabase.from('class_attendees').delete().eq('id', attendee.id)
+
+    if (error) {
+      console.error('handleRemoveAttendee failed:', error)
+      setAttendeeActionError(error.message)
+      return
+    }
+
+    await loadAttendees()
     onUpdate()
   }
 
@@ -639,6 +657,12 @@ export default function ClassDetailModal({
               </div>
             )}
 
+            {attendeeActionError && (
+              <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.375rem', padding: '0.5rem 0.625rem', color: '#f87171', fontSize: '0.75rem', marginBottom: '0.5rem' }}>
+                {attendeeActionError}
+              </div>
+            )}
+
             {loadingAttendees ? (
               <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Loading…</p>
             ) : attendees.length === 0 ? (
@@ -653,14 +677,24 @@ export default function ClassDetailModal({
                       </div>
                       <div>
                         <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>{a.profiles?.name}</p>
-                        {(userRole === 'coach' || userRole === 'admin') && <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{a.profiles?.email}</p>}
                       </div>
                     </div>
-                    {userRole === 'member' && a.member_id === userId && (
-                      <span style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '999px', background: a.status === 'attended' ? 'rgba(34,197,94,0.2)' : 'rgba(8,119,160,0.2)', color: a.status === 'attended' ? '#4ade80' : 'var(--teal-secondary)' }}>
-                        {a.status === 'attended' ? 'Attended' : 'Attending'}
-                      </span>
-                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                      {userRole === 'member' && a.member_id === userId && (
+                        <span style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '999px', background: a.status === 'attended' ? 'rgba(34,197,94,0.2)' : 'rgba(8,119,160,0.2)', color: a.status === 'attended' ? '#4ade80' : 'var(--teal-secondary)' }}>
+                          {a.status === 'attended' ? 'Attended' : 'Attending'}
+                        </span>
+                      )}
+                      {(userRole === 'coach' || userRole === 'admin') && (
+                        <button
+                          onClick={() => handleRemoveAttendee(a)}
+                          aria-label="Remove attendee"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', display: 'flex', minHeight: 0 }}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
