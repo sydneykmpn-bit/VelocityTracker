@@ -41,6 +41,7 @@ export default function WorkoutsPage() {
   const [dateRange, setDateRange] = useState({ from: '', to: '' })
   const [showDateFilter, setShowDateFilter] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   // Load user once on mount
   useEffect(() => {
@@ -86,10 +87,21 @@ export default function WorkoutsPage() {
   }
   const clearDateFilter = () => { setDateRange({ from: '', to: '' }); setPage(0) }
 
-  const handleDeleteWorkout = async (workoutId: string, e: React.MouseEvent) => {
+  const handleDeleteClick = (workoutId: string, e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (!confirm('Delete this workout? This cannot be undone.')) return
+    if (confirmDeleteId !== workoutId) {
+      // Arm the confirm state instead of using window.confirm() — native confirm()/alert()
+      // dialogs silently no-op on iOS PWAs added to the home screen and many Android WebViews,
+      // which made delete appear completely broken on mobile. Second tap performs the delete.
+      setConfirmDeleteId(workoutId)
+      setTimeout(() => setConfirmDeleteId(prev => (prev === workoutId ? null : prev)), 3000)
+      return
+    }
+    handleDeleteWorkout(workoutId)
+  }
+
+  const handleDeleteWorkout = async (workoutId: string) => {
     setDeleteError('')
     const supabase = createClient()
 
@@ -97,6 +109,7 @@ export default function WorkoutsPage() {
     if (exError) {
       console.error('handleDeleteWorkout: exercises delete failed', exError)
       setDeleteError(exError.message)
+      setConfirmDeleteId(null)
       return
     }
 
@@ -104,9 +117,11 @@ export default function WorkoutsPage() {
     if (workoutError) {
       console.error('handleDeleteWorkout: workouts delete failed', workoutError)
       setDeleteError(workoutError.message)
+      setConfirmDeleteId(null)
       return
     }
 
+    setConfirmDeleteId(null)
     loadWorkouts()
   }
 
@@ -283,18 +298,22 @@ export default function WorkoutsPage() {
 
                       {/* Delete */}
                       <button
-                        onClick={e => handleDeleteWorkout(w.id, e)}
-                        aria-label="Delete workout"
+                        onClick={e => handleDeleteClick(w.id, e)}
+                        aria-label={confirmDeleteId === w.id ? 'Confirm delete workout' : 'Delete workout'}
                         style={{
-                          background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem',
-                          padding: '0.35rem', color: 'var(--text-secondary)', display: 'flex',
-                          alignItems: 'center', cursor: 'pointer', minHeight: 32, minWidth: 32,
-                          justifyContent: 'center',
+                          background: confirmDeleteId === w.id ? 'rgba(239,68,68,0.15)' : 'none',
+                          border: `1px solid ${confirmDeleteId === w.id ? 'rgba(239,68,68,0.4)' : 'var(--border)'}`,
+                          borderRadius: '0.375rem',
+                          padding: confirmDeleteId === w.id ? '0.35rem 0.5rem' : '0.35rem',
+                          color: confirmDeleteId === w.id ? '#f87171' : 'var(--text-secondary)', display: 'flex',
+                          alignItems: 'center', gap: '0.3rem', cursor: 'pointer', minHeight: 32, minWidth: 32,
+                          justifyContent: 'center', whiteSpace: 'nowrap',
                         }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#ef4444'; (e.currentTarget as HTMLButtonElement).style.color = '#ef4444' }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)' }}
+                        onMouseEnter={e => { if (confirmDeleteId !== w.id) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#ef4444'; (e.currentTarget as HTMLButtonElement).style.color = '#ef4444' } }}
+                        onMouseLeave={e => { if (confirmDeleteId !== w.id) { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)' } }}
                       >
                         <Trash2 size={13} />
+                        {confirmDeleteId === w.id && <span style={{ fontSize: '0.7rem', fontWeight: 700 }}>Confirm?</span>}
                       </button>
                     </div>
                   </div>
