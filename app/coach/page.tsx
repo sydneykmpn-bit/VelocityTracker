@@ -811,7 +811,7 @@ export default function CoachPage() {
   useEffect(() => {
     if (!loading) loadCalendarWorkouts()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calendarDate, memberFilter, calendarMonth])
+  }, [calendarDate, memberFilter, calendarMonth, loading])
 
   useEffect(() => {
     if (!assignForm.member_id) { setAssignMemberWorkouts([]); return }
