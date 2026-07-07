@@ -3,9 +3,10 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Dumbbell, Pencil, Trash2, Volleyball, BicepsFlexed, Calendar, X } from 'lucide-react'
+import { Plus, Dumbbell, Pencil, Trash2, BicepsFlexed, Calendar, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { WorkoutCardSkeleton } from '@/components/Skeleton'
+import BasketballIcon from '@/components/icons/BasketballIcon'
 
 type Filter = 'all' | 'conditioning' | 'basketball' | 'both'
 
@@ -13,7 +14,7 @@ const PAGE_SIZE = 20
 
 function typeBadge(type: string) {
   const map: Record<string, { bg: string; color: string; border: string; icon: typeof Dumbbell }> = {
-    basketball: { bg: 'rgba(8,119,160,0.2)', color: '#34bac2', border: 'rgba(8,119,160,0.35)', icon: Volleyball },
+    basketball: { bg: 'rgba(8,119,160,0.2)', color: '#34bac2', border: 'rgba(8,119,160,0.35)', icon: BasketballIcon },
     conditioning: { bg: 'rgba(34,197,94,0.15)', color: '#4ade80', border: 'rgba(34,197,94,0.25)', icon: Dumbbell },
     both: { bg: 'rgba(168,85,247,0.15)', color: '#c084fc', border: 'rgba(168,85,247,0.25)', icon: BicepsFlexed },
   }
@@ -23,7 +24,7 @@ function typeBadge(type: string) {
 const tabs: { label: string; value: Filter; icon?: typeof Dumbbell }[] = [
   { label: 'All', value: 'all' },
   { label: 'Conditioning', value: 'conditioning', icon: Dumbbell },
-  { label: 'Basketball', value: 'basketball', icon: Volleyball },
+  { label: 'Basketball', value: 'basketball', icon: BasketballIcon },
   { label: 'Both', value: 'both', icon: BicepsFlexed },
 ]
 

@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Trash2, Pencil } from 'lucide-react'
+import { ArrowLeft, Trash2, Pencil, Dumbbell, BicepsFlexed } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import BasketballIcon from '@/components/icons/BasketballIcon'
 
-const TYPE_STYLE: Record<string, { color: string; bg: string; border: string; icon: string }> = {
-  basketball: { color: '#34bac2', bg: 'rgba(8,119,160,0.2)', border: 'rgba(8,119,160,0.35)', icon: '🏀' },
-  conditioning: { color: '#4ade80', bg: 'rgba(34,197,94,0.15)', border: 'rgba(34,197,94,0.25)', icon: '🏋️' },
-  both: { color: '#c084fc', bg: 'rgba(168,85,247,0.15)', border: 'rgba(168,85,247,0.25)', icon: '💪' },
+const TYPE_STYLE: Record<string, { color: string; bg: string; border: string; icon: typeof Dumbbell }> = {
+  basketball: { color: '#34bac2', bg: 'rgba(8,119,160,0.2)', border: 'rgba(8,119,160,0.35)', icon: BasketballIcon },
+  conditioning: { color: '#4ade80', bg: 'rgba(34,197,94,0.15)', border: 'rgba(34,197,94,0.25)', icon: Dumbbell },
+  both: { color: '#c084fc', bg: 'rgba(168,85,247,0.15)', border: 'rgba(168,85,247,0.25)', icon: BicepsFlexed },
 }
 
 export default function WorkoutDetailPage() {
@@ -87,9 +88,9 @@ export default function WorkoutDetailPage() {
               fontSize: '0.75rem', fontWeight: 700, padding: '0.375rem 0.875rem',
               borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.07em',
               color: ts.color, background: ts.bg, border: `1px solid ${ts.border}`,
-              whiteSpace: 'nowrap',
+              whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
             }}>
-              {ts.icon} {workout.type}
+              <ts.icon size={13} /> {workout.type}
             </span>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: workout.notes ? '1rem' : 0 }}>
