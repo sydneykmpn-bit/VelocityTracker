@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Trash2, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
+import { Trash2, ChevronDown, ChevronUp, Pencil, KeyRound } from 'lucide-react'
 import { getLocalDateString } from '@/lib/utils'
 
 type AdminTab = 'members' | 'coaches' | 'groups' | 'settings'
@@ -404,6 +404,9 @@ export default function AdminPage() {
   const [success, setSuccess] = useState('')
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<{id: string; name: string} | null>(null)
   const [showCreateUserModal, setShowCreateUserModal] = useState(false)
+  const [resetPasswordUserId, setResetPasswordUserId] = useState<string | null>(null)
+  const [resetPasswordValue, setResetPasswordValue] = useState('')
+  const [resetPasswordLoading, setResetPasswordLoading] = useState(false)
 
   const refreshMembers = async () => {
     const [pendingResult, allResult] = await Promise.all([
@@ -505,6 +508,30 @@ export default function AdminPage() {
       return false
     }
     return true
+  }
+
+  const handleResetPassword = async (userId: string) => {
+    if (resetPasswordValue.length < 6) {
+      setError('Password must be at least 6 characters.')
+      return
+    }
+    setResetPasswordLoading(true)
+    setError(''); setSuccess('')
+    const res = await fetch('/api/admin/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, newPassword: resetPasswordValue }),
+    })
+    if (!res.ok) {
+      const { error: err } = await res.json().catch(() => ({ error: 'Failed to reset password.' }))
+      setError(err || 'Failed to reset password.')
+      setResetPasswordLoading(false)
+      return
+    }
+    setSuccess('Password reset successfully.')
+    setResetPasswordUserId(null)
+    setResetPasswordValue('')
+    setResetPasswordLoading(false)
   }
 
   const handleCreateGroup = async (e: React.FormEvent) => {
@@ -762,44 +789,80 @@ export default function AdminPage() {
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {filteredMembers.map(u => (
-                  <div key={u.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-                    <button
-                      onClick={() => setSelectedMemberProfile({ id: u.id, name: u.name })}
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0 }}
-                    >
-                      <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--teal-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.875rem', flexShrink: 0 }}>
-                        {u.name?.charAt(0)?.toUpperCase()}
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <p style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>{u.name}</p>
-                      </div>
-                    </button>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
-                      <select
-                        value={u.role}
-                        onChange={async e => {
-                          const newRole = e.target.value
-                          await supabase.from('profiles').update({ role: newRole }).eq('id', u.id)
-                          setAllUsers(prev => prev.map(p => p.id === u.id ? { ...p, role: newRole } : p))
-                        }}
-                        style={{ ...inputBase, padding: '0.25rem 0.5rem', fontSize: '0.75rem', cursor: 'pointer',
-                          color: u.role === 'admin' ? '#c084fc' : u.role === 'coach' ? '#34bac2' : 'var(--text-secondary)' }}
-                      >
-                        <option value="member">member</option>
-                        <option value="coach">coach</option>
-                        <option value="admin">admin</option>
-                      </select>
+                  <div key={u.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem 1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
                       <button
-                        onClick={async () => {
-                          if (!confirm(`Remove ${u.name} from Velocity Tracker? This cannot be undone.`)) return
-                          const ok = await handleDeleteUser(u.id)
-                          if (ok) setAllUsers(prev => prev.filter(p => p.id !== u.id))
-                        }}
-                        style={{ width: '28px', height: '28px', borderRadius: '0.375rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', flexShrink: 0 }}
+                        onClick={() => setSelectedMemberProfile({ id: u.id, name: u.name })}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0 }}
                       >
-                        ✕
+                        <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--teal-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.875rem', flexShrink: 0 }}>
+                          {u.name?.charAt(0)?.toUpperCase()}
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <p style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>{u.name}</p>
+                        </div>
                       </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                        <select
+                          value={u.role}
+                          onChange={async e => {
+                            const newRole = e.target.value
+                            await supabase.from('profiles').update({ role: newRole }).eq('id', u.id)
+                            setAllUsers(prev => prev.map(p => p.id === u.id ? { ...p, role: newRole } : p))
+                          }}
+                          style={{ ...inputBase, padding: '0.25rem 0.5rem', fontSize: '0.75rem', cursor: 'pointer',
+                            color: u.role === 'admin' ? '#c084fc' : u.role === 'coach' ? '#34bac2' : 'var(--text-secondary)' }}
+                        >
+                          <option value="member">member</option>
+                          <option value="coach">coach</option>
+                          <option value="admin">admin</option>
+                        </select>
+                        <button
+                          onClick={() => {
+                            if (resetPasswordUserId === u.id) { setResetPasswordUserId(null); setResetPasswordValue(''); return }
+                            setResetPasswordUserId(u.id)
+                            setResetPasswordValue('')
+                            setError(''); setSuccess('')
+                          }}
+                          title="Reset Password"
+                          style={{ width: '28px', height: '28px', borderRadius: '0.375rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: resetPasswordUserId === u.id ? 'rgba(8,119,160,0.15)' : 'var(--surface-raised)', border: `1px solid ${resetPasswordUserId === u.id ? 'var(--teal-primary)' : 'var(--border)'}`, color: resetPasswordUserId === u.id ? 'var(--teal-secondary)' : 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0 }}
+                        >
+                          <KeyRound size={14} />
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`Remove ${u.name} from Velocity Tracker? This cannot be undone.`)) return
+                            const ok = await handleDeleteUser(u.id)
+                            if (ok) setAllUsers(prev => prev.filter(p => p.id !== u.id))
+                          }}
+                          style={{ width: '28px', height: '28px', borderRadius: '0.375rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', flexShrink: 0 }}
+                        >
+                          ✕
+                        </button>
+                      </div>
                     </div>
+                    {resetPasswordUserId === u.id && (
+                      <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>New Password</label>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <input
+                            type="password"
+                            value={resetPasswordValue}
+                            onChange={e => setResetPasswordValue(e.target.value)}
+                            placeholder="At least 6 characters"
+                            style={{ ...inputBase, flex: '1 1 200px' }}
+                          />
+                          <button
+                            onClick={() => handleResetPassword(u.id)}
+                            disabled={resetPasswordLoading}
+                            style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.6rem 1rem', fontSize: '0.8rem', fontWeight: 700, cursor: resetPasswordLoading ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
+                          >
+                            {resetPasswordLoading ? 'Saving…' : 'Confirm'}
+                          </button>
+                        </div>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>The user will need to use this new password next time they log in.</p>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

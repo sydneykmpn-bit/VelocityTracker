@@ -883,7 +883,7 @@ export default function CoachPage() {
 
   const handleRemoveStudent = async (studentId: string, studentName: string) => {
     if (!userId) return
-    if (!confirm(`Remove ${studentName} as your student? This removes them from your groups and cancels any plans/programs you've assigned them. This cannot be undone.`)) return
+    if (!confirm(`Remove ${studentName} as your student? This deletes their upcoming plans/programs and your notes about them. Completed workout history is kept. This cannot be undone.`)) return
 
     setError(''); setSuccess('')
 
@@ -900,14 +900,29 @@ export default function CoachPage() {
       if (gmErr) { setError(gmErr.message); return }
     }
 
-    // b) Mark this coach's pending/rescheduled plans for this student as skipped (preserve history)
-    const { error: planErr } = await supabase
+    // b) Delete this coach's pending/rescheduled plans for this student entirely — completed plans
+    // (and any workouts/exercises auto-logged from them) are left completely untouched
+    const { data: pendingPlans, error: pendingPlansErr } = await supabase
       .from('workout_plans')
-      .update({ status: 'skipped' })
+      .select('id')
       .eq('coach_id', userId)
       .eq('member_id', studentId)
       .in('status', ['pending', 'rescheduled'])
-    if (planErr) { setError(planErr.message); return }
+    if (pendingPlansErr) { setError(pendingPlansErr.message); return }
+    const pendingPlanIds = (pendingPlans ?? []).map((p: any) => p.id)
+    if (pendingPlanIds.length > 0) {
+      const { error: planExErr } = await supabase
+        .from('workout_plan_exercises')
+        .delete()
+        .in('plan_id', pendingPlanIds)
+      if (planExErr) { setError(planExErr.message); return }
+
+      const { error: planDelErr } = await supabase
+        .from('workout_plans')
+        .delete()
+        .in('id', pendingPlanIds)
+      if (planDelErr) { setError(planDelErr.message); return }
+    }
 
     // c) Unassign from this coach's programs (no status column, so delete is the only option)
     const { data: myPrograms, error: programsErr } = await supabase.from('programs').select('id').eq('coach_id', userId)
@@ -929,6 +944,14 @@ export default function CoachPage() {
       .eq('coach_id', userId)
       .eq('member_id', studentId)
     if (csErr) { setError(csErr.message); return }
+
+    // e) Delete this coach's notes about this student (notes from other coaches are unaffected)
+    const { error: notesErr } = await supabase
+      .from('coach_notes')
+      .delete()
+      .eq('coach_id', userId)
+      .eq('member_id', studentId)
+    if (notesErr) { setError(notesErr.message); return }
 
     await loadMyMembers(userId)
     setSuccess(`${studentName} has been removed as your student.`)
