@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { Lock } from 'lucide-react'
 
 export default function ForgotPasswordPage() {
   return (
@@ -17,7 +18,7 @@ export default function ForgotPasswordPage() {
           </span>
         </div>
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '2.5rem' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔒</div>
+          <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'center' }}><Lock size={48} /></div>
           <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: '2rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>
             RESET PASSWORD
           </h1>

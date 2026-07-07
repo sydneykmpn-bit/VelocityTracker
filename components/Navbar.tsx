@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Menu, X, ChevronDown } from 'lucide-react'
+import { Menu, X, ChevronDown, Home, User, LogOut } from 'lucide-react'
 import VLogo from '@/components/VLogo'
 
 export default function Navbar() {
@@ -243,11 +243,11 @@ export default function Navbar() {
                   </div>
                   <Link href="/dashboard" onClick={() => setAvatarOpen(false)}
                     style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.75rem 1rem', fontSize: '0.875rem', color: 'var(--text-secondary)', textDecoration: 'none', minHeight: 0 }}>
-                    🏠 Dashboard
+                    <Home size={15} /> Dashboard
                   </Link>
                   <Link href="/profile" onClick={() => setAvatarOpen(false)}
                     style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.75rem 1rem', fontSize: '0.875rem', color: 'var(--text-secondary)', textDecoration: 'none', borderTop: '1px solid var(--border)', minHeight: 0 }}>
-                    👤 View Profile
+                    <User size={15} /> View Profile
                   </Link>
                   <button
                     onClick={handleSignOut}
@@ -258,7 +258,7 @@ export default function Navbar() {
                       cursor: 'pointer', textAlign: 'left', minHeight: 0,
                     }}
                   >
-                    🚪 Sign Out
+                    <LogOut size={15} /> Sign Out
                   </button>
                 </div>
               )}
@@ -329,18 +329,18 @@ export default function Navbar() {
               </Link>
             ))}
             <Link href="/profile" onClick={() => setMenuOpen(false)}
-              style={{ display: 'flex', alignItems: 'center', padding: '1rem 1.25rem', fontSize: '1rem', color: 'var(--text-secondary)', textDecoration: 'none', borderBottom: '1px solid var(--border)', minHeight: 0 }}>
-              👤 Profile
+              style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '1rem 1.25rem', fontSize: '1rem', color: 'var(--text-secondary)', textDecoration: 'none', borderBottom: '1px solid var(--border)', minHeight: 0 }}>
+              <User size={16} /> Profile
             </Link>
             <button
               onClick={handleSignOut}
               style={{
-                width: '100%', display: 'flex', alignItems: 'center',
+                width: '100%', display: 'flex', alignItems: 'center', gap: '0.625rem',
                 padding: '1rem 1.25rem', fontSize: '1rem', color: '#ef4444',
                 background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', minHeight: 0,
               }}
             >
-              🚪 Sign Out
+              <LogOut size={16} /> Sign Out
             </button>
           </div>
         </div>

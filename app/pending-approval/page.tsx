@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import VLogo from '@/components/VLogo'
+import { Hourglass, Smartphone } from 'lucide-react'
 
 export default function PendingApprovalPage() {
   const supabase = createClient()
@@ -45,7 +46,7 @@ export default function PendingApprovalPage() {
 
       <div style={{ width: '100%', maxWidth: '440px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '2rem', textAlign: 'center' }}>
         <div style={{ width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', background: 'rgba(8,119,160,0.15)', border: '2px solid var(--teal-primary)' }}>
-          <span style={{ fontSize: '1.75rem' }}>⏳</span>
+          <Hourglass size={28} style={{ color: 'var(--teal-secondary)' }} />
         </div>
 
         <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: '2rem', letterSpacing: '0.03em', marginBottom: '0.75rem' }}>
@@ -57,8 +58,8 @@ export default function PendingApprovalPage() {
           You&apos;ll be automatically redirected once your account is approved.
         </p>
 
-        <div style={{ background: 'rgba(8,119,160,0.1)', border: '1px solid rgba(8,119,160,0.2)', borderRadius: '0.75rem', padding: '1rem', marginBottom: '1.5rem', fontSize: '0.875rem', color: 'var(--teal-secondary)' }}>
-          📱 Contact your coach or message us on Instagram{' '}
+        <div style={{ background: 'rgba(8,119,160,0.1)', border: '1px solid rgba(8,119,160,0.2)', borderRadius: '0.75rem', padding: '1rem', marginBottom: '1.5rem', fontSize: '0.875rem', color: 'var(--teal-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <Smartphone size={15} style={{ flexShrink: 0 }} /> Contact your coach or message us on Instagram{' '}
           <strong>@velocityfitnessph</strong> to speed up approval.
         </div>
 

@@ -8,6 +8,7 @@ import { WorkoutCardSkeleton, StatCardSkeleton, Skeleton } from '@/components/Sk
 import ClassDetailModal from '@/components/ClassDetailModal'
 import { getLocalDateString, formatLocalDate, formatDuration } from '@/lib/utils'
 import { TodayPlanCard, SkippedPlansSection, typeBadge } from '@/components/PlanCards'
+import { AlertTriangle, Users, Settings, ClipboardList, CheckCircle2, SkipForward, Clock, MapPin, Calendar } from 'lucide-react'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -274,7 +275,7 @@ export default function DashboardPage() {
             textDecoration: 'none', minHeight: 0,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ fontSize: '1.25rem' }}>⚠️</span>
+              <AlertTriangle size={20} style={{ color: '#f59e0b' }} />
               <div>
                 <p style={{ fontWeight: 600, fontSize: '0.875rem', color: '#f59e0b' }}>
                   {pendingApprovals} account{pendingApprovals !== 1 ? 's' : ''} waiting for approval
@@ -290,7 +291,7 @@ export default function DashboardPage() {
         {userRole === 'coach' && athletesScheduledToday && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
-              <span style={{ fontSize: '1.5rem' }}>👥</span>
+              <Users size={24} style={{ color: 'var(--teal-secondary)' }} />
               <div>
                 <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>
                   <span style={{ color: 'var(--teal-secondary)' }}>{athletesScheduledToday.count}</span>
@@ -315,8 +316,8 @@ export default function DashboardPage() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }} className="header-actions">
             {userRole === 'admin' && (
-              <Link href="/admin" className="btn-ghost md-show-flex" style={{ display: 'none', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
-                ⚙️ Admin Panel
+              <Link href="/admin" className="btn-ghost md-show-flex" style={{ display: 'none', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                <Settings size={14} /> Admin Panel
               </Link>
             )}
             {userRole === 'coach' && (
@@ -339,8 +340,8 @@ export default function DashboardPage() {
         {/* ── COACH NOTE ── */}
         {coachNote && (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderLeft: '3px solid var(--teal-primary)', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
-            <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--teal-secondary)', marginBottom: '0.5rem' }}>
-              📝 Note from Coach {coachNote.profiles?.name}
+            <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--teal-secondary)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              <ClipboardList size={11} /> Note from Coach {coachNote.profiles?.name}
             </p>
             <p style={{ fontSize: '0.875rem', color: 'var(--text-primary)', lineHeight: 1.6 }}>{coachNote.note}</p>
             <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
@@ -380,16 +381,16 @@ export default function DashboardPage() {
                       <button
                         onClick={() => handleQuickPlanAction(p, 'completed')}
                         disabled={isActing}
-                        style={{ flex: 1, minHeight: '44px', background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.3rem 0.25rem', fontSize: '0.75rem', fontWeight: 700, color: '#4ade80', cursor: isActing ? 'not-allowed' : 'pointer' }}
+                        style={{ flex: 1, minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.3rem 0.25rem', fontSize: '0.75rem', fontWeight: 700, color: '#4ade80', cursor: isActing ? 'not-allowed' : 'pointer' }}
                       >
-                        ✅ Done
+                        <CheckCircle2 size={13} /> Done
                       </button>
                       <button
                         onClick={() => handleQuickPlanAction(p, 'skipped')}
                         disabled={isActing}
-                        style={{ flex: 1, minHeight: '44px', background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.3rem 0.25rem', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', cursor: isActing ? 'not-allowed' : 'pointer' }}
+                        style={{ flex: 1, minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.3rem 0.25rem', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', cursor: isActing ? 'not-allowed' : 'pointer' }}
                       >
-                        ⏭️ Skip
+                        <SkipForward size={13} /> Skip
                       </button>
                     </div>
                   </div>
@@ -419,7 +420,7 @@ export default function DashboardPage() {
                 return (
                   <div key={plan.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '0.5rem', opacity: 0.6 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>✅ {plan.title}</span>
+                      <span style={{ fontSize: '0.875rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><CheckCircle2 size={14} /> {plan.title}</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <span style={{ fontSize: '0.7rem', color: '#22c55e' }}>Completed</span>
                         <button
@@ -458,9 +459,9 @@ export default function DashboardPage() {
                 >
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <p style={{ fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cls.title}</p>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      🕐 {cls.start_time?.slice(0, 5)}{cls.end_time ? ` – ${cls.end_time?.slice(0, 5)}` : ''}
-                      {cls.location ? ` · 📍 ${cls.location}` : ''}
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <Clock size={11} style={{ flexShrink: 0 }} /> {cls.start_time?.slice(0, 5)}{cls.end_time ? ` – ${cls.end_time?.slice(0, 5)}` : ''}
+                      {cls.location ? <> · <MapPin size={11} style={{ flexShrink: 0 }} /> {cls.location}</> : ''}
                       {cls.profiles?.name ? ` · ${cls.profiles.name}` : ''}
                     </p>
                   </div>
@@ -495,10 +496,10 @@ export default function DashboardPage() {
                 <div key={cls.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', minHeight: '56px' }}>
                   <div style={{ minWidth: 0 }}>
                     <p style={{ fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cls.title}</p>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                      📅 {new Date(cls.scheduled_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                      {' · '}🕐 {cls.start_time?.slice(0, 5)}
-                      {cls.groups?.name ? ` · 👥 ${cls.groups.name}` : ''}
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.3rem', flexWrap: 'wrap' }}>
+                      <Calendar size={11} style={{ flexShrink: 0 }} /> {new Date(cls.scheduled_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      {' · '}<Clock size={11} style={{ flexShrink: 0 }} /> {cls.start_time?.slice(0, 5)}
+                      {cls.groups?.name ? <> · <Users size={11} style={{ flexShrink: 0 }} /> {cls.groups.name}</> : ''}
                     </p>
                   </div>
                   <Link href="/coach" className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.4rem 0.875rem', minHeight: '36px', whiteSpace: 'nowrap', flexShrink: 0 }}>
