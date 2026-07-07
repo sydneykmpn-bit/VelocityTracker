@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Handshake, Folder, Dumbbell, Volleyball, BicepsFlexed, ClipboardList, Star, Pencil, Check, X } from 'lucide-react'
 
 const inputBase: React.CSSProperties = {
   width: '100%', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem',
@@ -17,6 +17,11 @@ const TYPE_BADGE: Record<string, { bg: string; color: string; border: string }> 
   basketball: { bg: 'rgba(8,119,160,0.2)', color: '#34bac2', border: 'rgba(8,119,160,0.35)' },
   conditioning: { bg: 'rgba(34,197,94,0.15)', color: '#4ade80', border: 'rgba(34,197,94,0.25)' },
   both: { bg: 'rgba(168,85,247,0.15)', color: '#c084fc', border: 'rgba(168,85,247,0.25)' },
+}
+function typeIconFor(t: string) {
+  if (t === 'conditioning') return Dumbbell
+  if (t === 'basketball') return Volleyball
+  return BicepsFlexed
 }
 
 export default function TemplatesPage() {
@@ -223,8 +228,8 @@ export default function TemplatesPage() {
   }
 
   const tabs = [
-    { key: 'shared' as const, label: '🤝 Shared by Coaches', count: sharedTemplates.length },
-    { key: 'mine' as const, label: '📁 My Templates', count: myTemplates.length },
+    { key: 'shared' as const, icon: Handshake, label: 'Shared by Coaches', count: sharedTemplates.length },
+    { key: 'mine' as const, icon: Folder, label: 'My Templates', count: myTemplates.length },
   ]
   const currentList = activeTab === 'shared' ? sharedTemplates : myTemplates
 
@@ -252,7 +257,7 @@ export default function TemplatesPage() {
           <div style={{ background: 'var(--surface)', border: '1px solid var(--teal-primary)', borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <h3 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', letterSpacing: '0.03em' }}>CREATE TEMPLATE</h3>
-              <button aria-label="Close" onClick={() => setShowCreateForm(false)} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', minHeight: 0 }}>✕</button>
+              <button aria-label="Close" onClick={() => setShowCreateForm(false)} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', minHeight: 0 }}><X size={16} /></button>
             </div>
             {createError && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.625rem 0.875rem', marginBottom: '0.875rem', color: '#f87171', fontSize: '0.875rem' }}>{createError}</div>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
@@ -263,14 +268,18 @@ export default function TemplatesPage() {
               <div>
                 <label style={labelBase}>Workout Type</label>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  {(['conditioning', 'basketball', 'both'] as const).map(t => (
-                    <button key={t} type="button" onClick={() => setCreateForm({ ...createForm, type: t })} style={{
-                      padding: '0.4rem 0.875rem', borderRadius: '0.375rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize', minHeight: 0,
-                      background: createForm.type === t ? 'rgba(8,119,160,0.2)' : 'var(--surface-raised)',
-                      border: `1px solid ${createForm.type === t ? 'var(--teal-primary)' : 'var(--border)'}`,
-                      color: createForm.type === t ? 'var(--teal-secondary)' : 'var(--text-secondary)',
-                    }}>{t === 'conditioning' ? '🏋️ Conditioning' : t === 'basketball' ? '🏀 Basketball' : '💪 Both'}</button>
-                  ))}
+                  {(['conditioning', 'basketball', 'both'] as const).map(t => {
+                    const TypeIcon = typeIconFor(t)
+                    return (
+                      <button key={t} type="button" onClick={() => setCreateForm({ ...createForm, type: t })} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                        padding: '0.4rem 0.875rem', borderRadius: '0.375rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize', minHeight: 0,
+                        background: createForm.type === t ? 'rgba(8,119,160,0.2)' : 'var(--surface-raised)',
+                        border: `1px solid ${createForm.type === t ? 'var(--teal-primary)' : 'var(--border)'}`,
+                        color: createForm.type === t ? 'var(--teal-secondary)' : 'var(--text-secondary)',
+                      }}><TypeIcon size={12} /> {t === 'both' ? 'Both' : t.charAt(0).toUpperCase() + t.slice(1)}</button>
+                    )
+                  })}
                 </div>
               </div>
               <div>
@@ -336,7 +345,9 @@ export default function TemplatesPage() {
               color: activeTab === t.key ? 'var(--teal-secondary)' : 'var(--text-secondary)',
               padding: '0.75rem 1.25rem', cursor: 'pointer', fontSize: '0.875rem',
               fontWeight: activeTab === t.key ? 700 : 400, marginBottom: '-1px',
+              display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
             }}>
+              <t.icon size={14} />
               {t.label} <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>({t.count})</span>
             </button>
           ))}
@@ -344,7 +355,7 @@ export default function TemplatesPage() {
 
         {currentList.length === 0 ? (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '3rem', textAlign: 'center' }}>
-            <p style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>📋</p>
+            <ClipboardList size={24} style={{ color: 'var(--text-secondary)', margin: '0 auto 0.5rem' }} />
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
               {activeTab === 'mine' ? 'No personal templates yet. Make a template to get started.' : 'No templates in this category yet.'}
             </p>
@@ -366,8 +377,8 @@ export default function TemplatesPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
                           <h3 style={{ fontWeight: 700, fontSize: '0.95rem' }}>{t.title}</h3>
                           <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', ...tb }}>{t.type}</span>
-                          {t.is_default && <span style={{ fontSize: '0.6rem', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)', padding: '0.1rem 0.4rem', borderRadius: '999px' }}>⭐ Default</span>}
-                          {t.is_shared && !t.is_default && <span style={{ fontSize: '0.6rem', background: 'rgba(8,119,160,0.15)', color: '#34bac2', border: '1px solid rgba(8,119,160,0.3)', padding: '0.1rem 0.4rem', borderRadius: '999px' }}>🤝 Shared</span>}
+                          {t.is_default && <span style={{ fontSize: '0.6rem', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)', padding: '0.1rem 0.4rem', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}><Star size={10} />Default</span>}
+                          {t.is_shared && !t.is_default && <span style={{ fontSize: '0.6rem', background: 'rgba(8,119,160,0.15)', color: '#34bac2', border: '1px solid rgba(8,119,160,0.3)', padding: '0.1rem 0.4rem', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}><Handshake size={10} />Shared</span>}
                         </div>
                         {t.description && <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{t.description}</p>}
                         <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>{t.workout_template_exercises?.length || 0} exercises</p>
@@ -408,9 +419,9 @@ export default function TemplatesPage() {
                           <>
                             <button
                               onClick={() => isEditing ? setEditingTemplate(null) : startEdit(t)}
-                              style={{ background: isEditing ? 'rgba(8,119,160,0.2)' : 'none', border: `1px solid ${isEditing ? 'var(--teal-primary)' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: isEditing ? 'var(--teal-secondary)' : 'var(--text-secondary)', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}
+                              style={{ background: isEditing ? 'rgba(8,119,160,0.2)' : 'none', border: `1px solid ${isEditing ? 'var(--teal-primary)' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: isEditing ? 'var(--teal-secondary)' : 'var(--text-secondary)', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
                             >
-                              ✏️ Edit
+                              <Pencil size={12} /> Edit
                             </button>
                             {!t.is_default && (
                               <button
@@ -429,18 +440,18 @@ export default function TemplatesPage() {
                                 await supabase.from('workout_templates').update({ is_shared: !t.is_shared, updated_at: new Date().toISOString() }).eq('id', t.id)
                                 if (userId) loadTemplates(userId)
                               }}
-                              style={{ background: 'none', border: `1px solid ${t.is_shared ? 'var(--teal-primary)' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: t.is_shared ? 'var(--teal-secondary)' : 'var(--text-secondary)', fontSize: '0.7rem', cursor: 'pointer', minHeight: 0 }}
+                              style={{ background: 'none', border: `1px solid ${t.is_shared ? 'var(--teal-primary)' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: t.is_shared ? 'var(--teal-secondary)' : 'var(--text-secondary)', fontSize: '0.7rem', cursor: 'pointer', minHeight: 0, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
                             >
-                              {t.is_shared ? '✓ Shared w/ Coaches' : 'Share w/ Coaches'}
+                              {t.is_shared && <Check size={11} />} {t.is_shared ? 'Shared w/ Coaches' : 'Share w/ Coaches'}
                             </button>
                             <button
                               onClick={async () => {
                                 await supabase.from('workout_templates').update({ is_visible_to_members: !t.is_visible_to_members, updated_at: new Date().toISOString() }).eq('id', t.id)
                                 if (userId) loadTemplates(userId)
                               }}
-                              style={{ background: 'none', border: `1px solid ${t.is_visible_to_members ? '#4ade80' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: t.is_visible_to_members ? '#4ade80' : 'var(--text-secondary)', fontSize: '0.7rem', cursor: 'pointer', minHeight: 0 }}
+                              style={{ background: 'none', border: `1px solid ${t.is_visible_to_members ? '#4ade80' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: t.is_visible_to_members ? '#4ade80' : 'var(--text-secondary)', fontSize: '0.7rem', cursor: 'pointer', minHeight: 0, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
                             >
-                              {t.is_visible_to_members ? '✓ Visible to Members' : 'Share w/ Members'}
+                              {t.is_visible_to_members && <Check size={11} />} {t.is_visible_to_members ? 'Visible to Members' : 'Share w/ Members'}
                             </button>
                           </>
                         )}
@@ -482,14 +493,18 @@ export default function TemplatesPage() {
                           <div>
                             <label style={labelBase}>Type</label>
                             <div style={{ display: 'flex', gap: '0.375rem' }}>
-                              {(['conditioning', 'basketball', 'both'] as const).map(tp => (
-                                <button key={tp} type="button" onClick={() => setEditForm((p: any) => ({ ...p, type: tp }))} style={{
-                                  flex: 1, padding: '0.4rem 0.25rem', borderRadius: '0.375rem', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize', minHeight: 0,
-                                  background: editForm.type === tp ? 'rgba(8,119,160,0.2)' : 'var(--surface)',
-                                  border: `1px solid ${editForm.type === tp ? 'var(--teal-primary)' : 'var(--border)'}`,
-                                  color: editForm.type === tp ? 'var(--teal-secondary)' : 'var(--text-secondary)',
-                                }}>{tp === 'conditioning' ? '🏋️' : tp === 'basketball' ? '🏀' : '💪'}</button>
-                              ))}
+                              {(['conditioning', 'basketball', 'both'] as const).map(tp => {
+                                const TypeIcon = typeIconFor(tp)
+                                return (
+                                  <button key={tp} type="button" onClick={() => setEditForm((p: any) => ({ ...p, type: tp }))} style={{
+                                    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    padding: '0.4rem 0.25rem', borderRadius: '0.375rem', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize', minHeight: 0,
+                                    background: editForm.type === tp ? 'rgba(8,119,160,0.2)' : 'var(--surface)',
+                                    border: `1px solid ${editForm.type === tp ? 'var(--teal-primary)' : 'var(--border)'}`,
+                                    color: editForm.type === tp ? 'var(--teal-secondary)' : 'var(--text-secondary)',
+                                  }}><TypeIcon size={12} /></button>
+                                )
+                              })}
                             </div>
                           </div>
                         </div>

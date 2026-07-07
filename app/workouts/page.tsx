@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Dumbbell, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Dumbbell, Pencil, Trash2, Volleyball, BicepsFlexed, Calendar, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { WorkoutCardSkeleton } from '@/components/Skeleton'
 
@@ -12,19 +12,19 @@ type Filter = 'all' | 'conditioning' | 'basketball' | 'both'
 const PAGE_SIZE = 20
 
 function typeBadge(type: string) {
-  const map: Record<string, { bg: string; color: string; border: string; icon: string }> = {
-    basketball: { bg: 'rgba(8,119,160,0.2)', color: '#34bac2', border: 'rgba(8,119,160,0.35)', icon: '🏀' },
-    conditioning: { bg: 'rgba(34,197,94,0.15)', color: '#4ade80', border: 'rgba(34,197,94,0.25)', icon: '🏋️' },
-    both: { bg: 'rgba(168,85,247,0.15)', color: '#c084fc', border: 'rgba(168,85,247,0.25)', icon: '💪' },
+  const map: Record<string, { bg: string; color: string; border: string; icon: typeof Dumbbell }> = {
+    basketball: { bg: 'rgba(8,119,160,0.2)', color: '#34bac2', border: 'rgba(8,119,160,0.35)', icon: Volleyball },
+    conditioning: { bg: 'rgba(34,197,94,0.15)', color: '#4ade80', border: 'rgba(34,197,94,0.25)', icon: Dumbbell },
+    both: { bg: 'rgba(168,85,247,0.15)', color: '#c084fc', border: 'rgba(168,85,247,0.25)', icon: BicepsFlexed },
   }
   return map[type] ?? map.both
 }
 
-const tabs: { label: string; value: Filter }[] = [
+const tabs: { label: string; value: Filter; icon?: typeof Dumbbell }[] = [
   { label: 'All', value: 'all' },
-  { label: '🏋️ Conditioning', value: 'conditioning' },
-  { label: '🏀 Basketball', value: 'basketball' },
-  { label: '💪 Both', value: 'both' },
+  { label: 'Conditioning', value: 'conditioning', icon: Dumbbell },
+  { label: 'Basketball', value: 'basketball', icon: Volleyball },
+  { label: 'Both', value: 'both', icon: BicepsFlexed },
 ]
 
 export default function WorkoutsPage() {
@@ -143,7 +143,9 @@ export default function WorkoutsPage() {
               borderRadius: '0.5rem', padding: '0.5rem 1rem',
               cursor: 'pointer', fontSize: '0.875rem', whiteSpace: 'nowrap', flexShrink: 0,
               fontWeight: filter === t.value ? 700 : 400, transition: 'all 0.2s', minHeight: 40,
+              display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
             }}>
+              {t.icon && <t.icon size={14} />}
               {t.label}
             </button>
           ))}
@@ -161,11 +163,11 @@ export default function WorkoutsPage() {
               fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.375rem', minHeight: 36,
             }}
           >
-            📅 {hasDateFilter ? 'Date filtered' : 'Filter by date'}
+            <Calendar size={14} /> {hasDateFilter ? 'Date filtered' : 'Filter by date'}
           </button>
           {hasDateFilter && (
-            <button onClick={clearDateFilter} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0 }}>
-              Clear ✕
+            <button onClick={clearDateFilter} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+              Clear <X size={12} />
             </button>
           )}
           {totalCount > 0 && (
@@ -237,7 +239,7 @@ export default function WorkoutsPage() {
                         flex: 1, minWidth: 0, textDecoration: 'none', color: 'inherit',
                       }}
                     >
-                      <span style={{ fontSize: '1.5rem', flexShrink: 0 }}>{badge.icon}</span>
+                      <badge.icon size={22} style={{ color: badge.color, flexShrink: 0 }} />
                       <div style={{ minWidth: 0 }}>
                         <h3 style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.2rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {w.title}
