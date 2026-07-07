@@ -40,6 +40,7 @@ export default function WorkoutsPage() {
   const [totalCount, setTotalCount] = useState(0)
   const [dateRange, setDateRange] = useState({ from: '', to: '' })
   const [showDateFilter, setShowDateFilter] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   // Load user once on mount
   useEffect(() => {
@@ -89,10 +90,23 @@ export default function WorkoutsPage() {
     e.preventDefault()
     e.stopPropagation()
     if (!confirm('Delete this workout? This cannot be undone.')) return
+    setDeleteError('')
     const supabase = createClient()
-    // Delete exercises first (cascade should handle it but be explicit)
-    await supabase.from('exercises').delete().eq('workout_id', workoutId)
-    await supabase.from('workouts').delete().eq('id', workoutId)
+
+    const { error: exError } = await supabase.from('exercises').delete().eq('workout_id', workoutId)
+    if (exError) {
+      console.error('handleDeleteWorkout: exercises delete failed', exError)
+      setDeleteError(exError.message)
+      return
+    }
+
+    const { error: workoutError } = await supabase.from('workouts').delete().eq('id', workoutId)
+    if (workoutError) {
+      console.error('handleDeleteWorkout: workouts delete failed', workoutError)
+      setDeleteError(workoutError.message)
+      return
+    }
+
     loadWorkouts()
   }
 
@@ -176,6 +190,10 @@ export default function WorkoutsPage() {
                 style={{ width: '100%', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', color: '#F2F2F2', fontSize: '0.9rem', outline: 'none' }} />
             </div>
           </div>
+        )}
+
+        {deleteError && (
+          <p style={{ color: '#f87171', fontSize: '0.8rem', marginBottom: '0.75rem' }}>{deleteError}</p>
         )}
 
         {loading ? (

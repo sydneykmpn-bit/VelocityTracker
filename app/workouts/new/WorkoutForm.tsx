@@ -534,7 +534,7 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputBase} />
         </div>
         <div>
-          <label style={labelBase}>Duration (minutes)</label>
+          <label style={{ ...labelBase, whiteSpace: 'nowrap' }}>Duration (minutes)</label>
           <input type="number" value={duration} onChange={(e) => setDuration(e.target.value)} style={inputBase} placeholder="60" min="1" />
         </div>
       </div>
@@ -859,7 +859,7 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: '0.5rem' }}>
                       {(['sets', 'reps', 'weight'] as const).map((f) => (
                         <div key={f}>
-                          <label style={labelBase}>{f === 'weight' ? 'Weight (kg)' : f.charAt(0).toUpperCase() + f.slice(1)}</label>
+                          <label style={{ ...labelBase, whiteSpace: 'nowrap' }}>{f === 'weight' ? 'Weight (kg)' : f.charAt(0).toUpperCase() + f.slice(1)}</label>
                           <input type="number" value={ex[f]} onChange={(e) => update(idx, f, e.target.value)} style={inputBase} placeholder={f === 'weight' ? '50' : f === 'sets' ? '3' : '10'} step={f === 'weight' ? '0.5' : '1'} min="0" />
                         </div>
                       ))}
