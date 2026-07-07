@@ -21,7 +21,7 @@ export default function DashboardPage() {
   const [upcomingPlans, setUpcomingPlans] = useState<any[]>([])
   const [skippedPlans, setSkippedPlans] = useState<any[]>([])
   const [todayClasses, setTodayClasses] = useState<any[]>([])
-  const [studentsScheduledToday, setStudentsScheduledToday] = useState<{ count: number; total: number } | null>(null)
+  const [athletesScheduledToday, setAthletesScheduledToday] = useState<{ count: number; total: number } | null>(null)
   const [upcomingCoachClasses, setUpcomingCoachClasses] = useState<any[]>([])
   const [pendingApprovals, setPendingApprovals] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -36,7 +36,7 @@ export default function DashboardPage() {
     const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
     const nextWeek = new Date(); nextWeek.setDate(nextWeek.getDate() + 7)
 
-    // Client-side catch-up only — a plan won't flip to 'skipped' until the member or their coach next opens /dashboard or /student, not on a schedule.
+    // Client-side catch-up only — a plan won't flip to 'skipped' until the member or their coach next opens /dashboard or /student (athlete panel), not on a schedule.
     const { data: overdueP } = await supabase
       .from('workout_plans')
       .select('id')
@@ -97,7 +97,7 @@ export default function DashboardPage() {
             .eq('scheduled_date', today)
             .in('status', ['pending', 'rescheduled'])
           const scheduledCount = new Set((scheduledTodayPlans ?? []).map((p: any) => p.member_id)).size
-          setStudentsScheduledToday({ count: scheduledCount, total: ids.length })
+          setAthletesScheduledToday({ count: scheduledCount, total: ids.length })
         }
       }
 
@@ -286,15 +286,15 @@ export default function DashboardPage() {
           </Link>
         )}
 
-        {/* ── COACH: Students scheduled today ── */}
-        {userRole === 'coach' && studentsScheduledToday && (
+        {/* ── COACH: Athletes scheduled today ── */}
+        {userRole === 'coach' && athletesScheduledToday && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
               <span style={{ fontSize: '1.5rem' }}>👥</span>
               <div>
                 <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>
-                  <span style={{ color: 'var(--teal-secondary)' }}>{studentsScheduledToday.count}</span>
-                  <span style={{ color: 'var(--text-secondary)' }}> / {studentsScheduledToday.total} students have a workout scheduled today</span>
+                  <span style={{ color: 'var(--teal-secondary)' }}>{athletesScheduledToday.count}</span>
+                  <span style={{ color: 'var(--text-secondary)' }}> / {athletesScheduledToday.total} athletes have a workout scheduled today</span>
                 </p>
                 <Link href="/coach" style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)', textDecoration: 'none', display: 'inline', minHeight: 0 }}>
                   View Coach Panel →

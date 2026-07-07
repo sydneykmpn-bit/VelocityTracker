@@ -275,7 +275,7 @@ export default function StudentPage() {
       <main style={{ maxWidth: '980px', margin: '0 auto', padding: '2rem 1rem' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
           <div>
-            <p style={{ color: 'var(--teal-secondary)', fontSize: '0.7rem', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Student Panel</p>
+            <p style={{ color: 'var(--teal-secondary)', fontSize: '0.7rem', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Athlete Panel</p>
             <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: 'clamp(2rem, 6vw, 3rem)', letterSpacing: '0.03em' }}>{firstName.toUpperCase()}&apos;S TRAINING</h1>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '0.25rem' }}>
               Your assignments, attendance, progress, and coach context in one place.
@@ -286,7 +286,7 @@ export default function StudentPage() {
           </Link>
         </div>
 
-        <div className="student-overview" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+        <div className="athlete-overview" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', marginBottom: '1.25rem' }}>
           <div style={{ ...cardStyle, padding: '1.25rem' }}>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.75rem' }}>Coach Context</p>
             <p style={{ fontWeight: 700, marginBottom: '0.25rem' }}>{coach?.name ?? 'No coach assigned'}</p>
@@ -722,7 +722,7 @@ export default function StudentPage() {
 
       <style>{`
         @media (max-width: 760px) {
-          .student-overview { grid-template-columns: 1fr !important; }
+          .athlete-overview { grid-template-columns: 1fr !important; }
         }
         .plan-collapsed-row { display: flex; }
         .plan-full-card { display: none; }

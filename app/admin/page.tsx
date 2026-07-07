@@ -395,7 +395,7 @@ export default function AdminPage() {
   const [allPRs, setAllPRs] = useState<any[]>([])
 
   // Coaches state
-  const [coachStats, setCoachStats] = useState<Record<string, { groups: number; students: number; plansAssigned: number }>>({})
+  const [coachStats, setCoachStats] = useState<Record<string, { groups: number; athletes: number; plansAssigned: number }>>({})
   const [classesThisMonthCount, setClassesThisMonthCount] = useState(0)
   const [settings, setSettings] = useState({ require_approval: true, instagram_handle: '', public_pr_exercises: [] as string[] })
   const [settingsSaved, setSettingsSaved] = useState(false)
@@ -466,7 +466,7 @@ export default function AdminPage() {
 
       // Coach stats
       const coachUsers = (allResult.data || []).filter((u: any) => u.role === 'coach')
-      const cStats: Record<string, { groups: number; students: number; plansAssigned: number }> = {}
+      const cStats: Record<string, { groups: number; athletes: number; plansAssigned: number }> = {}
       for (const coach of coachUsers) {
         const coachGroupIds = (await supabase.from('groups').select('id').eq('coach_id', coach.id)).data?.map((g: any) => g.id) || []
         const [{ count: gCount }, { count: sCount }, { count: pCount }] = await Promise.all([
@@ -476,7 +476,7 @@ export default function AdminPage() {
             : Promise.resolve({ count: 0 }),
           supabase.from('workout_plans').select('id', { count: 'exact', head: true }).eq('coach_id', coach.id),
         ])
-        cStats[coach.id] = { groups: gCount || 0, students: sCount || 0, plansAssigned: pCount || 0 }
+        cStats[coach.id] = { groups: gCount || 0, athletes: sCount || 0, plansAssigned: pCount || 0 }
       }
       setCoachStats(cStats)
 
@@ -887,7 +887,7 @@ export default function AdminPage() {
                     <p style={{ fontWeight: 600, fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{coach.name}</p>
                     <div style={{ display: 'flex', gap: '0.875rem', marginTop: '0.375rem', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
                       <span>{coachStats[coach.id]?.groups ?? 0} groups</span>
-                      <span>{coachStats[coach.id]?.students ?? 0} students</span>
+                      <span>{coachStats[coach.id]?.athletes ?? 0} athletes</span>
                       <span>{coachStats[coach.id]?.plansAssigned ?? 0} plans assigned</span>
                     </div>
                   </div>

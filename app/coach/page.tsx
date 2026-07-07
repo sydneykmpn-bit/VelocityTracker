@@ -500,7 +500,7 @@ function AssignProgramModal({ program, members, groups, supabase, onClose }: { p
               ) : filterMode === 'group' && loadingGroupMembers ? (
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Loading…</p>
               ) : activeList.length === 0 ? (
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No students found.</p>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No athletes found.</p>
               ) : (
                 pageItems.map(m => (
                   <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.5rem 0.625rem', borderRadius: '0.5rem', background: selected.includes(m.id) ? 'rgba(8,119,160,0.15)' : 'var(--surface-raised)', cursor: 'pointer', border: `1px solid ${selected.includes(m.id) ? 'var(--teal-primary)' : 'transparent'}` }}>
@@ -576,9 +576,9 @@ export default function CoachPage() {
   const [myMembers, setMyMembers] = useState<any[]>([])
   const [expandedMember, setExpandedMember] = useState<string | null>(null)
   const [memberWorkouts, setMemberWorkouts] = useState<Record<string, any[]>>({})
-  const [showAddStudent, setShowAddStudent] = useState(false)
-  const [addStudentSearch, setAddStudentSearch] = useState('')
-  const [addingStudentId, setAddingStudentId] = useState<string | null>(null)
+  const [showAddAthlete, setShowAddAthlete] = useState(false)
+  const [addAthleteSearch, setAddAthleteSearch] = useState('')
+  const [addingAthleteId, setAddingAthleteId] = useState<string | null>(null)
 
   // Groups
   const [myGroups, setMyGroups] = useState<any[]>([])
@@ -672,9 +672,9 @@ export default function CoachPage() {
   const [assigningProgram, setAssigningProgram] = useState<any | null>(null)
 
   const loadMyMembers = async (coachId: string) => {
-    // coach_students is the authoritative source of "is this my current student" — every place a
+    // coach_students is the authoritative source of "is this my current athlete" — every place a
     // coach first interacts with a member (add to group, assign plan, assign program, or the
-    // explicit "+ Add Student" picker) upserts a row here. This means removing a student actually
+    // explicit "+ Add Athlete" picker) upserts a row here. This means removing an athlete actually
     // removes them, instead of historical workout_plans/group_members/program_assignments rows
     // permanently re-qualifying them after removal.
     const { data: csData, error: csErr } = await supabase.from('coach_students').select('member_id').eq('coach_id', coachId)
@@ -722,7 +722,7 @@ export default function CoachPage() {
       .order('scheduled_date', { ascending: false })
 
     // Client-side catch-up only — a plan won't flip to 'skipped' until the coach next opens Assigned
-    // Plans, not on a schedule. Same limitation as the equivalent logic in dashboard/student pages.
+    // Plans, not on a schedule. Same limitation as the equivalent logic in dashboard/athlete pages.
     const today = getLocalDateString()
     const overdueIds = (data ?? []).filter((p: any) => (p.status === 'pending' || p.status === 'rescheduled') && p.scheduled_date < today).map((p: any) => p.id)
     let finalPlans = data ?? []
@@ -750,7 +750,7 @@ export default function CoachPage() {
     const endOfMonth = new Date(year, month + 1, 0)
     const endStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(endOfMonth.getDate()).padStart(2, '0')}`
 
-    // Logged workouts (what a student has DONE)
+    // Logged workouts (what an athlete has DONE)
     let query = supabase
       .from('workouts')
       .select('*, profiles(name), exercises(count)')
@@ -881,9 +881,9 @@ export default function CoachPage() {
     await loadMyMembers(userId)
   }
 
-  const handleRemoveStudent = async (studentId: string, studentName: string) => {
+  const handleRemoveAthlete = async (athleteId: string, athleteName: string) => {
     if (!userId) return
-    if (!confirm(`Remove ${studentName} as your student? This deletes their upcoming plans/programs and your notes about them. Completed workout history is kept. This cannot be undone.`)) return
+    if (!confirm(`Remove ${athleteName} as your athlete? This deletes their upcoming plans/programs and your notes about them. Completed workout history is kept. This cannot be undone.`)) return
 
     setError(''); setSuccess('')
 
@@ -895,18 +895,18 @@ export default function CoachPage() {
       const { error: gmErr } = await supabase
         .from('group_members')
         .delete()
-        .eq('member_id', studentId)
+        .eq('member_id', athleteId)
         .in('group_id', myGroupIds)
       if (gmErr) { setError(gmErr.message); return }
     }
 
-    // b) Delete this coach's pending/rescheduled plans for this student entirely — completed plans
+    // b) Delete this coach's pending/rescheduled plans for this athlete entirely — completed plans
     // (and any workouts/exercises auto-logged from them) are left completely untouched
     const { data: pendingPlans, error: pendingPlansErr } = await supabase
       .from('workout_plans')
       .select('id')
       .eq('coach_id', userId)
-      .eq('member_id', studentId)
+      .eq('member_id', athleteId)
       .in('status', ['pending', 'rescheduled'])
     if (pendingPlansErr) { setError(pendingPlansErr.message); return }
     const pendingPlanIds = (pendingPlans ?? []).map((p: any) => p.id)
@@ -932,7 +932,7 @@ export default function CoachPage() {
       const { error: assignErr } = await supabase
         .from('program_assignments')
         .delete()
-        .eq('member_id', studentId)
+        .eq('member_id', athleteId)
         .in('program_id', programIds)
       if (assignErr) { setError(assignErr.message); return }
     }
@@ -942,34 +942,34 @@ export default function CoachPage() {
       .from('coach_students')
       .delete()
       .eq('coach_id', userId)
-      .eq('member_id', studentId)
+      .eq('member_id', athleteId)
     if (csErr) { setError(csErr.message); return }
 
-    // e) Delete this coach's notes about this student (notes from other coaches are unaffected)
+    // e) Delete this coach's notes about this athlete (notes from other coaches are unaffected)
     const { error: notesErr } = await supabase
       .from('coach_notes')
       .delete()
       .eq('coach_id', userId)
-      .eq('member_id', studentId)
+      .eq('member_id', athleteId)
     if (notesErr) { setError(notesErr.message); return }
 
     await loadMyMembers(userId)
-    setSuccess(`${studentName} has been removed as your student.`)
+    setSuccess(`${athleteName} has been removed as your athlete.`)
   }
 
-  const handleAddStudent = async (memberId: string) => {
+  const handleAddAthlete = async (memberId: string) => {
     if (!userId) return
-    setAddingStudentId(memberId)
+    setAddingAthleteId(memberId)
     setError('')
     const { error: err } = await supabase.from('coach_students').insert({ coach_id: userId, member_id: memberId })
     if (err) {
       setError(err.message)
     } else {
       await loadMyMembers(userId)
-      setShowAddStudent(false)
-      setAddStudentSearch('')
+      setShowAddAthlete(false)
+      setAddAthleteSearch('')
     }
-    setAddingStudentId(null)
+    setAddingAthleteId(null)
   }
 
   const handleAssignPlan = async (e: React.FormEvent) => {
@@ -1441,7 +1441,7 @@ export default function CoachPage() {
   const recentNotes = notes.slice(0, 3)
 
   const tabs: { value: Tab; label: string }[] = [
-    { value: 'members', label: 'My Students' },
+    { value: 'members', label: 'My Athletes' },
     { value: 'groups', label: 'Groups' },
     { value: 'assign', label: 'Assign Plan' },
     { value: 'assigned', label: 'Assigned Plans' },
@@ -1457,7 +1457,7 @@ export default function CoachPage() {
           <div>
             <p style={{ color: 'var(--teal-secondary)', fontSize: '0.7rem', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Coach Panel</p>
             <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: 'clamp(2rem, 6vw, 3.5rem)', letterSpacing: '0.03em' }}>COACH PANEL</h1>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '0.25rem' }}>Students, groups, assignments, reviews, and coach notes.</p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '0.25rem' }}>Athletes, groups, assignments, reviews, and coach notes.</p>
           </div>
           <Link href="/dashboard" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '0.625rem 1rem', borderRadius: '0.5rem', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 600, whiteSpace: 'nowrap', minHeight: 44, display: 'flex', alignItems: 'center' }}>
             ← My Dashboard
@@ -1466,7 +1466,7 @@ export default function CoachPage() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
           {[
-            { label: 'Students', value: myMembers.length, color: 'var(--teal-secondary)' },
+            { label: 'Athletes', value: myMembers.length, color: 'var(--teal-secondary)' },
             { label: 'Groups', value: myGroups.length, color: '#60a5fa' },
             { label: 'Needs Review', value: pendingPlanCount, color: '#f59e0b' },
             { label: 'Inactive 7d+', value: inactiveMembers.length, color: inactiveMembers.length > 0 ? '#f87171' : '#4ade80' },
@@ -1491,7 +1491,7 @@ export default function CoachPage() {
             <p style={{ color: 'var(--teal-secondary)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.75rem' }}>Attention Queue</p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem' }}>
               <div>
-                <p style={{ fontWeight: 700 }}>{inactiveMembers.length} student{inactiveMembers.length === 1 ? '' : 's'} need check-in</p>
+                <p style={{ fontWeight: 700 }}>{inactiveMembers.length} athlete{inactiveMembers.length === 1 ? '' : 's'} need check-in</p>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.5, marginTop: '0.25rem' }}>No workout in the last seven days or no workout logged yet.</p>
               </div>
               <div>
@@ -1552,7 +1552,7 @@ export default function CoachPage() {
             {/* Search + Sort + Group filter */}
             <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
               <input
-                type="text" placeholder="Search students…" value={memberSearch}
+                type="text" placeholder="Search athletes…" value={memberSearch}
                 onChange={e => setMemberSearch(e.target.value)}
                 style={{ flex: 1, minWidth: '160px', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none' }}
               />
@@ -1575,23 +1575,23 @@ export default function CoachPage() {
                 <option value="last-workout">Sort: Last Workout</option>
               </select>
               <button
-                onClick={() => setShowAddStudent(prev => !prev)}
+                onClick={() => setShowAddAthlete(prev => !prev)}
                 style={{
-                  background: showAddStudent ? 'var(--surface)' : 'var(--teal-primary)',
-                  color: showAddStudent ? 'var(--text-primary)' : '#fff',
-                  border: showAddStudent ? '1px solid var(--border)' : 'none',
+                  background: showAddAthlete ? 'var(--surface)' : 'var(--teal-primary)',
+                  color: showAddAthlete ? 'var(--text-primary)' : '#fff',
+                  border: showAddAthlete ? '1px solid var(--border)' : 'none',
                   borderRadius: '0.5rem', padding: '0.6rem 1rem', fontSize: '0.875rem', fontWeight: 700, cursor: 'pointer', minHeight: 0, whiteSpace: 'nowrap',
                 }}
               >
-                {showAddStudent ? 'Cancel' : '+ Add Student'}
+                {showAddAthlete ? 'Cancel' : '+ Add Athlete'}
               </button>
             </div>
 
-            {showAddStudent && (
+            {showAddAthlete && (
               <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', marginBottom: '1rem' }}>
                 <input
-                  type="text" placeholder="Search members by name…" value={addStudentSearch}
-                  onChange={e => setAddStudentSearch(e.target.value)}
+                  type="text" placeholder="Search members by name…" value={addAthleteSearch}
+                  onChange={e => setAddAthleteSearch(e.target.value)}
                   style={{ ...inputBase, width: '100%', marginBottom: '0.75rem' }}
                 />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', maxHeight: '240px', overflowY: 'auto' }}>
@@ -1599,7 +1599,7 @@ export default function CoachPage() {
                     const myMemberIds = new Set(myMembers.map(m => m.id))
                     const candidates = allMembers.filter(m =>
                       !myMemberIds.has(m.id) &&
-                      (!addStudentSearch.trim() || m.name?.toLowerCase().includes(addStudentSearch.toLowerCase()))
+                      (!addAthleteSearch.trim() || m.name?.toLowerCase().includes(addAthleteSearch.toLowerCase()))
                     )
                     if (candidates.length === 0) {
                       return <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No matching members found.</p>
@@ -1607,19 +1607,19 @@ export default function CoachPage() {
                     return candidates.map(m => (
                       <button
                         key={m.id}
-                        onClick={() => handleAddStudent(m.id)}
-                        disabled={addingStudentId === m.id}
+                        onClick={() => handleAddAthlete(m.id)}
+                        disabled={addingAthleteId === m.id}
                         style={{
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                           background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '0.5rem',
-                          padding: '0.5rem 0.75rem', cursor: addingStudentId === m.id ? 'not-allowed' : 'pointer',
+                          padding: '0.5rem 0.75rem', cursor: addingAthleteId === m.id ? 'not-allowed' : 'pointer',
                           color: 'var(--text-primary)', fontSize: '0.875rem', textAlign: 'left', minHeight: 0,
-                          opacity: addingStudentId === m.id ? 0.6 : 1,
+                          opacity: addingAthleteId === m.id ? 0.6 : 1,
                         }}
                       >
                         <span>{m.name}</span>
                         <span style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', fontWeight: 700 }}>
-                          {addingStudentId === m.id ? 'Adding…' : '+ Add'}
+                          {addingAthleteId === m.id ? 'Adding…' : '+ Add'}
                         </span>
                       </button>
                     ))
@@ -1710,7 +1710,7 @@ export default function CoachPage() {
                               <Calendar size={11} /> Calendar
                             </button>
                             <button
-                              onClick={e => { e.stopPropagation(); handleRemoveStudent(m.id, m.name) }}
+                              onClick={e => { e.stopPropagation(); handleRemoveAthlete(m.id, m.name) }}
                               style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.3rem 0.5rem', color: '#f87171', fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 0 }}
                             >
                               Remove
@@ -2142,7 +2142,7 @@ export default function CoachPage() {
             {/* Filter assigned plans by member */}
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
               <input
-                type="text" placeholder="Search students…" value={planSearch}
+                type="text" placeholder="Search athletes…" value={planSearch}
                 onChange={e => setPlanSearch(e.target.value)}
                 style={{ flex: 1, minWidth: '160px', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none' }}
               />
@@ -2151,7 +2151,7 @@ export default function CoachPage() {
                 onChange={e => setPlanMemberFilter(e.target.value)}
                 style={{ background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', cursor: 'pointer' }}
               >
-                <option value="all">All Students</option>
+                <option value="all">All Athletes</option>
                 {myGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
               </select>
             </div>
@@ -2201,7 +2201,7 @@ export default function CoachPage() {
                 return acc
               }, {})
 
-              const studentGroups = Object.entries(byMember).map(([memberId, plans]) => {
+              const athleteGroups = Object.entries(byMember).map(([memberId, plans]) => {
                 const memberName = (plans as any[])[0]?.member?.name ?? '—'
                 const pendingCount = (plans as any[]).filter(p => p.status === 'pending' || p.status === 'rescheduled').length
                 const todayCount = (plans as any[]).filter(p => p.scheduled_date === todayStr).length
@@ -2215,7 +2215,7 @@ export default function CoachPage() {
 
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {studentGroups.map(sg => {
+                  {athleteGroups.map(sg => {
                     const isExpanded = expandedPlanMember === sg.memberId
                     return (
                       <div key={sg.memberId} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', overflow: 'hidden' }}>
@@ -2462,7 +2462,7 @@ export default function CoachPage() {
               headerExtra={
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
                   <input
-                    type="text" placeholder="Search students…" value={calendarMemberSearch}
+                    type="text" placeholder="Search athletes…" value={calendarMemberSearch}
                     onChange={e => setCalendarMemberSearch(e.target.value)}
                     style={{ flex: 1, minWidth: '160px', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none' }}
                   />
@@ -2471,7 +2471,7 @@ export default function CoachPage() {
                     onChange={e => setMemberFilter(e.target.value)}
                     style={{ background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', cursor: 'pointer' }}
                   >
-                    <option value="all">All Students</option>
+                    <option value="all">All Athletes</option>
                     {myMembers
                       .filter((m: any) => !calendarMemberSearch.trim() || m.name?.toLowerCase().includes(calendarMemberSearch.toLowerCase()))
                       .map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
@@ -2606,7 +2606,7 @@ export default function CoachPage() {
                 <div>
                   <label style={labelBase}>For Member *</label>
                   <select value={notesMemberId} onChange={e => setNotesMemberId(e.target.value)} required style={{ ...inputBase, width: '100%', cursor: 'pointer' }}>
-                    <option value="">Select a student…</option>
+                    <option value="">Select an athlete…</option>
                     {myMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                   </select>
                 </div>
@@ -2636,7 +2636,7 @@ export default function CoachPage() {
             {/* Filter notes by member */}
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
               <input
-                type="text" placeholder="Search students…" value={noteSearch}
+                type="text" placeholder="Search athletes…" value={noteSearch}
                 onChange={e => setNoteSearch(e.target.value)}
                 style={{ flex: 1, minWidth: '160px', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none' }}
               />
@@ -2645,7 +2645,7 @@ export default function CoachPage() {
                 onChange={e => setNoteMemberFilter(e.target.value)}
                 style={{ background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', cursor: 'pointer' }}
               >
-                <option value="all">All Students</option>
+                <option value="all">All Athletes</option>
                 {myGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
               </select>
             </div>
@@ -2659,7 +2659,7 @@ export default function CoachPage() {
                 const groupMemberIds = new Set((groupMembers[noteMemberFilter] ?? []).map((gm: any) => gm.member_id))
                 filteredNotes = filteredNotes.filter((n: any) => groupMemberIds.has(n.member_id))
               }
-              if (filteredNotes.length === 0) return <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No notes for this student yet.</p>
+              if (filteredNotes.length === 0) return <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No notes for this athlete yet.</p>
               return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {[...filteredNotes].sort((a, b) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0)).map(note => (

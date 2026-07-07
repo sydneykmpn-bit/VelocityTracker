@@ -13,7 +13,7 @@ export default function Navbar() {
   const pathname = usePathname()
   const [userRole, setUserRole] = useState<string | null>(null)
   const [userName, setUserName] = useState('')
-  const [isStudent, setIsStudent] = useState(false)
+  const [isAthlete, setIsAthlete] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [avatarOpen, setAvatarOpen] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
@@ -22,10 +22,10 @@ export default function Navbar() {
   useEffect(() => {
     const cachedRole = sessionStorage.getItem('vel_role')
     const cachedName = sessionStorage.getItem('vel_name')
-    const cachedIsStudent = sessionStorage.getItem('vel_is_student')
+    const cachedIsAthlete = sessionStorage.getItem('vel_is_athlete')
     if (cachedRole !== null) setUserRole(cachedRole)
     if (cachedName !== null) setUserName(cachedName)
-    if (cachedIsStudent !== null) setIsStudent(cachedIsStudent === 'true')
+    if (cachedIsAthlete !== null) setIsAthlete(cachedIsAthlete === 'true')
   }, [])
 
   useEffect(() => {
@@ -33,7 +33,7 @@ export default function Navbar() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const [profileResult, membershipResult, workoutPlansResult, programAssignmentsResult, coachStudentsResult] = await Promise.all([
+      const [profileResult, membershipResult, workoutPlansResult, programAssignmentsResult, coachAthletesResult] = await Promise.all([
         supabase.from('profiles').select('role, name').eq('id', user.id).single(),
         supabase.from('group_members').select('id').eq('member_id', user.id).limit(1),
         supabase.from('workout_plans').select('id').eq('member_id', user.id).in('status', ['pending', 'rescheduled']).limit(1),
@@ -45,14 +45,14 @@ export default function Navbar() {
       const membership = membershipResult.data
       const workoutPlans = workoutPlansResult.data
       const programAssignments = programAssignmentsResult.data
-      const coachStudents = coachStudentsResult.data
+      const coachAthletes = coachAthletesResult.data
       if (!profile) return
 
-      const studentStatus = profile.role === 'member' && (
+      const athleteStatus = profile.role === 'member' && (
         (membership?.length || 0) > 0 ||
         (workoutPlans?.length || 0) > 0 ||
         (programAssignments?.length || 0) > 0 ||
-        (coachStudents?.length || 0) > 0
+        (coachAthletes?.length || 0) > 0
       )
 
       let pending = 0
@@ -65,12 +65,12 @@ export default function Navbar() {
       // Set ALL state at once — prevents double render / flicker
       setUserRole(profile.role)
       setUserName(profile.name || '')
-      setIsStudent(studentStatus)
+      setIsAthlete(athleteStatus)
       setPendingCount(pending)
 
       // Cache so next page navigation loads instantly without re-fetching
       sessionStorage.setItem('vel_role', profile.role ?? 'member')
-      sessionStorage.setItem('vel_is_student', String(studentStatus))
+      sessionStorage.setItem('vel_is_athlete', String(athleteStatus))
       sessionStorage.setItem('vel_name', profile.name ?? '')
 
       await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', user.id)
@@ -91,7 +91,7 @@ export default function Navbar() {
 
   const handleSignOut = async () => {
     sessionStorage.removeItem('vel_role')
-    sessionStorage.removeItem('vel_is_student')
+    sessionStorage.removeItem('vel_is_athlete')
     sessionStorage.removeItem('vel_name')
     await supabase.auth.signOut()
     router.push('/login')
@@ -124,7 +124,7 @@ export default function Navbar() {
       { href: '/analytics', label: 'Analytics' },
       { href: '/templates', label: 'Templates' },
     ]
-    if (isStudent) base.splice(1, 0, { href: '/student', label: 'Student Panel' })
+    if (isAthlete) base.splice(1, 0, { href: '/student', label: 'Athlete Panel' })
     return base
   }
 
@@ -132,16 +132,16 @@ export default function Navbar() {
   const isActive = (href: string) => pathname === href || (href !== '/dashboard' && pathname.startsWith(href + '/'))
 
   // Exclude whatever BottomNav (mobile) is currently showing so links aren't duplicated on mobile.
-  // BottomNav always shows /dashboard, /workouts/new, /calendar, plus a role/student-dependent
+  // BottomNav always shows /dashboard, /workouts/new, /calendar, plus a role/athlete-dependent
   // second and fourth tab — mirror that logic exactly (see components/BottomNav.tsx).
   const bottomNavHrefs = new Set<string>(['/dashboard', '/workouts/new', '/calendar'])
   if (userRole === 'admin') {
     bottomNavHrefs.add('/admin')
-    bottomNavHrefs.add(isStudent ? '/student' : '/workouts')
+    bottomNavHrefs.add(isAthlete ? '/student' : '/workouts')
   } else if (userRole === 'coach') {
     bottomNavHrefs.add('/coach')
     bottomNavHrefs.add('/leaderboard')
-  } else if (isStudent) {
+  } else if (isAthlete) {
     bottomNavHrefs.add('/student')
     bottomNavHrefs.add('/workouts')
   } else {

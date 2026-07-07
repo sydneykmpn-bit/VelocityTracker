@@ -16,13 +16,13 @@ export default function BottomNav() {
   const pathname = usePathname()
   const supabase = createClient()
   const [role, setRole] = useState('member')
-  const [isStudent, setIsStudent] = useState(false)
+  const [isAthlete, setIsAthlete] = useState(false)
 
   useEffect(() => {
     const cachedRole = sessionStorage.getItem('vel_role')
-    const cachedIsStudent = sessionStorage.getItem('vel_is_student')
+    const cachedIsAthlete = sessionStorage.getItem('vel_is_athlete')
     if (cachedRole) setRole(cachedRole)
-    if (cachedIsStudent !== null) setIsStudent(cachedIsStudent === 'true')
+    if (cachedIsAthlete !== null) setIsAthlete(cachedIsAthlete === 'true')
     if (cachedRole) return
 
     async function load() {
@@ -35,20 +35,20 @@ export default function BottomNav() {
       sessionStorage.setItem('vel_role', profile.role)
 
       if (profile.role === 'member' || profile.role === 'admin' || profile.role === 'coach') {
-        const [membershipResult, workoutPlansResult, programAssignmentsResult, coachStudentsResult] = await Promise.all([
+        const [membershipResult, workoutPlansResult, programAssignmentsResult, coachAthletesResult] = await Promise.all([
           supabase.from('group_members').select('id').eq('member_id', user.id).limit(1),
           supabase.from('workout_plans').select('id').eq('member_id', user.id).in('status', ['pending', 'rescheduled']).limit(1),
           supabase.from('program_assignments').select('id').eq('member_id', user.id).limit(1),
           supabase.from('coach_students').select('id').eq('member_id', user.id).limit(1),
         ])
-        const studentStatus = (
+        const athleteStatus = (
           (membershipResult.data?.length || 0) > 0 ||
           (workoutPlansResult.data?.length || 0) > 0 ||
           (programAssignmentsResult.data?.length || 0) > 0 ||
-          (coachStudentsResult.data?.length || 0) > 0
+          (coachAthletesResult.data?.length || 0) > 0
         )
-        setIsStudent(studentStatus)
-        sessionStorage.setItem('vel_is_student', String(studentStatus))
+        setIsAthlete(athleteStatus)
+        sessionStorage.setItem('vel_is_athlete', String(athleteStatus))
       }
     }
     load()
@@ -58,18 +58,18 @@ export default function BottomNav() {
   const isActive = (href: string) =>
     pathname === href || (href !== '/dashboard' && pathname.startsWith(href + '/'))
 
-  const showStudentTabs = role === 'member' && isStudent
+  const showAthleteTabs = role === 'member' && isAthlete
 
-  const second = showStudentTabs
-    ? { href: '/student', label: 'Student', icon: GraduationCap }
+  const second = showAthleteTabs
+    ? { href: '/student', label: 'Athlete', icon: GraduationCap }
     : (SECOND_TAB[role] ?? SECOND_TAB.member)
   const SecondIcon = second.icon
 
-  const fourth = showStudentTabs
+  const fourth = showAthleteTabs
     ? { href: '/workouts', label: 'Workouts', icon: Dumbbell }
     : role === 'admin'
-    ? (isStudent
-        ? { href: '/student', label: 'Student', icon: GraduationCap }
+    ? (isAthlete
+        ? { href: '/student', label: 'Athlete', icon: GraduationCap }
         : { href: '/workouts', label: 'Workouts', icon: Dumbbell })
     : { href: '/leaderboard', label: 'Board', icon: Trophy }
   const FourthIcon = fourth.icon
