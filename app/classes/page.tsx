@@ -94,6 +94,7 @@ export default function ClassesPage() {
 
   const genderMatches = (restriction: string) => {
     if (restriction === 'mixed') return true
+    if (gender === 'other') return true
     if (restriction === 'men') return gender === 'male'
     if (restriction === 'women') return gender === 'female'
     return true

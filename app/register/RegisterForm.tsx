@@ -31,7 +31,6 @@ const GENDERS: { key: string; label: string; icon?: typeof Mars }[] = [
   { key: 'male', label: 'Male', icon: Mars },
   { key: 'female', label: 'Female', icon: Venus },
   { key: 'other', label: 'Other' },
-  { key: 'prefer_not_to_say', label: 'Prefer not to say' },
 ]
 
 export default function RegisterForm() {

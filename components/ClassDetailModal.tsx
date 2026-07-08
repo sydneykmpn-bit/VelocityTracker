@@ -168,12 +168,13 @@ export default function ClassDetailModal({
         await loadAttendees()
       } else {
         const restriction = cls.gender_restriction
-        if (restriction === 'men' && myGender !== 'male') {
+        if (myGender === 'other') {
+          // other-gender users can join any class regardless of restriction
+        } else if (restriction === 'men' && myGender !== 'male') {
           setRsvpError('This class is for men only.')
           setRsvpLoading(false)
           return
-        }
-        if (restriction === 'women' && myGender !== 'female') {
+        } else if (restriction === 'women' && myGender !== 'female') {
           setRsvpError('This class is for women only.')
           setRsvpLoading(false)
           return

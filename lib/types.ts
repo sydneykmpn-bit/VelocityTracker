@@ -4,7 +4,7 @@ export interface Profile {
   email: string
   username?: string
   role: 'admin' | 'coach' | 'member'
-  gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say'
+  gender?: 'male' | 'female' | 'other'
   age?: number
   weight_kg?: number
   weight_unit?: 'kg' | 'lbs'
