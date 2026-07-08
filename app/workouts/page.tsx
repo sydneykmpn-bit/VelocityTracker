@@ -7,10 +7,32 @@ import { Plus, Dumbbell, Pencil, Trash2, BicepsFlexed, Calendar, X } from 'lucid
 import { createClient } from '@/lib/supabase/client'
 import { WorkoutCardSkeleton } from '@/components/Skeleton'
 import BasketballIcon from '@/components/icons/BasketballIcon'
+import { formatDateYMD, getLocalDateString } from '@/lib/utils'
 
-type Filter = 'all' | 'conditioning' | 'basketball' | 'both'
+type TypeFilter = 'all' | 'conditioning' | 'basketball' | 'both'
+type DayFilter = 'all' | number // 0 = Sunday .. 6 = Saturday, matching Date#getDay()
 
 const PAGE_SIZE = 20
+
+const DAY_TABS: { label: string; value: DayFilter }[] = [
+  { label: 'All', value: 'all' },
+  { label: 'Sun', value: 0 },
+  { label: 'Mon', value: 1 },
+  { label: 'Tue', value: 2 },
+  { label: 'Wed', value: 3 },
+  { label: 'Thu', value: 4 },
+  { label: 'Fri', value: 5 },
+  { label: 'Sat', value: 6 },
+]
+
+const DAY_NAMES_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+const TYPE_TABS: { label: string; value: TypeFilter; icon?: typeof Dumbbell }[] = [
+  { label: 'All', value: 'all' },
+  { label: 'Gym', value: 'conditioning', icon: Dumbbell },
+  { label: 'Basketball', value: 'basketball', icon: BasketballIcon },
+  { label: 'Both', value: 'both', icon: BicepsFlexed },
+]
 
 function typeBadge(type: string) {
   const map: Record<string, { bg: string; color: string; border: string; icon: typeof Dumbbell }> = {
@@ -21,12 +43,38 @@ function typeBadge(type: string) {
   return map[type] ?? map.both
 }
 
-const tabs: { label: string; value: Filter; icon?: typeof Dumbbell }[] = [
-  { label: 'All', value: 'all' },
-  { label: 'Conditioning', value: 'conditioning', icon: Dumbbell },
-  { label: 'Basketball', value: 'basketball', icon: BasketballIcon },
-  { label: 'Both', value: 'both', icon: BicepsFlexed },
-]
+// Groups workouts into weeks (most recent week first, Sunday-start), and within each week,
+// buckets entries under the day-of-week they were logged on (most recent day first).
+function buildWeekGroups(items: any[]) {
+  const weeks = new Map<string, { start: Date; byDay: Map<number, any[]> }>()
+  items.forEach(w => {
+    const d = new Date(w.date ?? w.created_at)
+    const dow = d.getDay()
+    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dow)
+    const key = formatDateYMD(start)
+    if (!weeks.has(key)) weeks.set(key, { start, byDay: new Map() })
+    const week = weeks.get(key)!
+    if (!week.byDay.has(dow)) week.byDay.set(dow, [])
+    week.byDay.get(dow)!.push(w)
+  })
+  return Array.from(weeks.entries())
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([key, val]) => ({
+      key,
+      start: val.start,
+      days: Array.from(val.byDay.entries()).sort((a, b) => b[0] - a[0]),
+    }))
+}
+
+function weekLabel(weekKey: string, weekStart: Date, currentWeekKey: string): string {
+  if (weekKey === currentWeekKey) return 'This Week'
+  const prevWeek = new Date(weekStart)
+  prevWeek.setDate(prevWeek.getDate() + 7)
+  if (formatDateYMD(prevWeek) === currentWeekKey) return 'Last Week'
+  const weekEnd = new Date(weekStart)
+  weekEnd.setDate(weekStart.getDate() + 6)
+  return `Week of ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+}
 
 export default function WorkoutsPage() {
   const router = useRouter()
@@ -34,7 +82,8 @@ export default function WorkoutsPage() {
 
   const [user, setUser] = useState<any>(null)
   const [profileLoaded, setProfileLoaded] = useState(false)
-  const [filter, setFilter] = useState<Filter>('all')
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
+  const [dayFilter, setDayFilter] = useState<DayFilter>('all')
   const [workouts, setWorkouts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(0)
@@ -59,21 +108,31 @@ export default function WorkoutsPage() {
   const loadWorkouts = useCallback(async () => {
     if (!user) return
     setLoading(true)
+    const dayModeActive = dayFilter !== 'all'
     let q = supabase
       .from('workouts')
-      .select('id, title, type, date, created_at, duration, exercises(count)', { count: 'exact' })
+      .select('id, title, type, date, created_at, duration, exercises(count)', dayModeActive ? {} : { count: 'exact' })
       .eq('user_id', user.id)
       .order('date', { ascending: false })
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
-    if (filter !== 'all') q = q.eq('type', filter)
+    if (typeFilter !== 'all') q = q.eq('type', typeFilter)
     if (dateRange.from) q = q.gte('date', dateRange.from + 'T00:00:00')
     if (dateRange.to) q = q.lte('date', dateRange.to + 'T23:59:59')
+    // A single day-of-week filter spans all time and can't be expressed in PostgREST directly,
+    // so it's applied client-side below — fetch everything matching type/date-range instead of
+    // paging, since the usual page-by-page fetch wouldn't have enough rows to filter from.
+    if (!dayModeActive) q = q.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
     const { data, count } = await q
-    setWorkouts(data ?? [])
-    setTotalCount(count ?? 0)
+    if (dayModeActive) {
+      const filtered = (data ?? []).filter(w => new Date(w.date ?? w.created_at).getDay() === dayFilter)
+      setWorkouts(filtered)
+      setTotalCount(filtered.length)
+    } else {
+      setWorkouts(data ?? [])
+      setTotalCount(count ?? 0)
+    }
     setLoading(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, filter, page, dateRange])
+  }, [user, typeFilter, dayFilter, page, dateRange])
 
   useEffect(() => {
     if (!profileLoaded || !user) return
@@ -81,7 +140,8 @@ export default function WorkoutsPage() {
   }, [profileLoaded, user, loadWorkouts])
 
   // Reset page when filters change
-  const handleFilterChange = (f: Filter) => { setFilter(f); setPage(0) }
+  const handleTypeFilterChange = (f: TypeFilter) => { setTypeFilter(f); setPage(0) }
+  const handleDayFilterChange = (f: DayFilter) => { setDayFilter(f); setPage(0) }
   const handleDateChange = (field: 'from' | 'to', val: string) => {
     setDateRange(prev => ({ ...prev, [field]: val }))
     setPage(0)
@@ -128,6 +188,107 @@ export default function WorkoutsPage() {
 
   const hasDateFilter = dateRange.from || dateRange.to
   const totalPages = Math.ceil(totalCount / PAGE_SIZE)
+  const dayModeActive = dayFilter !== 'all'
+
+  const currentWeekKey = (() => {
+    const today = new Date(getLocalDateString() + 'T00:00:00')
+    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay())
+    return formatDateYMD(start)
+  })()
+
+  const weekGroups = !dayModeActive ? buildWeekGroups(workouts) : []
+
+  const renderWorkoutCard = (w: any) => {
+    const badge = typeBadge(w.type)
+    return (
+      <div
+        key={w.id}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: '0.75rem',
+          padding: '0.875rem 1rem',
+          transition: 'all 0.2s',
+        }}
+        onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--teal-primary)' }}
+        onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)' }}
+      >
+        {/* Clickable area — takes user to workout detail */}
+        <Link
+          href={`/workouts/${w.id}`}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '0.875rem',
+            flex: 1, minWidth: 0, textDecoration: 'none', color: 'inherit',
+          }}
+        >
+          <badge.icon size={22} style={{ color: badge.color, flexShrink: 0 }} />
+          <div style={{ minWidth: 0 }}>
+            <h3 style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.2rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {w.title}
+            </h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {new Date(w.date ?? w.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              {w.duration ? ` · ${w.duration} min` : ''}
+              {(w.exercises as any[])?.[0]?.count ? ` · ${(w.exercises as any[])[0].count} exercises` : ''}
+            </p>
+          </div>
+        </Link>
+
+        {/* Right side: badge + action buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+          {/* Type badge */}
+          <span style={{
+            fontSize: '0.65rem', fontWeight: 700, padding: '0.25rem 0.625rem',
+            borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.07em',
+            background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`,
+            whiteSpace: 'nowrap',
+          }}>
+            {w.type}
+          </span>
+
+          {/* Edit */}
+          <Link
+            href={`/workouts/${w.id}/edit`}
+            aria-label="Edit workout"
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem',
+              padding: '0.35rem', color: 'var(--text-secondary)', display: 'flex',
+              alignItems: 'center', textDecoration: 'none', minHeight: 32, minWidth: 32,
+              justifyContent: 'center',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = 'var(--teal-primary)'; (e.currentTarget as HTMLAnchorElement).style.color = 'var(--teal-secondary)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-secondary)' }}
+          >
+            <Pencil size={13} />
+          </Link>
+
+          {/* Delete */}
+          <button
+            onClick={e => handleDeleteClick(w.id, e)}
+            aria-label={confirmDeleteId === w.id ? 'Confirm delete workout' : 'Delete workout'}
+            style={{
+              background: confirmDeleteId === w.id ? 'rgba(239,68,68,0.15)' : 'none',
+              border: `1px solid ${confirmDeleteId === w.id ? 'rgba(239,68,68,0.4)' : 'var(--border)'}`,
+              borderRadius: '0.375rem',
+              padding: confirmDeleteId === w.id ? '0.35rem 0.5rem' : '0.35rem',
+              color: confirmDeleteId === w.id ? '#f87171' : 'var(--text-secondary)', display: 'flex',
+              alignItems: 'center', gap: '0.3rem', cursor: 'pointer', minHeight: 32, minWidth: 32,
+              justifyContent: 'center', whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={e => { if (confirmDeleteId !== w.id) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#ef4444'; (e.currentTarget as HTMLButtonElement).style.color = '#ef4444' } }}
+            onMouseLeave={e => { if (confirmDeleteId !== w.id) { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)' } }}
+          >
+            <Trash2 size={13} />
+            {confirmDeleteId === w.id && <span style={{ fontSize: '0.7rem', fontWeight: 700 }}>Confirm?</span>}
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
@@ -145,30 +306,29 @@ export default function WorkoutsPage() {
           </Link>
         </div>
 
-        {/* Filter tabs */}
+        {/* Day-of-week filter — primary top-row filter */}
         <div style={{
           display: 'flex', gap: '0.5rem', overflowX: 'auto',
           WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none',
           flexWrap: 'nowrap', marginBottom: '0.75rem', paddingBottom: '4px',
         }}>
-          {tabs.map((t) => (
-            <button key={t.value} onClick={() => handleFilterChange(t.value)} style={{
-              background: filter === t.value ? 'var(--teal-primary)' : 'var(--surface)',
-              color: filter === t.value ? 'white' : 'var(--text-secondary)',
-              border: `1px solid ${filter === t.value ? 'var(--teal-primary)' : 'var(--border)'}`,
+          {DAY_TABS.map((t) => (
+            <button key={String(t.value)} onClick={() => handleDayFilterChange(t.value)} style={{
+              background: dayFilter === t.value ? 'var(--teal-primary)' : 'var(--surface)',
+              color: dayFilter === t.value ? 'white' : 'var(--text-secondary)',
+              border: `1px solid ${dayFilter === t.value ? 'var(--teal-primary)' : 'var(--border)'}`,
               borderRadius: '0.5rem', padding: '0.5rem 1rem',
               cursor: 'pointer', fontSize: '0.875rem', whiteSpace: 'nowrap', flexShrink: 0,
-              fontWeight: filter === t.value ? 700 : 400, transition: 'all 0.2s', minHeight: 40,
+              fontWeight: dayFilter === t.value ? 700 : 400, transition: 'all 0.2s', minHeight: 40,
               display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
             }}>
-              {t.icon && <t.icon size={14} />}
               {t.label}
             </button>
           ))}
         </div>
 
-        {/* Date range filter */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+        {/* Secondary filter row: date filter + type filter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
           <button
             aria-label="Toggle date filter"
             onClick={() => setShowDateFilter(!showDateFilter)}
@@ -191,6 +351,28 @@ export default function WorkoutsPage() {
               {totalCount} workout{totalCount !== 1 ? 's' : ''}
             </span>
           )}
+        </div>
+
+        {/* Type filter pills — secondary, relocated below the date filter */}
+        <div style={{
+          display: 'flex', gap: '0.5rem', overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none',
+          flexWrap: 'nowrap', marginBottom: '1rem', paddingBottom: '4px',
+        }}>
+          {TYPE_TABS.map((t) => (
+            <button key={t.value} onClick={() => handleTypeFilterChange(t.value)} style={{
+              background: typeFilter === t.value ? 'rgba(8,119,160,0.15)' : 'none',
+              color: typeFilter === t.value ? 'var(--teal-secondary)' : 'var(--text-secondary)',
+              border: `1px solid ${typeFilter === t.value ? 'var(--teal-primary)' : 'var(--border)'}`,
+              borderRadius: '999px', padding: '0.375rem 0.75rem',
+              cursor: 'pointer', fontSize: '0.75rem', whiteSpace: 'nowrap', flexShrink: 0,
+              fontWeight: typeFilter === t.value ? 700 : 400, transition: 'all 0.2s', minHeight: 32,
+              display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
+            }}>
+              {t.icon && <t.icon size={12} />}
+              {t.label}
+            </button>
+          ))}
         </div>
 
         {showDateFilter && (
@@ -226,103 +408,36 @@ export default function WorkoutsPage() {
               + Log workout
             </Link>
           </div>
+        ) : dayModeActive ? (
+          // Specific day-of-week selected — flat list across all time, no week grouping.
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {workouts.map(w => renderWorkoutCard(w))}
+          </div>
         ) : (
           <>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {workouts.map((w) => {
-                const badge = typeBadge(w.type)
-                return (
-                  <div
-                    key={w.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.75rem',
-                      background: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '0.75rem',
-                      padding: '0.875rem 1rem',
-                      transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--teal-primary)' }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)' }}
-                  >
-                    {/* Clickable area — takes user to workout detail */}
-                    <Link
-                      href={`/workouts/${w.id}`}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '0.875rem',
-                        flex: 1, minWidth: 0, textDecoration: 'none', color: 'inherit',
-                      }}
-                    >
-                      <badge.icon size={22} style={{ color: badge.color, flexShrink: 0 }} />
-                      <div style={{ minWidth: 0 }}>
-                        <h3 style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.2rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {w.title}
-                        </h3>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {new Date(w.date ?? w.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          {w.duration ? ` · ${w.duration} min` : ''}
-                          {(w.exercises as any[])?.[0]?.count ? ` · ${(w.exercises as any[])[0].count} exercises` : ''}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              {weekGroups.map(week => (
+                <div key={week.key}>
+                  <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.15rem', letterSpacing: '0.03em', color: 'var(--teal-secondary)', marginBottom: '0.625rem' }}>
+                    {weekLabel(week.key, week.start, currentWeekKey).toUpperCase()}
+                  </h2>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {week.days.map(([dow, dayWorkouts]) => (
+                      <div key={dow}>
+                        <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                          {DAY_NAMES_FULL[dow]}
                         </p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                          {dayWorkouts.map((w: any) => renderWorkoutCard(w))}
+                        </div>
                       </div>
-                    </Link>
-
-                    {/* Right side: badge + action buttons */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
-                      {/* Type badge */}
-                      <span style={{
-                        fontSize: '0.65rem', fontWeight: 700, padding: '0.25rem 0.625rem',
-                        borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.07em',
-                        background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`,
-                        whiteSpace: 'nowrap',
-                      }}>
-                        {w.type}
-                      </span>
-
-                      {/* Edit */}
-                      <Link
-                        href={`/workouts/${w.id}/edit`}
-                        aria-label="Edit workout"
-                        onClick={e => e.stopPropagation()}
-                        style={{
-                          background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem',
-                          padding: '0.35rem', color: 'var(--text-secondary)', display: 'flex',
-                          alignItems: 'center', textDecoration: 'none', minHeight: 32, minWidth: 32,
-                          justifyContent: 'center',
-                        }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = 'var(--teal-primary)'; (e.currentTarget as HTMLAnchorElement).style.color = 'var(--teal-secondary)' }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-secondary)' }}
-                      >
-                        <Pencil size={13} />
-                      </Link>
-
-                      {/* Delete */}
-                      <button
-                        onClick={e => handleDeleteClick(w.id, e)}
-                        aria-label={confirmDeleteId === w.id ? 'Confirm delete workout' : 'Delete workout'}
-                        style={{
-                          background: confirmDeleteId === w.id ? 'rgba(239,68,68,0.15)' : 'none',
-                          border: `1px solid ${confirmDeleteId === w.id ? 'rgba(239,68,68,0.4)' : 'var(--border)'}`,
-                          borderRadius: '0.375rem',
-                          padding: confirmDeleteId === w.id ? '0.35rem 0.5rem' : '0.35rem',
-                          color: confirmDeleteId === w.id ? '#f87171' : 'var(--text-secondary)', display: 'flex',
-                          alignItems: 'center', gap: '0.3rem', cursor: 'pointer', minHeight: 32, minWidth: 32,
-                          justifyContent: 'center', whiteSpace: 'nowrap',
-                        }}
-                        onMouseEnter={e => { if (confirmDeleteId !== w.id) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#ef4444'; (e.currentTarget as HTMLButtonElement).style.color = '#ef4444' } }}
-                        onMouseLeave={e => { if (confirmDeleteId !== w.id) { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)' } }}
-                      >
-                        <Trash2 size={13} />
-                        {confirmDeleteId === w.id && <span style={{ fontSize: '0.7rem', fontWeight: 700 }}>Confirm?</span>}
-                      </button>
-                    </div>
+                    ))}
                   </div>
-                )
-              })}
+                </div>
+              ))}
             </div>
 
-            {/* Pagination */}
+            {/* Pagination — only meaningful in the paginated "All" weekly view */}
             {totalCount > PAGE_SIZE && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginTop: '1.5rem' }}>
                 <button
