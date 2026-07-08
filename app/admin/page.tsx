@@ -962,7 +962,7 @@ export default function AdminPage() {
 
         {/* ── GROUPS TAB ── */}
         {activeTab === 'groups' && (
-          <div key="tab-groups" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '1.5rem', alignItems: 'start' }}>
+          <div key="tab-groups" className="admin-groups-grid" style={{ display: 'grid', alignItems: 'start' }}>
             <div>
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>
                 GROUPS ({groups.length})
@@ -1108,6 +1108,13 @@ export default function AdminPage() {
                 </button>
               </form>
             </div>
+
+            <style>{`
+              .admin-groups-grid { grid-template-columns: 1fr 320px; gap: 1.5rem; }
+              @media (max-width: 768px) {
+                .admin-groups-grid { grid-template-columns: 1fr; }
+              }
+            `}</style>
           </div>
         )}
 
