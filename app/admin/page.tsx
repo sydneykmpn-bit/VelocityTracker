@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Trash2, ChevronDown, ChevronUp, Pencil, KeyRound } from 'lucide-react'
+import { Trash2, ChevronDown, ChevronUp, Pencil, KeyRound, Timer, X, AlertTriangle, Target, CheckCircle2, Mars, Venus, Users, UserCog, Building2, Settings, Check } from 'lucide-react'
 import { getLocalDateString } from '@/lib/utils'
 
 type AdminTab = 'members' | 'coaches' | 'groups' | 'settings'
@@ -55,7 +55,7 @@ function WorkoutHistoryCard({ workout, supabase }: { workout: any; supabase: any
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase' as const, ...tb }}>{workout.type}</span>
-            {workout.duration && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>⏱ {workout.duration}min</span>}
+            {workout.duration && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}><Timer size={11} /> {workout.duration}min</span>}
           </div>
           <p style={{ fontWeight: 600, fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{workout.title}</p>
           <p style={{ fontSize: '0.7rem', marginTop: '0.15rem', color: 'var(--text-secondary)' }}>
@@ -141,7 +141,11 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
             <div>
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>{memberName}</h2>
               <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem', fontSize: '0.7rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
-                {profile?.gender && <span>{profile.gender === 'male' ? '♂ Male' : profile.gender === 'female' ? '♀ Female' : profile.gender}</span>}
+                {profile?.gender && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                    {profile.gender === 'male' ? <><Mars size={11} /> Male</> : profile.gender === 'female' ? <><Venus size={11} /> Female</> : profile.gender}
+                  </span>
+                )}
                 {profile?.age && <span>Age {profile.age}</span>}
                 {profile?.weight_kg && <span>{profile.weight_kg} {profile.weight_unit || 'kg'}</span>}
                 {profile?.city && <span>{profile.city}</span>}
@@ -151,7 +155,7 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
               </div>
             </div>
           </div>
-          <button onClick={onClose} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0, minHeight: 0 }}>✕</button>
+          <button onClick={onClose} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0, minHeight: 0 }}><X size={16} /></button>
         </div>
         {!loadingModal && (
           <>
@@ -196,13 +200,13 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   {profile?.medical_info && (
                     <div style={{ background: 'rgba(245,158,11,0.08)', borderLeft: '3px solid #f59e0b', borderRadius: '0.5rem', padding: '0.75rem 1rem' }}>
-                      <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#f59e0b', marginBottom: '0.35rem' }}>⚠️ Medical / Injury Info</p>
+                      <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#f59e0b', marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}><AlertTriangle size={11} /> Medical / Injury Info</p>
                       <p style={{ fontSize: '0.8rem', color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{profile.medical_info}</p>
                     </div>
                   )}
                   {profile?.goals && (
                     <div style={{ background: 'rgba(8,119,160,0.08)', borderLeft: '3px solid var(--teal-primary)', borderRadius: '0.5rem', padding: '0.75rem 1rem' }}>
-                      <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--teal-secondary)', marginBottom: '0.35rem' }}>🎯 Goals</p>
+                      <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--teal-secondary)', marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}><Target size={11} /> Goals</p>
                       <p style={{ fontSize: '0.8rem', color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{profile.goals}</p>
                     </div>
                   )}
@@ -307,11 +311,11 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
       <div style={{ width: '100%', maxWidth: '440px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '1rem', background: 'var(--surface)', border: '1px solid var(--border)', padding: '1.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
           <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>CREATE USER</h2>
-          <button onClick={onClose} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0, minHeight: 0 }}>✕</button>
+          <button onClick={onClose} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0, minHeight: 0 }}><X size={16} /></button>
         </div>
         {done ? (
           <div style={{ textAlign: 'center', padding: '1rem 0' }}>
-            <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>✅</p>
+            <CheckCircle2 size={32} style={{ color: '#4ade80', marginBottom: '0.5rem' }} />
             <p style={{ color: 'var(--text-primary)', fontSize: '0.95rem', fontWeight: 600, marginBottom: '0.5rem' }}>User created!</p>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '1.25rem' }}>Share the temporary password with the user.</p>
             <button onClick={onClose} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.7rem 1.5rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>Done</button>
@@ -652,11 +656,11 @@ export default function AdminPage() {
     )
   }
 
-  const adminTabs: { value: AdminTab; label: string }[] = [
-    { value: 'members', label: '👥 Members' },
-    { value: 'coaches', label: '👨‍💼 Coaches' },
-    { value: 'groups', label: '🏢 Groups & Classes' },
-    { value: 'settings', label: '⚙️ Settings' },
+  const adminTabs: { value: AdminTab; label: string; icon: typeof Users }[] = [
+    { value: 'members', label: 'Members', icon: Users },
+    { value: 'coaches', label: 'Coaches', icon: UserCog },
+    { value: 'groups', label: 'Groups & Classes', icon: Building2 },
+    { value: 'settings', label: 'Settings', icon: Settings },
   ]
 
   return (
@@ -696,9 +700,9 @@ export default function AdminPage() {
               color: activeTab === t.value ? 'var(--teal-secondary)' : 'var(--text-secondary)',
               padding: '0.75rem 1rem', cursor: 'pointer', fontSize: '0.8rem',
               fontWeight: activeTab === t.value ? 700 : 400, marginBottom: '-1px', transition: 'all 0.15s',
-              whiteSpace: 'nowrap',
+              whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
             }}>
-              {t.label}
+              <t.icon size={13} /> {t.label}
             </button>
           ))}
         </div>
@@ -760,9 +764,9 @@ export default function AdminPage() {
                             setPendingUsers(prev => prev.filter(p => p.id !== u.id))
                             setAllUsers(prev => [...prev, { ...u, approved: true }])
                           }}
-                          style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+                          style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
                         >
-                          ✓ Approve
+                          <Check size={12} /> Approve
                         </button>
                         <button
                           onClick={async () => {
@@ -770,9 +774,9 @@ export default function AdminPage() {
                             const ok = await handleDeleteUser(u.id)
                             if (ok) setPendingUsers(prev => prev.filter(p => p.id !== u.id))
                           }}
-                          style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', color: '#ef4444' }}
+                          style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', color: '#ef4444', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
                         >
-                          ✕ Reject
+                          <X size={12} /> Reject
                         </button>
                       </div>
                     </div>
@@ -837,7 +841,7 @@ export default function AdminPage() {
                           }}
                           style={{ width: '28px', height: '28px', borderRadius: '0.375rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', flexShrink: 0 }}
                         >
-                          ✕
+                          <X size={14} />
                         </button>
                       </div>
                     </div>
@@ -926,7 +930,7 @@ export default function AdminPage() {
                     }}
                     style={{ width: '28px', height: '28px', borderRadius: '0.375rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', flexShrink: 0 }}
                   >
-                    ✕
+                    <X size={14} />
                   </button>
                 </div>
               </div>
@@ -1089,8 +1093,8 @@ export default function AdminPage() {
         {activeTab === 'settings' && (
           <div key="tab-settings" style={{ maxWidth: '540px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             {settingsSaved && (
-              <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.75rem', color: '#4ade80', fontSize: '0.875rem' }}>
-                ✅ Settings saved
+              <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.75rem', color: '#4ade80', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <CheckCircle2 size={15} /> Settings saved
               </div>
             )}
 
@@ -1169,7 +1173,7 @@ export default function AdminPage() {
                     <button
                       onClick={() => setSettings(prev => ({ ...prev, public_pr_exercises: prev.public_pr_exercises.filter((_, idx) => idx !== i) }))}
                       style={{ width: '36px', height: '36px', borderRadius: '0.375rem', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0 }}
-                    >✕</button>
+                    ><X size={15} /></button>
                   </div>
                 ))}
                 <button
@@ -1202,9 +1206,9 @@ export default function AdminPage() {
                   setSuccess('All public PRs deleted.')
                   setTimeout(() => setSuccess(''), 3000)
                 }}
-                style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.5rem', padding: '0.625rem 1.25rem', fontSize: '0.875rem', fontWeight: 700, color: '#ef4444', cursor: 'pointer' }}
+                style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.5rem', padding: '0.625rem 1.25rem', fontSize: '0.875rem', fontWeight: 700, color: '#ef4444', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
               >
-                ⚠️ Delete All Public PRs
+                <AlertTriangle size={14} /> Delete All Public PRs
               </button>
             </div>
           </div>

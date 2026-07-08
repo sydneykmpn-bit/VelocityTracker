@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Mars, Venus, Medal, Flame, BicepsFlexed, Hand, Trophy, Search, X, MessageCircle } from 'lucide-react'
 import { debounce, getLocalDateString, normalizeToKg, sortRecords, LOWER_IS_BETTER } from '@/lib/utils'
 
 type LeaderTab = 'public' | 'mine'
@@ -50,23 +50,23 @@ function convertForDisplay(value: number, storedUnit: string, preferredUnit: 'kg
   return { value: Math.round(converted * 10) / 10, unit: preferredUnit }
 }
 
-const GENDER_FILTERS = [
+const GENDER_FILTERS: { key: string; label: string; icon?: typeof Mars }[] = [
   { key: 'all', label: 'All' },
-  { key: 'male', label: '♂ Men' },
-  { key: 'female', label: '♀ Women' },
+  { key: 'male', label: 'Men', icon: Mars },
+  { key: 'female', label: 'Women', icon: Venus },
   { key: 'other', label: 'Other' },
 ]
 
-const MEDALS: Record<number, { emoji: string; color: string }> = {
-  0: { emoji: '🥇', color: '#FFD700' },
-  1: { emoji: '🥈', color: '#C0C0C0' },
-  2: { emoji: '🥉', color: '#CD7F32' },
+const MEDALS: Record<number, { color: string }> = {
+  0: { color: '#FFD700' },
+  1: { color: '#C0C0C0' },
+  2: { color: '#CD7F32' },
 }
 
 const REACTIONS = [
-  { type: 'fire', emoji: '🔥' },
-  { type: 'flex', emoji: '💪' },
-  { type: 'clap', emoji: '👏' },
+  { type: 'fire', icon: Flame },
+  { type: 'flex', icon: BicepsFlexed },
+  { type: 'clap', icon: Hand },
 ]
 
 const inputBase: React.CSSProperties = {
@@ -99,8 +99,8 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
 }
 
 function genderBadge(gender?: string) {
-  if (gender === 'male') return <span style={{ color: '#60a5fa', fontSize: '0.7rem' }}> ♂</span>
-  if (gender === 'female') return <span style={{ color: '#f472b6', fontSize: '0.7rem' }}> ♀</span>
+  if (gender === 'male') return <Mars size={11} style={{ color: '#60a5fa', display: 'inline', verticalAlign: '-1px', marginLeft: '0.25rem' }} />
+  if (gender === 'female') return <Venus size={11} style={{ color: '#f472b6', display: 'inline', verticalAlign: '-1px', marginLeft: '0.25rem' }} />
   return null
 }
 
@@ -354,10 +354,10 @@ export default function LeaderboardPage() {
             {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{error}</div>}
             {success && <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#4ade80', fontSize: '0.875rem' }}>{success}</div>}
             {/* Info banner */}
-            <div style={{ background: 'rgba(8,119,160,0.1)', border: '1px solid rgba(8,119,160,0.2)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--teal-secondary)' }}>
+            <div style={{ background: 'rgba(8,119,160,0.1)', border: '1px solid rgba(8,119,160,0.2)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--teal-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               {activeTab === 'public'
-                ? '🏆 Public leaderboard tracks 3 main lifts + sprint. Selecting an exercise auto-sets the unit.'
-                : '💪 Personal PRs are visible only to you and can be any exercise.'}
+                ? <><Trophy size={14} style={{ flexShrink: 0 }} /> Public leaderboard tracks 3 main lifts + sprint. Selecting an exercise auto-sets the unit.</>
+                : <><BicepsFlexed size={14} style={{ flexShrink: 0 }} /> Personal PRs are visible only to you and can be any exercise.</>}
             </div>
 
             <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -462,8 +462,8 @@ export default function LeaderboardPage() {
         {/* ── PUBLIC LEADERBOARD TAB ── */}
         {activeTab === 'public' && (
           <>
-            <p style={{ fontSize: '0.75rem', marginBottom: '1rem', color: 'var(--vel-text-dim, #4a5a60)' }}>
-              🏆 Monthly leaderboard — resets on the 1st of each month. Past records are archived.
+            <p style={{ fontSize: '0.75rem', marginBottom: '1rem', color: 'var(--vel-text-dim, #4a5a60)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <Trophy size={12} style={{ flexShrink: 0 }} /> Monthly leaderboard — resets on the 1st of each month. Past records are archived.
             </p>
             {/* Featured exercise pills */}
             <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', paddingBottom: '4px', marginBottom: '0.75rem' }}>
@@ -485,14 +485,17 @@ export default function LeaderboardPage() {
             </div>
 
             {/* Member name search */}
-            <input
-              type="text"
-              value={memberSearchInput}
-              onChange={e => { setMemberSearchInput(e.target.value); debouncedSetSearch(e.target.value) }}
-              placeholder="🔍 Search by member name…"
-              style={{ ...inputBase, width: '100%', marginBottom: '0.5rem' }}
-              aria-label="Search leaderboard by member name"
-            />
+            <div style={{ position: 'relative', marginBottom: '0.5rem' }}>
+              <Search size={15} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }} />
+              <input
+                type="text"
+                value={memberSearchInput}
+                onChange={e => { setMemberSearchInput(e.target.value); debouncedSetSearch(e.target.value) }}
+                placeholder="Search by member name…"
+                style={{ ...inputBase, width: '100%', paddingLeft: '2.25rem' }}
+                aria-label="Search leaderboard by member name"
+              />
+            </div>
             {memberSearch && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -500,9 +503,9 @@ export default function LeaderboardPage() {
                 </p>
                 <button
                   onClick={() => { setMemberSearchInput(''); setMemberSearch('') }}
-                  style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}
+                  style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
                 >
-                  Clear ✕
+                  Clear <X size={11} />
                 </button>
               </div>
             )}
@@ -515,8 +518,8 @@ export default function LeaderboardPage() {
                   background: genderFilter === g.key ? 'var(--surface)' : 'transparent',
                   color: genderFilter === g.key ? 'var(--text-primary)' : 'var(--text-secondary)',
                   border: `1px solid ${genderFilter === g.key ? 'var(--teal-primary)' : 'var(--border)'}`,
-                  transition: 'all 0.15s', minHeight: 36,
-                }}>{g.label}</button>
+                  transition: 'all 0.15s', minHeight: 36, display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                }}>{g.icon && <g.icon size={13} />} {g.label}</button>
               ))}
             </div>
 
@@ -538,14 +541,14 @@ export default function LeaderboardPage() {
                   return (
                     <div key={r.id} className="card-vel" style={{ padding: '0.875rem 1rem', background: medal ? `${medal.color}08` : 'var(--surface)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <span style={{ fontSize: '1.1rem', width: '2rem', textAlign: 'center', flexShrink: 0 }}>
-                          {medal ? medal.emoji : `#${i + 1}`}
+                        <span style={{ width: '2rem', display: 'flex', justifyContent: 'center', flexShrink: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                          {medal ? <Medal size={18} style={{ color: medal.color }} /> : `#${i + 1}`}
                         </span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <p style={{ fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {profile?.name ?? '—'}
-                            {profile?.gender === 'male' && <span style={{ marginLeft: '0.25rem', fontSize: '0.7rem', color: '#60a5fa' }}>♂</span>}
-                            {profile?.gender === 'female' && <span style={{ marginLeft: '0.25rem', fontSize: '0.7rem', color: '#f472b6' }}>♀</span>}
+                            {profile?.gender === 'male' && <Mars size={11} style={{ marginLeft: '0.25rem', color: '#60a5fa', display: 'inline', verticalAlign: '-1px' }} />}
+                            {profile?.gender === 'female' && <Venus size={11} style={{ marginLeft: '0.25rem', color: '#f472b6', display: 'inline', verticalAlign: '-1px' }} />}
                           </p>
                           <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.exercise_name ?? r.exercise}</p>
                         </div>
@@ -572,7 +575,7 @@ export default function LeaderboardPage() {
                               padding: '0.3rem 0.625rem', fontSize: '0.75rem', cursor: 'pointer',
                               color: mine ? 'var(--teal-secondary)' : 'var(--text-secondary)', minHeight: 0,
                             }}>
-                              {rx.emoji} {count > 0 && count}
+                              <rx.icon size={13} /> {count > 0 && count}
                             </button>
                           )
                         })}
@@ -580,7 +583,7 @@ export default function LeaderboardPage() {
                           display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'var(--surface-raised)', border: '1px solid var(--border)',
                           borderRadius: '999px', padding: '0.3rem 0.625rem', fontSize: '0.75rem', cursor: 'pointer', color: 'var(--text-secondary)', minHeight: 0,
                         }}>
-                          💬 {comments.length > 0 && comments.length}
+                          <MessageCircle size={13} /> {comments.length > 0 && comments.length}
                         </button>
                       </div>
 

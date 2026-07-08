@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, Mars, Venus, Lock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import VLogo from '@/components/VLogo'
 
@@ -27,9 +27,9 @@ const labelBase: React.CSSProperties = {
   marginBottom: '0.4rem',
 }
 
-const GENDERS = [
-  { key: 'male', label: '♂ Male' },
-  { key: 'female', label: '♀ Female' },
+const GENDERS: { key: string; label: string; icon?: typeof Mars }[] = [
+  { key: 'male', label: 'Male', icon: Mars },
+  { key: 'female', label: 'Female', icon: Venus },
   { key: 'other', label: 'Other' },
   { key: 'prefer_not_to_say', label: 'Prefer not to say' },
 ]
@@ -188,9 +188,10 @@ export default function RegisterForm() {
                       color: gender === g.key ? 'var(--teal-secondary)' : 'var(--text-secondary)',
                       fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.15s',
                       fontWeight: gender === g.key ? 700 : 400, minHeight: 36,
+                      display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
                     }}
                   >
-                    {g.label}
+                    {g.icon && <g.icon size={12} />} {g.label}
                   </button>
                 ))}
               </div>
@@ -247,8 +248,8 @@ export default function RegisterForm() {
                 style={{ ...inputBase, minHeight: '90px', resize: 'vertical', fontFamily: 'inherit' }}
                 placeholder="Any injuries, conditions, or medications your coach should know about"
               />
-              <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
-                🔒 Only visible to you, your coaches, and admins.
+              <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <Lock size={11} /> Only visible to you, your coaches, and admins.
               </p>
             </div>
 

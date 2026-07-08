@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { Trash2, Pencil, Check, X } from 'lucide-react'
+import { Trash2, Pencil, Check, X, Scale, Droplet } from 'lucide-react'
 import {
   normalizeToKg, sortRecords, LOWER_IS_BETTER,
 } from '@/lib/utils'
@@ -333,8 +333,8 @@ export default function AnalyticsPage() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{new Date(m.recorded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                       <p style={{ fontSize: '0.8rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.2rem' }}>
-                        {m.weight_kg != null && <span>⚖️ {m.weight_kg}kg</span>}
-                        {m.body_fat_pct != null && <span>🩸 {m.body_fat_pct}%</span>}
+                        {m.weight_kg != null && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}><Scale size={12} /> {m.weight_kg}kg</span>}
+                        {m.body_fat_pct != null && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}><Droplet size={12} /> {m.body_fat_pct}%</span>}
                         {m.chest_cm != null && <span>Chest {m.chest_cm}cm</span>}
                         {m.waist_cm != null && <span>Waist {m.waist_cm}cm</span>}
                         {m.hips_cm != null && <span>Hips {m.hips_cm}cm</span>}

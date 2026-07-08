@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, CheckCircle2, Check, Lock, Pencil, Trash2 } from 'lucide-react'
 import { getLocalDateString, normalizeToKg } from '@/lib/utils'
 import { TodayPlanCard, SkippedPlansSection, typeBadge } from '@/components/PlanCards'
 
@@ -26,8 +26,8 @@ function CompletedPlansCollapse({ plans, onUndo, undoingId }: { plans: any[]; on
 
   return (
     <div style={{ marginTop: '0.75rem' }}>
-      <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-        ✅ Completed ({plans.length})
+      <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+        <CheckCircle2 size={12} /> Completed ({plans.length})
       </p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
         {visible.map(plan => (
@@ -36,7 +36,7 @@ function CompletedPlansCollapse({ plans, onUndo, undoingId }: { plans: any[]; on
             borderRadius: '0.5rem', padding: '0.625rem 0.875rem',
             display: 'flex', alignItems: 'center', gap: '0.75rem', opacity: 0.7,
           }}>
-            <span style={{ color: '#4ade80', fontWeight: 800, fontSize: '0.8rem' }}>✓</span>
+            <Check size={14} style={{ color: '#4ade80', flexShrink: 0 }} strokeWidth={3} />
             <div style={{ minWidth: 0, flex: 1 }}>
               <p style={{ fontWeight: 600, fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{plan.title}</p>
               <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>
@@ -550,7 +550,7 @@ export default function StudentPage() {
                               <div>
                                 <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                                   {new Date(pr.recorded_at || pr.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                  {!pr.is_public && <span style={{ marginLeft: '0.5rem', fontSize: '0.7rem' }}>🔒</span>}
+                                  {!pr.is_public && <Lock size={11} style={{ marginLeft: '0.5rem', display: 'inline', verticalAlign: '-1px' }} />}
                                 </p>
                               </div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
@@ -564,7 +564,7 @@ export default function StudentPage() {
                                   onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal-primary)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--teal-secondary)' }}
                                   onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)' }}
                                 >
-                                  ✏️
+                                  <Pencil size={12} />
                                 </button>
                                 {/* Delete button */}
                                 <button
@@ -580,7 +580,7 @@ export default function StudentPage() {
                                   onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#ef4444'; (e.currentTarget as HTMLButtonElement).style.color = '#ef4444' }}
                                   onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)' }}
                                 >
-                                  🗑️
+                                  <Trash2 size={12} />
                                 </button>
                               </div>
                             </>

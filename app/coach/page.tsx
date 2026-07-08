@@ -4,7 +4,8 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { ChevronDown, ChevronUp, Trash2, Pencil, Plus, Calendar } from 'lucide-react'
+import { ChevronDown, ChevronUp, Trash2, Pencil, Plus, Calendar, Timer, Mars, Venus, Users, X, AlertTriangle, Target, CheckCircle2, Circle, XCircle, UserCog, ClipboardList, Check, Dumbbell, BicepsFlexed, Save, Pin, Eye, EyeOff, ArrowDown } from 'lucide-react'
+import BasketballIcon from '@/components/icons/BasketballIcon'
 import { getLocalDateString, formatLocalDate } from '@/lib/utils'
 import CalendarGrid, { CalendarEntry } from '@/components/CalendarGrid'
 
@@ -18,6 +19,11 @@ const inputBase: React.CSSProperties = {
 const labelBase: React.CSSProperties = {
   display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)',
   textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.375rem',
+}
+function typeIconFor(t: string) {
+  if (t === 'conditioning') return Dumbbell
+  if (t === 'basketball') return BasketballIcon
+  return BicepsFlexed
 }
 
 const STRENGTH_EXERCISES = [
@@ -84,7 +90,7 @@ function WorkoutHistoryCard({ workout, supabase }: { workout: any; supabase: any
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', ...tb }}>{workout.type}</span>
-            {workout.duration && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>⏱ {workout.duration}min</span>}
+            {workout.duration && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}><Timer size={11} /> {workout.duration}min</span>}
           </div>
           <p style={{ fontWeight: 600, fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{workout.title}</p>
           <p style={{ fontSize: '0.7rem', marginTop: '0.15rem', color: 'var(--text-secondary)' }}>
@@ -174,21 +180,25 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
             <div>
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>{memberName}</h2>
               <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem', fontSize: '0.7rem', color: 'var(--text-secondary)', flexWrap: 'wrap', alignItems: 'center' }}>
-                {profile?.gender && <span>{profile.gender === 'male' ? '♂ Male' : profile.gender === 'female' ? '♀ Female' : profile.gender}</span>}
+                {profile?.gender && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                    {profile.gender === 'male' ? <><Mars size={11} /> Male</> : profile.gender === 'female' ? <><Venus size={11} /> Female</> : profile.gender}
+                  </span>
+                )}
                 {profile?.age && <span>Age {profile.age}</span>}
                 {profile?.weight_kg && <span>{profile.weight_kg} {profile.weight_unit || 'kg'}</span>}
                 {profile?.city && <span>{profile.city}</span>}
                 {profile?.contact_number && <span>{profile.contact_number}</span>}
                 {profile?.created_at && <span>Since {new Date(profile.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>}
                 {memberGroups.map(g => (
-                  <span key={g.id} style={{ fontSize: '0.7rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '999px', background: 'rgba(8,119,160,0.15)', color: 'var(--teal-secondary)', border: '1px solid rgba(8,119,160,0.3)' }}>
-                    👥 {g.name}
+                  <span key={g.id} style={{ fontSize: '0.7rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '999px', background: 'rgba(8,119,160,0.15)', color: 'var(--teal-secondary)', border: '1px solid rgba(8,119,160,0.3)', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                    <Users size={10} /> {g.name}
                   </span>
                 ))}
               </div>
             </div>
           </div>
-          <button onClick={onClose} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0, minHeight: 0 }}>✕</button>
+          <button onClick={onClose} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0, minHeight: 0 }}><X size={16} /></button>
         </div>
         {/* Stats */}
         {!loadingModal && (
@@ -239,13 +249,13 @@ function MemberProfileModal({ memberId, memberName, onClose }: { memberId: strin
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   {profile?.medical_info && (
                     <div style={{ background: 'rgba(245,158,11,0.08)', borderLeft: '3px solid #f59e0b', borderRadius: '0.5rem', padding: '0.75rem 1rem' }}>
-                      <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#f59e0b', marginBottom: '0.35rem' }}>⚠️ Medical / Injury Info</p>
+                      <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#f59e0b', marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}><AlertTriangle size={11} /> Medical / Injury Info</p>
                       <p style={{ fontSize: '0.8rem', color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{profile.medical_info}</p>
                     </div>
                   )}
                   {profile?.goals && (
                     <div style={{ background: 'rgba(8,119,160,0.08)', borderLeft: '3px solid var(--teal-primary)', borderRadius: '0.5rem', padding: '0.75rem 1rem' }}>
-                      <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--teal-secondary)', marginBottom: '0.35rem' }}>🎯 Goals</p>
+                      <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--teal-secondary)', marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}><Target size={11} /> Goals</p>
                       <p style={{ fontSize: '0.8rem', color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{profile.goals}</p>
                     </div>
                   )}
@@ -437,17 +447,17 @@ function AssignProgramModal({ program, members, groups, supabase, onClose }: { p
       <div style={{ width: '100%', maxWidth: '480px', maxHeight: '85vh', overflowY: 'auto', borderRadius: '1rem', background: 'var(--surface)', border: '1px solid var(--border)', padding: '1.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
           <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>ASSIGN “{program.title}”</h2>
-          <button onClick={onClose} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0, minHeight: 0 }}>✕</button>
+          <button onClick={onClose} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0, minHeight: 0 }}><X size={16} /></button>
         </div>
         {done ? (
           <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
-            <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>✅</p>
+            <CheckCircle2 size={32} style={{ color: '#4ade80', marginBottom: '0.5rem' }} />
             <p style={{ color: 'var(--text-primary)', fontSize: '0.95rem', fontWeight: 600, marginBottom: '1rem' }}>Assigned to {selected.length} member{selected.length === 1 ? '' : 's'}!</p>
             <button onClick={onClose} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.7rem 1.5rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>Done</button>
           </div>
         ) : assignError ? (
           <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
-            <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⚠️</p>
+            <AlertTriangle size={32} style={{ color: '#f59e0b', marginBottom: '0.5rem' }} />
             <p style={{ color: 'var(--text-primary)', fontSize: '0.95rem', fontWeight: 600, marginBottom: '0.75rem' }}>Assignment partially failed</p>
             <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.5rem', padding: '0.875rem', marginBottom: '1rem', textAlign: 'left' }}>
               <p style={{ color: '#fca5a5', fontSize: '0.8rem', lineHeight: 1.5 }}>{assignError}</p>
@@ -746,9 +756,10 @@ export default function CoachPage() {
     setCalLoading(true)
     const year = calendarMonth.getFullYear()
     const month = calendarMonth.getMonth()
-    const startOfMonth = `${year}-${String(month + 1).padStart(2, '0')}-01`
-    const endOfMonth = new Date(year, month + 1, 0)
-    const endStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(endOfMonth.getDate()).padStart(2, '0')}`
+    // Padded by a week on each side so week-view rows that straddle a month boundary still have
+    // their adjacent-month days' data loaded (CalendarGrid's week mode can show days outside `month`).
+    const startOfMonth = formatLocalDate(new Date(year, month, 1 - 7))
+    const endStr = formatLocalDate(new Date(year, month + 1, 0 + 7))
 
     // Logged workouts (what an athlete has DONE)
     let query = supabase
@@ -1423,11 +1434,11 @@ export default function CoachPage() {
     basketball: '#34bac2', conditioning: '#4ade80', both: '#c084fc',
   }
 
-  const PLAN_STATUS: Record<string, { label: string; color: string }> = {
-    pending: { label: '🟡 Pending', color: '#f59e0b' },
-    completed: { label: '✅ Completed', color: '#22c55e' },
-    skipped: { label: '❌ Missed', color: '#ef4444' },
-    rescheduled: { label: '📅 Rescheduled', color: '#60a5fa' },
+  const PLAN_STATUS: Record<string, { label: string; color: string; icon: typeof Circle }> = {
+    pending: { label: 'Pending', color: '#f59e0b', icon: Circle },
+    completed: { label: 'Completed', color: '#22c55e', icon: CheckCircle2 },
+    skipped: { label: 'Missed', color: '#ef4444', icon: XCircle },
+    rescheduled: { label: 'Rescheduled', color: '#60a5fa', icon: Calendar },
   }
 
   const pendingPlanCount = assignedPlans.filter(p => p.status === 'pending' || p.status === 'rescheduled').length
@@ -1666,13 +1677,14 @@ export default function CoachPage() {
 
                     return (
                       <div key={m.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', overflow: 'hidden' }}>
-                        <button onClick={() => toggleMember(m.id)} style={{ width: '100%', background: 'none', border: 'none', padding: '1.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--text-primary)' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem', minWidth: 0, textAlign: 'left' }}>
+                        <button onClick={() => toggleMember(m.id)} className="coach-member-header" style={{ width: '100%', background: 'none', border: 'none', padding: '1.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--text-primary)' }}>
+                          <div className="coach-member-name-wrap" style={{ display: 'flex', alignItems: 'center', gap: '0.875rem', minWidth: 0, textAlign: 'left' }}>
                             {/* Activity dot */}
                             <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: actColor, flexShrink: 0 }} title={`Last workout: ${m.lastWorkout ? new Date(m.lastWorkout).toLocaleDateString() : 'Never'}`} />
                             <div style={{ minWidth: 0 }}>
                               <h3
                                 onClick={e => { e.stopPropagation(); setSelectedMemberProfile({ id: m.id, name: m.name }) }}
+                                className="coach-member-name"
                                 style={{ fontWeight: 600, marginBottom: '0.1rem', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(52,186,194,0.4)', textUnderlineOffset: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                               >{m.name}</h3>
                               <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1691,7 +1703,7 @@ export default function CoachPage() {
                               )}
                             </div>
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                          <div className="coach-member-actions" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
                             {/* Assign Plan shortcut */}
                             <button
                               onClick={e => {
@@ -1699,18 +1711,21 @@ export default function CoachPage() {
                                 setAssignForm(p => ({ ...p, member_id: m.id }))
                                 switchTab('assign')
                               }}
+                              className="coach-action-btn"
                               style={{ background: 'rgba(8,119,160,0.15)', border: '1px solid rgba(8,119,160,0.35)', borderRadius: '0.375rem', padding: '0.3rem 0.5rem', color: 'var(--teal-secondary)', fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 0 }}
                             >
                               + Plan
                             </button>
                             <button
                               onClick={e => { e.stopPropagation(); setMemberFilter(m.id); switchTab('calendar') }}
+                              className="coach-action-btn"
                               style={{ background: 'rgba(8,119,160,0.15)', border: '1px solid rgba(8,119,160,0.35)', borderRadius: '0.375rem', padding: '0.3rem 0.5rem', color: 'var(--teal-secondary)', fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', minHeight: 0 }}
                             >
                               <Calendar size={11} /> Calendar
                             </button>
                             <button
                               onClick={e => { e.stopPropagation(); handleRemoveAthlete(m.id, m.name) }}
+                              className="coach-action-btn"
                               style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.3rem 0.5rem', color: '#f87171', fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 0 }}
                             >
                               Remove
@@ -1851,9 +1866,9 @@ export default function CoachPage() {
                             border: 'none',
                             background: templateSource === src ? 'var(--teal-primary)' : '#1a2e34',
                             color: templateSource === src ? '#fff' : 'var(--text-secondary)',
-                            minHeight: 0,
+                            minHeight: 0, display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
                           }}>
-                          {src === 'shared' ? '👨‍💼 Shared by Coach' : '📋 My Templates'}
+                          {src === 'shared' ? <><UserCog size={11} /> Shared by Coach</> : <><ClipboardList size={11} /> My Templates</>}
                         </button>
                       ))}
                     </div>
@@ -1940,8 +1955,8 @@ export default function CoachPage() {
                   </div>
 
                   {selectedTemplate && (
-                    <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)', marginTop: '0.375rem' }}>
-                      ✓ Loaded: {selectedTemplate.title} — you can still customize
+                    <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)', marginTop: '0.375rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <Check size={12} /> Loaded: {selectedTemplate.title} — you can still customize
                     </p>
                   )}
                 </div>
@@ -1986,15 +2001,19 @@ export default function CoachPage() {
                   <div>
                     <label style={labelBase}>Type</label>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      {(['conditioning', 'basketball', 'both'] as const).map(t => (
-                        <button key={t} type="button" onClick={() => setAssignForm(p => ({ ...p, type: t }))} style={{
-                          background: assignForm.type === t ? 'rgba(8,119,160,0.2)' : '#0d1a1e',
-                          border: `1px solid ${assignForm.type === t ? 'var(--teal-primary)' : '#1a2e34'}`,
-                          borderRadius: '0.375rem', padding: '0.5rem 0.75rem',
-                          color: assignForm.type === t ? 'var(--teal-secondary)' : 'var(--text-secondary)',
-                          fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize', minHeight: 0,
-                        }}>{t === 'conditioning' ? '🏋️' : t === 'basketball' ? '🏀' : '💪'}</button>
-                      ))}
+                      {(['conditioning', 'basketball', 'both'] as const).map(t => {
+                        const TypeIcon = typeIconFor(t)
+                        return (
+                          <button key={t} type="button" onClick={() => setAssignForm(p => ({ ...p, type: t }))} style={{
+                            background: assignForm.type === t ? 'rgba(8,119,160,0.2)' : '#0d1a1e',
+                            border: `1px solid ${assignForm.type === t ? 'var(--teal-primary)' : '#1a2e34'}`,
+                            borderRadius: '0.375rem', padding: '0.5rem 0.75rem',
+                            color: assignForm.type === t ? 'var(--teal-secondary)' : 'var(--text-secondary)',
+                            fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize', minHeight: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}><TypeIcon size={13} /></button>
+                        )
+                      })}
                     </div>
                   </div>
                 </div>
@@ -2075,13 +2094,13 @@ export default function CoachPage() {
                 {/* Save as Template */}
                 <div style={{ marginTop: '0.5rem', paddingTop: '0.875rem', borderTop: '1px solid var(--border)' }}>
                   {templateSaved && (
-                    <div style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.625rem 0.875rem', marginBottom: '0.75rem', color: '#4ade80', fontSize: '0.8rem' }}>
-                      ✅ Template saved!{shareTemplate ? " It's now visible in Shared by Coaches." : ''}
+                    <div style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.625rem 0.875rem', marginBottom: '0.75rem', color: '#4ade80', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <Check size={13} style={{ flexShrink: 0 }} /> Template saved!{shareTemplate ? " It's now visible in Shared by Coaches." : ''}
                     </div>
                   )}
                   {!showSaveTemplate ? (
-                    <button type="button" onClick={() => setShowSaveTemplate(true)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.4rem 0.875rem', color: 'var(--text-secondary)', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0, width: '100%' }}>
-                      💾 Save as Reusable Template
+                    <button type="button" onClick={() => setShowSaveTemplate(true)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.4rem 0.875rem', color: 'var(--text-secondary)', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+                      <Save size={13} /> Save as Reusable Template
                     </button>
                   ) : (
                     <div style={{ background: '#0a1518', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
@@ -2161,11 +2180,11 @@ export default function CoachPage() {
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '0.75rem' }}>ASSIGNED PLANS ({assignedPlans.length})</h2>
               <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.375rem', scrollbarWidth: 'none' }}>
                 {([
-                  { key: 'all', label: 'All', icon: '📋' },
-                  { key: 'pending', label: 'Pending', icon: '🟡' },
-                  { key: 'completed', label: 'Completed', icon: '✅' },
-                  { key: 'skipped', label: 'Missed', icon: '❌' },
-                  { key: 'rescheduled', label: 'Rescheduled', icon: '📅' },
+                  { key: 'all', label: 'All', icon: ClipboardList },
+                  { key: 'pending', label: 'Pending', icon: Circle },
+                  { key: 'completed', label: 'Completed', icon: CheckCircle2 },
+                  { key: 'skipped', label: 'Missed', icon: XCircle },
+                  { key: 'rescheduled', label: 'Rescheduled', icon: Calendar },
                 ] as const).map(tab => (
                   <button
                     key={tab.key}
@@ -2175,10 +2194,10 @@ export default function CoachPage() {
                       background: planStatusFilter === tab.key ? 'var(--teal-primary)' : 'var(--surface-raised)',
                       color: planStatusFilter === tab.key ? '#fff' : 'var(--text-secondary)',
                       border: `1px solid ${planStatusFilter === tab.key ? 'var(--teal-primary)' : 'var(--border)'}`,
-                      minHeight: 0,
+                      minHeight: 0, display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
                     }}
                   >
-                    {tab.icon} {tab.label}
+                    <tab.icon size={12} /> {tab.label}
                   </button>
                 ))}
               </div>
@@ -2266,7 +2285,7 @@ export default function CoachPage() {
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
                                         <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{p.title}</span>
                                         <span style={{ ...tb, fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase' }}>{p.type}</span>
-                                        <span style={{ fontSize: '0.75rem', color: st.color }}>{st.label}</span>
+                                        <span style={{ fontSize: '0.75rem', color: st.color, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}><st.icon size={11} /> {st.label}</span>
                                       </div>
                                       <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                                         {p.member?.name} · {(p.workout_plan_exercises as any[])?.[0]?.count ?? 0} exercises
@@ -2285,9 +2304,9 @@ export default function CoachPage() {
                                           setCompletingPlan(p.id)
                                         }}
                                         disabled={isActingThis}
-                                        style={{ flex: '1 1 auto', background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.35)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: '#4ade80', fontSize: '0.75rem', cursor: isActingThis ? 'not-allowed' : 'pointer', minHeight: 0 }}
+                                        style={{ flex: '1 1 auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.35)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: '#4ade80', fontSize: '0.75rem', cursor: isActingThis ? 'not-allowed' : 'pointer', minHeight: 0 }}
                                       >
-                                        ✅ {isActingThis ? 'Saving…' : isCompletingThis ? 'Cancel' : 'Complete'}
+                                        <CheckCircle2 size={12} /> {isActingThis ? 'Saving…' : isCompletingThis ? 'Cancel' : 'Complete'}
                                       </button>
                                     ) : (
                                       <button
@@ -2305,16 +2324,16 @@ export default function CoachPage() {
                                           setReschedulePlanDate(p.scheduled_date)
                                           setReschedulingPlan(p.id)
                                         }}
-                                        style={{ flex: '1 1 auto', background: isReschedulingThis ? 'rgba(96,165,250,0.15)' : 'none', border: `1px solid ${isReschedulingThis ? '#60a5fa' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: isReschedulingThis ? '#60a5fa' : 'var(--text-secondary)', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}
+                                        style={{ flex: '1 1 auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: isReschedulingThis ? 'rgba(96,165,250,0.15)' : 'none', border: `1px solid ${isReschedulingThis ? '#60a5fa' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: isReschedulingThis ? '#60a5fa' : 'var(--text-secondary)', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}
                                       >
-                                        📅 {isReschedulingThis ? 'Cancel' : 'Reschedule'}
+                                        <Calendar size={12} /> {isReschedulingThis ? 'Cancel' : 'Reschedule'}
                                       </button>
                                     )}
-                                    <button onClick={() => { if (isEditingThis) { setEditingPlan(null); return }; openPlanEdit(p) }} style={{ flex: '1 1 auto', background: isEditingThis ? 'rgba(8,119,160,0.15)' : 'none', border: `1px solid ${isEditingThis ? 'var(--teal-primary)' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: isEditingThis ? 'var(--teal-secondary)' : 'var(--text-secondary)', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
-                                      ✏️ {isEditingThis ? 'Editing…' : 'Edit'}
+                                    <button onClick={() => { if (isEditingThis) { setEditingPlan(null); return }; openPlanEdit(p) }} style={{ flex: '1 1 auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: isEditingThis ? 'rgba(8,119,160,0.15)' : 'none', border: `1px solid ${isEditingThis ? 'var(--teal-primary)' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: isEditingThis ? 'var(--teal-secondary)' : 'var(--text-secondary)', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
+                                      <Pencil size={12} /> {isEditingThis ? 'Editing…' : 'Edit'}
                                     </button>
-                                    <button onClick={() => handleDeletePlan(p.id)} style={{ flex: '1 1 auto', background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: '#f87171', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
-                                      🗑️ Remove
+                                    <button onClick={() => handleDeletePlan(p.id)} style={{ flex: '1 1 auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: '#f87171', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
+                                      <Trash2 size={12} /> Remove
                                     </button>
                                   </div>
 
@@ -2370,14 +2389,18 @@ export default function CoachPage() {
                                       <div>
                                         <label style={labelBase}>Type</label>
                                         <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                          {(['conditioning', 'basketball', 'both'] as const).map(t => (
-                                            <button key={t} type="button" onClick={() => setEditPlanForm((prev: any) => ({ ...prev, type: t }))} style={{
-                                              flex: 1, background: editPlanForm.type === t ? 'rgba(8,119,160,0.2)' : '#0d1a1e',
-                                              border: `1px solid ${editPlanForm.type === t ? 'var(--teal-primary)' : '#1a2e34'}`,
-                                              borderRadius: '0.375rem', padding: '0.4rem', color: editPlanForm.type === t ? 'var(--teal-secondary)' : 'var(--text-secondary)',
-                                              fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize', minHeight: 0,
-                                            }}>{t === 'conditioning' ? '🏋️' : t === 'basketball' ? '🏀' : '💪'}</button>
-                                          ))}
+                                          {(['conditioning', 'basketball', 'both'] as const).map(t => {
+                                            const TypeIcon = typeIconFor(t)
+                                            return (
+                                              <button key={t} type="button" onClick={() => setEditPlanForm((prev: any) => ({ ...prev, type: t }))} style={{
+                                                flex: 1, background: editPlanForm.type === t ? 'rgba(8,119,160,0.2)' : '#0d1a1e',
+                                                border: `1px solid ${editPlanForm.type === t ? 'var(--teal-primary)' : '#1a2e34'}`,
+                                                borderRadius: '0.375rem', padding: '0.4rem', color: editPlanForm.type === t ? 'var(--teal-secondary)' : 'var(--text-secondary)',
+                                                fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize', minHeight: 0,
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                              }}><TypeIcon size={13} /></button>
+                                            )
+                                          })}
                                         </div>
                                       </div>
                                       <div>
@@ -2486,8 +2509,8 @@ export default function CoachPage() {
                     if (w.isPlan) {
                       const isSkipped = w.status === 'skipped'
                       return (
-                        <div key={w.id} style={{ ...badgeStyle, background: 'transparent', color: isSkipped ? '#ef4444' : '#34bac2', border: `1px dashed ${isSkipped ? 'rgba(239,68,68,0.6)' : 'rgba(8,119,160,0.5)'}` }}>
-                          {isSkipped ? '❌' : '📋'} {label}
+                        <div style={{ ...badgeStyle, background: 'transparent', color: isSkipped ? '#ef4444' : '#34bac2', border: `1px dashed ${isSkipped ? 'rgba(239,68,68,0.6)' : 'rgba(8,119,160,0.5)'}`, display: 'flex', alignItems: 'center', gap: '0.15rem' }} key={w.id}>
+                          {isSkipped ? <XCircle size={8} style={{ flexShrink: 0 }} /> : <ClipboardList size={8} style={{ flexShrink: 0 }} />} {label}
                         </div>
                       )
                     }
@@ -2523,8 +2546,8 @@ export default function CoachPage() {
                               <div onClick={() => toggleCalendarPlanExpand(w.id)} style={{ padding: '1rem', cursor: 'pointer' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
                                   <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', ...tb }}>{w.type}</span>
-                                  <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', background: isSkipped ? 'rgba(239,68,68,0.15)' : isCompleted ? 'rgba(34,197,94,0.15)' : 'rgba(8,119,160,0.15)', color: isSkipped ? '#ef4444' : isCompleted ? '#4ade80' : 'var(--teal-secondary)' }}>
-                                    {isSkipped ? '❌ Missed' : isCompleted ? '✅ Completed' : '📋 Assigned'}
+                                  <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', background: isSkipped ? 'rgba(239,68,68,0.15)' : isCompleted ? 'rgba(34,197,94,0.15)' : 'rgba(8,119,160,0.15)', color: isSkipped ? '#ef4444' : isCompleted ? '#4ade80' : 'var(--teal-secondary)', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                    {isSkipped ? <><XCircle size={10} /> Missed</> : isCompleted ? <><CheckCircle2 size={10} /> Completed</> : <><ClipboardList size={10} /> Assigned</>}
                                   </span>
                                 </div>
                                 <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>{w.title}</p>
@@ -2559,22 +2582,22 @@ export default function CoachPage() {
                                       <button
                                         onClick={e => { e.stopPropagation(); handleCompletePlan(w, null).then(() => loadCalendarWorkouts()) }}
                                         disabled={planActionLoading === w.id}
-                                        style={{ flex: '1 1 auto', background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.35)', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', color: '#4ade80', fontSize: '0.75rem', fontWeight: 700, cursor: planActionLoading === w.id ? 'not-allowed' : 'pointer', minHeight: 0 }}
+                                        style={{ flex: '1 1 auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.35)', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', color: '#4ade80', fontSize: '0.75rem', fontWeight: 700, cursor: planActionLoading === w.id ? 'not-allowed' : 'pointer', minHeight: 0 }}
                                       >
-                                        ✅ {planActionLoading === w.id ? 'Saving…' : 'Mark Done'}
+                                        <CheckCircle2 size={12} /> {planActionLoading === w.id ? 'Saving…' : 'Mark Done'}
                                       </button>
                                     )}
                                     <button
                                       onClick={e => { e.stopPropagation(); openPlanEdit(w); switchTab('assigned') }}
-                                      style={{ flex: '1 1 auto', background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
+                                      style={{ flex: '1 1 auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
                                     >
-                                      ✏️ Edit
+                                      <Pencil size={12} /> Edit
                                     </button>
                                     <button
                                       onClick={e => { e.stopPropagation(); handleDeletePlan(w.id).then(() => loadCalendarWorkouts()) }}
-                                      style={{ flex: '1 1 auto', background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', color: '#f87171', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
+                                      style={{ flex: '1 1 auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', color: '#f87171', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
                                     >
-                                      🗑️ Remove
+                                      <Trash2 size={12} /> Remove
                                     </button>
                                   </div>
                                 </div>
@@ -2670,7 +2693,7 @@ export default function CoachPage() {
                   <div style={{ padding: '1rem 1.25rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.5rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-                        {note.is_pinned && <span style={{ fontSize: '0.75rem' }}>📌</span>}
+                        {note.is_pinned && <Pin size={12} style={{ color: 'var(--teal-secondary)', flexShrink: 0 }} />}
                         <p style={{ fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {note.member?.name ?? 'General note'}
                         </p>
@@ -2687,7 +2710,7 @@ export default function CoachPage() {
                           style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.25rem 0.5rem', fontSize: '0.7rem', cursor: 'pointer', color: note.is_pinned ? 'var(--teal-secondary)' : 'var(--text-secondary)', minHeight: 0 }}
                           title={note.is_pinned ? 'Unpin' : 'Pin'}
                         >
-                          📌
+                          <Pin size={12} />
                         </button>
                         {/* Visibility toggle */}
                         <button
@@ -2695,21 +2718,21 @@ export default function CoachPage() {
                           style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.25rem 0.5rem', fontSize: '0.7rem', cursor: 'pointer', color: note.visible_to_member ? 'var(--teal-secondary)' : 'var(--text-secondary)', minHeight: 0 }}
                           title={note.visible_to_member ? 'Hide from member' : 'Show to member'}
                         >
-                          {note.visible_to_member ? '👁' : '🙈'}
+                          {note.visible_to_member ? <Eye size={12} /> : <EyeOff size={12} />}
                         </button>
                         {/* Edit */}
                         <button
                           onClick={() => { setEditingNote(note.id); setEditText(note.note) }}
                           style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.25rem 0.5rem', fontSize: '0.7rem', cursor: 'pointer', color: 'var(--text-secondary)', minHeight: 0 }}
                         >
-                          ✏️
+                          <Pencil size={12} />
                         </button>
                         {/* Delete */}
                         <button
                           onClick={() => confirm('Delete this note?') && handleDeleteNote(note.id)}
                           style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.25rem 0.5rem', fontSize: '0.7rem', cursor: 'pointer', color: '#f87171', minHeight: 0 }}
                         >
-                          🗑
+                          <Trash2 size={12} />
                         </button>
                       </div>
                     </div>
@@ -2834,9 +2857,9 @@ export default function CoachPage() {
                       background: programWeek === w ? 'var(--teal-primary)' : 'var(--surface)',
                       color: programWeek === w ? '#fff' : 'var(--text-secondary)',
                       border: `1px solid ${programWeek === w ? 'var(--teal-primary)' : 'var(--border)'}`,
-                      minHeight: 36,
+                      minHeight: 36, display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
                     }}>
-                      Wk {w}{Number(programForm.deload_week) === w ? ' 🔻' : ''}
+                      Wk {w}{Number(programForm.deload_week) === w && <ArrowDown size={11} />}
                     </button>
                   ))}
                 </div>
@@ -2988,6 +3011,13 @@ export default function CoachPage() {
       <style>{`
         @media (max-width: 760px) {
           .coach-overview { grid-template-columns: 1fr !important; }
+        }
+        @media (max-width: 640px) {
+          .coach-member-header { flex-direction: column !important; align-items: flex-start !important; gap: 0.75rem !important; }
+          .coach-member-name-wrap { width: 100%; }
+          .coach-member-name { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; word-break: break-word; }
+          .coach-member-actions { width: 100%; flex-wrap: wrap !important; justify-content: flex-start !important; }
+          .coach-action-btn { min-height: 44px; }
         }
       `}</style>
     </div>

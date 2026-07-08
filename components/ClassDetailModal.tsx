@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Repeat, ClipboardList, Pencil, X, MapPin, Flag, Check, CheckCircle2, SkipForward } from 'lucide-react'
 
 export function classTypeColor(type: string): { bg: string; color: string } {
   if (type === 'basketball') return { bg: 'rgba(30,58,95,0.8)', color: '#60a5fa' }
@@ -319,8 +319,8 @@ export default function ClassDetailModal({
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '999px', textTransform: 'uppercase', background: tc.bg, color: tc.color }}>{cls.type?.toUpperCase()}</span>
-                {cls.is_recurring && <span style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem', borderRadius: '999px', background: 'var(--surface-raised)', color: 'var(--text-secondary)' }}>🔁 Recurring {cls.recurrence_rule}</span>}
-                {cls.isPlan && <span style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem', borderRadius: '999px', background: 'rgba(8,119,160,0.2)', color: 'var(--teal-secondary)' }}>📋 Workout Plan</span>}
+                {cls.is_recurring && <span style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem', borderRadius: '999px', background: 'var(--surface-raised)', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}><Repeat size={10} /> Recurring {cls.recurrence_rule}</span>}
+                {cls.isPlan && <span style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem', borderRadius: '999px', background: 'rgba(8,119,160,0.2)', color: 'var(--teal-secondary)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}><ClipboardList size={10} /> Workout Plan</span>}
               </div>
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.75rem', letterSpacing: '0.03em' }}>{cls.title}</h2>
               {cls.description && <p style={{ fontSize: '0.875rem', marginTop: '0.25rem', color: 'var(--text-secondary)' }}>{cls.description}</p>}
@@ -329,12 +329,12 @@ export default function ClassDetailModal({
               {(userRole === 'admin' || userRole === 'coach') && !cls.isPlan && !isEditing && (
                 <button
                   onClick={() => setIsEditing(true)}
-                  style={{ padding: '0.4rem 0.875rem', borderRadius: '0.375rem', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, minHeight: 0 }}
+                  style={{ padding: '0.4rem 0.875rem', borderRadius: '0.375rem', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, minHeight: 0, display: 'flex', alignItems: 'center', gap: '0.3rem' }}
                 >
-                  ✏️ Edit
+                  <Pencil size={13} /> Edit
                 </button>
               )}
-              <button onClick={onClose} style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.875rem', minHeight: 0 }}>✕</button>
+              <button onClick={onClose} style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.875rem', minHeight: 0 }}><X size={16} /></button>
             </div>
           </div>
         </div>
@@ -445,7 +445,7 @@ export default function ClassDetailModal({
           {cls.location && (
             <div style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.75rem', gridColumn: '1 / -1' }}>
               <p style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Location</p>
-              <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>📍 {cls.location}</p>
+              <p style={{ fontWeight: 600, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}><MapPin size={13} /> {cls.location}</p>
             </div>
           )}
           {cls.is_recurring && cls.recurrence_end_date && (
@@ -465,8 +465,8 @@ export default function ClassDetailModal({
         {!cls.isPlan && (userRole === 'member' || userRole === 'admin') && (
           <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
             {isPastClass ? (
-              <div style={{ textAlign: 'center', padding: '0.75rem', background: 'var(--surface-raised)', borderRadius: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-                🏁 Class has ended
+              <div style={{ textAlign: 'center', padding: '0.75rem', background: 'var(--surface-raised)', borderRadius: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+                <Flag size={14} /> Class has ended
               </div>
             ) : (
               <>
@@ -478,11 +478,11 @@ export default function ClassDetailModal({
                 <button
                   onClick={handleRSVP}
                   disabled={rsvpLoading}
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 700, fontSize: '0.9rem', cursor: rsvpLoading ? 'not-allowed' : 'pointer', background: myAttendance ? 'transparent' : 'var(--teal-primary)', color: myAttendance ? '#ef4444' : 'white', border: myAttendance ? '1px solid rgba(239,68,68,0.4)' : 'none' }}
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 700, fontSize: '0.9rem', cursor: rsvpLoading ? 'not-allowed' : 'pointer', background: myAttendance ? 'transparent' : 'var(--teal-primary)', color: myAttendance ? '#ef4444' : 'white', border: myAttendance ? '1px solid rgba(239,68,68,0.4)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
                 >
-                  {rsvpLoading ? '…' : myAttendance ? '✕ Remove Attendance' : '✓ I\'m Attending'}
+                  {rsvpLoading ? '…' : myAttendance ? <><X size={15} /> Remove Attendance</> : <><Check size={15} /> I&apos;m Attending</>}
                 </button>
-                {myAttendance && <p style={{ fontSize: '0.75rem', textAlign: 'center', marginTop: '0.5rem', color: '#4ade80' }}>✅ You&apos;re marked as attending this class</p>}
+                {myAttendance && <p style={{ fontSize: '0.75rem', textAlign: 'center', marginTop: '0.5rem', color: '#4ade80', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem' }}><CheckCircle2 size={13} /> You&apos;re marked as attending this class</p>}
               </>
             )}
           </div>
@@ -526,7 +526,7 @@ export default function ClassDetailModal({
 
             {cls.status === 'completed' ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
-                <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#4ade80' }}>✅ Completed</span>
+                <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#4ade80', display: 'flex', alignItems: 'center', gap: '0.35rem' }}><CheckCircle2 size={15} /> Completed</span>
                 <button
                   onClick={async () => {
                     setPlanActionLoading(true)
@@ -638,9 +638,9 @@ export default function ClassDetailModal({
                       onClose(); onUpdate()
                     }}
                     disabled={planActionLoading}
-                    style={{ flex: 1, background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.75rem', fontWeight: 700, fontSize: '0.875rem', cursor: planActionLoading ? 'not-allowed' : 'pointer', opacity: planActionLoading ? 0.7 : 1 }}
+                    style={{ flex: 1, background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.75rem', fontWeight: 700, fontSize: '0.875rem', cursor: planActionLoading ? 'not-allowed' : 'pointer', opacity: planActionLoading ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
                   >
-                    ✅ Mark Done
+                    <CheckCircle2 size={15} /> Mark Done
                   </button>
                   <button
                     onClick={async () => {
@@ -650,9 +650,9 @@ export default function ClassDetailModal({
                       onClose(); onUpdate()
                     }}
                     disabled={planActionLoading}
-                    style={{ background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.75rem 1rem', fontSize: '0.875rem', cursor: 'pointer' }}
+                    style={{ background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.75rem 1rem', fontSize: '0.875rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
                   >
-                    ⏭️ Skip
+                    <SkipForward size={15} /> Skip
                   </button>
                 </div>
               </>
@@ -668,9 +668,9 @@ export default function ClassDetailModal({
               {(userRole === 'admin' || userRole === 'coach') && (
                 <button
                   onClick={() => { setShowAddAttendee(o => !o); setAddAttendeeError('') }}
-                  style={{ padding: '0.3rem 0.7rem', borderRadius: '0.375rem', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: 'var(--teal-secondary)', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, minHeight: 0, flexShrink: 0 }}
+                  style={{ padding: '0.3rem 0.7rem', borderRadius: '0.375rem', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: 'var(--teal-secondary)', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, minHeight: 0, flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
                 >
-                  {showAddAttendee ? '✕ Cancel' : '+ Add Attendee'}
+                  {showAddAttendee ? <><X size={12} /> Cancel</> : '+ Add Attendee'}
                 </button>
               )}
             </div>
@@ -762,9 +762,9 @@ export default function ClassDetailModal({
         {/* Delete options (admin/coach only) */}
         {(userRole === 'admin' || userRole === 'coach') && !cls.isPlan && (
           <div style={{ padding: '0 1.5rem 1.25rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <button onClick={handleDeleteClass} style={{ flex: 1, background: 'transparent', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.5rem', color: '#f87171', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0 }}>🗑️ Delete This Class</button>
+            <button onClick={handleDeleteClass} style={{ flex: 1, background: 'transparent', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.5rem', color: '#f87171', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}><Trash2 size={13} /> Delete This Class</button>
             {cls.is_recurring && (
-              <button onClick={handleDeleteSeries} style={{ flex: 1, background: 'transparent', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.5rem', color: '#f87171', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0 }}>🗑️ Delete Entire Series</button>
+              <button onClick={handleDeleteSeries} style={{ flex: 1, background: 'transparent', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.5rem', color: '#f87171', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}><Trash2 size={13} /> Delete Entire Series</button>
             )}
           </div>
         )}

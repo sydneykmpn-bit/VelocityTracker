@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Dumbbell, Armchair, Skull, ArrowUp, RefreshCw, Target, Wind, Zap, Footprints, BicepsFlexed, ClipboardList, Check, Save, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { getLocalDateString } from '@/lib/utils'
+import BasketballIcon from '@/components/icons/BasketballIcon'
 
 type WorkoutType = 'conditioning' | 'basketball' | 'both'
 
@@ -29,34 +30,34 @@ const blank = (): Exercise => ({
   drillCategory: 'Shooting',
 })
 
-const FEATURED_EXERCISES_BY_TYPE: Record<string, { name: string; icon: string }[]> = {
+const FEATURED_EXERCISES_BY_TYPE: Record<string, { name: string; icon: typeof Dumbbell }[]> = {
   conditioning: [
-    { name: 'Back Squat', icon: '🏋️' },
-    { name: 'Bench Press', icon: '🛋️' },
-    { name: 'Deadlift', icon: '💀' },
-    { name: 'Overhead Press', icon: '☝️' },
-    { name: 'Barbell Row', icon: '🔄' },
-    { name: 'Pull Up', icon: '⬆️' },
+    { name: 'Back Squat', icon: Dumbbell },
+    { name: 'Bench Press', icon: Armchair },
+    { name: 'Deadlift', icon: Skull },
+    { name: 'Overhead Press', icon: ArrowUp },
+    { name: 'Barbell Row', icon: RefreshCw },
+    { name: 'Pull Up', icon: ArrowUp },
   ],
   basketball: [
-    { name: 'Free Throw %', icon: '🎯' },
-    { name: 'Sprint 20m', icon: '💨' },
-    { name: 'Sprint', icon: '💨' },
-    { name: 'Vertical Jump', icon: '⬆️' },
-    { name: '3-Point %', icon: '🏀' },
-    { name: 'Agility T-Test', icon: '⚡' },
+    { name: 'Free Throw %', icon: Target },
+    { name: 'Sprint 20m', icon: Wind },
+    { name: 'Sprint', icon: Wind },
+    { name: 'Vertical Jump', icon: ArrowUp },
+    { name: '3-Point %', icon: BasketballIcon },
+    { name: 'Agility T-Test', icon: Zap },
   ],
   both: [
-    { name: 'Back Squat', icon: '🏋️' },
-    { name: 'Sprint', icon: '💨' },
-    { name: 'Deadlift', icon: '💀' },
-    { name: 'Vertical Jump', icon: '⬆️' },
+    { name: 'Back Squat', icon: Dumbbell },
+    { name: 'Sprint', icon: Wind },
+    { name: 'Deadlift', icon: Skull },
+    { name: 'Vertical Jump', icon: ArrowUp },
   ],
 }
 
-const RUNNING_EXERCISES: { name: string; icon: string }[] = [
-  { name: 'Run / Jog', icon: '🏃' },
-  { name: 'Treadmill', icon: '🏃' },
+const RUNNING_EXERCISES: { name: string; icon: typeof Dumbbell }[] = [
+  { name: 'Run / Jog', icon: Footprints },
+  { name: 'Treadmill', icon: Footprints },
 ]
 
 function isRunningExercise(name: string): boolean {
@@ -373,10 +374,10 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
     router.refresh()
   }
 
-  const typeOptions: { value: WorkoutType; emoji: string; label: string; sub: string }[] = [
-    { value: 'conditioning', emoji: '🏋️', label: 'Conditioning', sub: 'Strength & cardio' },
-    { value: 'basketball', emoji: '🏀', label: 'Basketball', sub: 'Drills & skill work' },
-    { value: 'both', emoji: '💪', label: 'Both', sub: 'Combined session' },
+  const typeOptions: { value: WorkoutType; icon: typeof Dumbbell; label: string; sub: string }[] = [
+    { value: 'conditioning', icon: Dumbbell, label: 'Conditioning', sub: 'Strength & cardio' },
+    { value: 'basketball', icon: BasketballIcon, label: 'Basketball', sub: 'Drills & skill work' },
+    { value: 'both', icon: BicepsFlexed, label: 'Both', sub: 'Combined session' },
   ]
 
   return (
@@ -400,11 +401,11 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
                   style={{
                     padding: '0.3rem 0.75rem', borderRadius: '999px',
                     fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer',
-                    border: 'none',
+                    border: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
                     background: templateSource === src ? 'var(--teal-primary)' : '#1a2e34',
                     color: templateSource === src ? '#fff' : 'var(--text-secondary)',
                   }}>
-                  {src === 'shared' ? '👨‍💼 Shared by Coach' : '📋 My Templates'}
+                  {src === 'shared' ? <><Users size={11} /> Shared by Coach</> : <><ClipboardList size={11} /> My Templates</>}
                 </button>
               ))}
             </div>
@@ -495,8 +496,8 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
           </div>
 
           {selectedTemplate && (
-            <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)', marginTop: '0.375rem' }}>
-              ✓ Loaded: {selectedTemplate.title} — you can still customize
+            <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)', marginTop: '0.375rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              <Check size={12} /> Loaded: {selectedTemplate.title} — you can still customize
             </p>
           )}
         </div>
@@ -513,7 +514,7 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
               borderRadius: '0.5rem', padding: '1rem 0.75rem',
               color: '#F2F2F2', cursor: 'pointer', textAlign: 'center', transition: 'all 0.2s',
             }}>
-              <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>{opt.emoji}</div>
+              <div style={{ marginBottom: '0.25rem', display: 'flex', justifyContent: 'center' }}><opt.icon size={24} /></div>
               <div style={{ fontSize: '0.8rem', fontWeight: 700 }}>{opt.label}</div>
               <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>{opt.sub}</div>
             </button>
@@ -682,7 +683,7 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
                       onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal-primary)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--teal-secondary)' }}
                       onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1a2e34'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)' }}
                     >
-                      {ex.icon} {ex.name}
+                      <ex.icon size={14} /> {ex.name}
                     </button>
                   )
                 })}
@@ -725,6 +726,7 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
                             fontWeight: 700,
                             cursor: 'pointer',
                             border: 'none',
+                            display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
                             background: ex.section === sec
                               ? sec === 'basketball' ? 'rgba(8,119,160,0.3)' : 'rgba(34,197,94,0.2)'
                               : '#1a2e34',
@@ -733,7 +735,7 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
                               : 'var(--text-secondary)',
                           }}
                         >
-                          {sec === 'basketball' ? '🏀 Basketball' : '🏋️ Conditioning'}
+                          {sec === 'basketball' ? <><BasketballIcon size={11} /> Basketball</> : <><Dumbbell size={11} /> Conditioning</>}
                         </button>
                       ))}
                     </div>
@@ -891,17 +893,17 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
       {/* Save as Template */}
       <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
         {templateSaved && (
-          <div style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '0.75rem', color: '#4ade80', fontSize: '0.875rem' }}>
-            ✅ Template saved! Find it in the Templates library.
+          <div style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '0.75rem', color: '#4ade80', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <Check size={15} /> Template saved! Find it in the Templates library.
           </div>
         )}
         {!showSaveTemplate ? (
           <button
             type="button"
             onClick={() => setShowSaveTemplate(true)}
-            style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.6rem 1rem', color: 'var(--text-secondary)', fontSize: '0.875rem', cursor: 'pointer', width: '100%' }}
+            style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.6rem 1rem', color: 'var(--text-secondary)', fontSize: '0.875rem', cursor: 'pointer', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
           >
-            💾 Save Current Workout as Template
+            <Save size={15} /> Save Current Workout as Template
           </button>
         ) : (
           <div style={{ background: '#0a1518', border: '1px solid #1a2e34', borderRadius: '0.75rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -931,7 +933,7 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
                   <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Share with other coaches</span>
                 </label>
                 {shareTemplate && (
-                  <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)' }}>✓ This template will appear in the "Shared by Coaches" tab for all coaches</p>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}><Check size={11} /> This template will appear in the "Shared by Coaches" tab for all coaches</p>
                 )}
               </div>
             )}

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Mars, Venus, AlertTriangle, Lock, CheckCircle2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 const inputBase: React.CSSProperties = {
@@ -14,9 +14,9 @@ const labelBase: React.CSSProperties = {
   textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem',
 }
 
-const GENDERS = [
-  { value: 'male', label: '♂ Male' },
-  { value: 'female', label: '♀ Female' },
+const GENDERS: { value: string; label: string; icon?: typeof Mars }[] = [
+  { value: 'male', label: 'Male', icon: Mars },
+  { value: 'female', label: 'Female', icon: Venus },
   { value: 'other', label: 'Other' },
 ]
 
@@ -178,8 +178,8 @@ export default function ProfilePage() {
         </div>
 
         {!profile?.gender && (
-          <div style={{ background: 'rgba(8,119,160,0.1)', color: 'var(--teal-secondary)', border: '1px solid rgba(8,119,160,0.3)', borderRadius: '0.75rem', padding: '1rem', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
-            ⚠️ Set your gender to appear on the leaderboard. Gender is required for leaderboard visibility.
+          <div style={{ background: 'rgba(8,119,160,0.1)', color: 'var(--teal-secondary)', border: '1px solid rgba(8,119,160,0.3)', borderRadius: '0.75rem', padding: '1rem', marginBottom: '1.5rem', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <AlertTriangle size={15} style={{ flexShrink: 0 }} /> Set your gender to appear on the leaderboard. Gender is required for leaderboard visibility.
           </div>
         )}
 
@@ -208,10 +208,10 @@ export default function ProfilePage() {
                     background: form.gender === g.value ? 'var(--teal-primary)' : 'var(--surface-raised)',
                     color: form.gender === g.value ? '#fff' : 'var(--text-secondary)',
                     border: `1px solid ${form.gender === g.value ? 'var(--teal-primary)' : 'var(--border)'}`,
-                    minHeight: 0,
+                    minHeight: 0, display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
                   }}
                 >
-                  {g.label}
+                  {g.icon && <g.icon size={13} />} {g.label}
                 </button>
               ))}
             </div>
@@ -279,8 +279,8 @@ export default function ProfilePage() {
               style={{ ...inputBase, minHeight: '90px', resize: 'vertical', fontFamily: 'inherit' }}
               placeholder="Any injuries, conditions, or medications your coach should know about"
             />
-            <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
-              🔒 Visible to your coaches and admins only.
+            <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              <Lock size={11} /> Visible to your coaches and admins only.
             </p>
           </div>
 
@@ -303,7 +303,7 @@ export default function ProfilePage() {
           </div>
 
           {error && <p style={{ fontSize: '0.875rem', color: '#fca5a5' }}>{error}</p>}
-          {success && <p style={{ fontSize: '0.875rem', color: '#4ade80' }}>✅ Profile saved successfully!</p>}
+          {success && <p style={{ fontSize: '0.875rem', color: '#4ade80', display: 'flex', alignItems: 'center', gap: '0.3rem' }}><CheckCircle2 size={14} /> Profile saved successfully!</p>}
 
           <button onClick={handleSave} disabled={saving} style={{
             background: saving ? '#0d1a1e' : 'var(--teal-primary)', color: 'white',
@@ -373,7 +373,7 @@ export default function ProfilePage() {
               </div>
 
               {passwordError && <p style={{ fontSize: '0.875rem', color: '#fca5a5' }}>{passwordError}</p>}
-              {passwordSuccess && <p style={{ fontSize: '0.875rem', color: '#4ade80' }}>✅ Password changed successfully!</p>}
+              {passwordSuccess && <p style={{ fontSize: '0.875rem', color: '#4ade80', display: 'flex', alignItems: 'center', gap: '0.3rem' }}><CheckCircle2 size={14} /> Password changed successfully!</p>}
 
               <button onClick={handlePasswordChange} disabled={passwordSaving} style={{
                 background: passwordSaving ? '#0d1a1e' : 'var(--teal-primary)', color: 'white',
@@ -425,7 +425,7 @@ export default function ProfilePage() {
               </div>
 
               {usernameError && <p style={{ fontSize: '0.875rem', color: '#fca5a5' }}>{usernameError}</p>}
-              {usernameSuccess && <p style={{ fontSize: '0.875rem', color: '#4ade80' }}>✅ {usernameSuccess}</p>}
+              {usernameSuccess && <p style={{ fontSize: '0.875rem', color: '#4ade80', display: 'flex', alignItems: 'center', gap: '0.3rem' }}><CheckCircle2 size={14} /> {usernameSuccess}</p>}
 
               <button onClick={handleUsernameChange} disabled={usernameSaving} style={{
                 background: usernameSaving ? '#0d1a1e' : 'var(--teal-primary)', color: 'white',

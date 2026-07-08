@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Dumbbell, BicepsFlexed } from 'lucide-react'
+import BasketballIcon from '@/components/icons/BasketballIcon'
 import { createClient } from '@/lib/supabase/client'
 import { getLocalDateString } from '@/lib/utils'
 
@@ -168,10 +169,10 @@ export default function EditWorkoutPage() {
     }
   }
 
-  const typeOptions: { value: WorkoutType; emoji: string; label: string }[] = [
-    { value: 'conditioning', emoji: '🏋️', label: 'Conditioning' },
-    { value: 'basketball', emoji: '🏀', label: 'Basketball' },
-    { value: 'both', emoji: '💪', label: 'Both' },
+  const typeOptions: { value: WorkoutType; icon: typeof Dumbbell; label: string }[] = [
+    { value: 'conditioning', icon: Dumbbell, label: 'Conditioning' },
+    { value: 'basketball', icon: BasketballIcon, label: 'Basketball' },
+    { value: 'both', icon: BicepsFlexed, label: 'Both' },
   ]
 
   if (loading) {
@@ -216,7 +217,7 @@ export default function EditWorkoutPage() {
                     borderRadius: '0.5rem', padding: '0.875rem 0.5rem',
                     color: '#F2F2F2', cursor: 'pointer', textAlign: 'center', transition: 'all 0.2s',
                   }}>
-                    <div style={{ fontSize: '1.25rem', marginBottom: '0.2rem' }}>{opt.emoji}</div>
+                    <div style={{ marginBottom: '0.2rem', display: 'flex', justifyContent: 'center' }}><opt.icon size={20} /></div>
                     <div style={{ fontSize: '0.8rem', fontWeight: 700 }}>{opt.label}</div>
                   </button>
                 ))}

@@ -124,8 +124,10 @@ export default function CalendarPage() {
   const loadClasses = async () => {
     const year = currentMonth.getFullYear()
     const month = currentMonth.getMonth()
-    const startOfMonth = new Date(year, month, 1).toISOString().split('T')[0]
-    const endOfMonth = new Date(year, month + 1, 0).toISOString().split('T')[0]
+    // Padded by a week on each side so week-view rows that straddle a month boundary still have
+    // their adjacent-month days' data loaded (CalendarGrid's week mode can show days outside `month`).
+    const startOfMonth = formatLocalDate(new Date(year, month, 1 - 7))
+    const endOfMonth = formatLocalDate(new Date(year, month + 1, 0 + 7))
 
     // Fetch stored class instances for this month
     const { data: classData } = await supabase

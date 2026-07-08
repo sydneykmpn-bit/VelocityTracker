@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import VLogo from '@/components/VLogo'
+import { Mars, Venus, Lock } from 'lucide-react'
 
 const inputBase: React.CSSProperties = {
   width: '100%', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem',
@@ -14,9 +15,9 @@ const labelBase: React.CSSProperties = {
   textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.4rem',
 }
 
-const GENDERS = [
-  { value: 'male', label: '♂ Male' },
-  { value: 'female', label: '♀ Female' },
+const GENDERS: { value: string; label: string; icon?: typeof Mars }[] = [
+  { value: 'male', label: 'Male', icon: Mars },
+  { value: 'female', label: 'Female', icon: Venus },
   { value: 'other', label: 'Other' },
 ]
 
@@ -134,10 +135,10 @@ export default function ProfileSetupPage() {
                       background: form.gender === g.value ? 'var(--teal-primary)' : 'var(--surface-raised)',
                       color: form.gender === g.value ? '#fff' : 'var(--text-secondary)',
                       border: `1px solid ${form.gender === g.value ? 'var(--teal-primary)' : 'var(--border)'}`,
-                      minHeight: 0,
+                      minHeight: 0, display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
                     }}
                   >
-                    {g.label}
+                    {g.icon && <g.icon size={13} />} {g.label}
                   </button>
                 ))}
               </div>
@@ -155,8 +156,8 @@ export default function ProfileSetupPage() {
                 style={{ ...inputBase, minHeight: '90px', resize: 'vertical', fontFamily: 'inherit' }}
                 placeholder="Any injuries, conditions, or medications your coach should know about"
               />
-              <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
-                🔒 Only visible to you, your coaches, and admins.
+              <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <Lock size={11} /> Only visible to you, your coaches, and admins.
               </p>
             </div>
 
