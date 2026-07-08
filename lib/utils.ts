@@ -87,6 +87,71 @@ export function formatLocalDate(date: Date, timeZone = 'Asia/Manila'): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone }).format(date)
 }
 
+// Convert a Date object to YYYY-MM-DD using the browser's local timezone (no forced zone)
+export function formatDateYMD(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+// Parse a YYYY-MM-DD string into a local Date (midnight local time, no timezone shifting)
+export function parseLocalDateStr(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+export const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
+export const DAY_LABELS: Record<string, string> = {
+  sunday: 'Sunday', monday: 'Monday', tuesday: 'Tuesday', wednesday: 'Wednesday',
+  thursday: 'Thursday', friday: 'Friday', saturday: 'Saturday',
+}
+
+export function dayNameFromDate(dateStr: string): string {
+  return DAY_NAMES[parseLocalDateStr(dateStr).getDay()]
+}
+
+// Format a 24h "HH:MM" time string as "H:MM AM/PM"
+export function formatTimeLabel(t: string): string {
+  if (!t) return ''
+  const [h, m] = t.split(':').map(Number)
+  const period = h >= 12 ? 'PM' : 'AM'
+  const h12 = h % 12 === 0 ? 12 : h % 12
+  return `${h12}:${String(m).padStart(2, '0')} ${period}`
+}
+
+export interface BballClassRow {
+  id: string
+  title: string
+  description: string | null
+  day_of_week: string
+  start_time: string
+  end_time: string
+  gender_restriction: string
+  max_slots: number
+  is_recurring: boolean
+  specific_date: string | null
+}
+
+// Occurrence date strings (YYYY-MM-DD) for a bball_classes row within [rangeStart, rangeEnd] inclusive.
+// Recurring classes emit one date per matching weekday in range; one-time classes emit their
+// specific_date if it falls in range (or nothing otherwise).
+export function bballOccurrencesInRange(cls: BballClassRow, rangeStart: string, rangeEnd: string): string[] {
+  if (!cls.is_recurring) {
+    return cls.specific_date && cls.specific_date >= rangeStart && cls.specific_date <= rangeEnd ? [cls.specific_date] : []
+  }
+  const dayIdx = DAY_NAMES.indexOf(cls.day_of_week as any)
+  if (dayIdx < 0) return []
+  const dates: string[] = []
+  const cur = parseLocalDateStr(rangeStart)
+  const end = parseLocalDateStr(rangeEnd)
+  while (cur <= end) {
+    if (cur.getDay() === dayIdx) dates.push(formatDateYMD(cur))
+    cur.setDate(cur.getDate() + 1)
+  }
+  return dates
+}
+
 // Workout streak calculation (weekly)
 export function calculateStreak(workoutDates: string[]): number {
   if (!workoutDates.length) return 0

@@ -9,8 +9,11 @@ create table if not exists bball_classes (
   end_time time not null,
   gender_restriction text not null default 'mixed' check (gender_restriction in ('mixed','men','women')),
   max_slots int not null default 10,
+  is_recurring boolean not null default true,
+  specific_date date,
   created_by uuid references profiles(id),
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  constraint bball_classes_specific_date_check check (is_recurring or specific_date is not null)
 );
 
 create table if not exists bball_class_signups (

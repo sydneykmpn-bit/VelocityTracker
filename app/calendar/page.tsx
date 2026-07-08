@@ -3,19 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, X } from 'lucide-react'
 import ClassDetailModal, { classTypeColor } from '@/components/ClassDetailModal'
 import CalendarGrid, { CalendarEntry } from '@/components/CalendarGrid'
-import { getLocalDateString } from '@/lib/utils'
-
-const inputBase: React.CSSProperties = {
-  background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem',
-  padding: '0.6rem 0.875rem', color: '#F2F2F2', fontSize: '1rem', outline: 'none', width: '100%',
-}
-const labelBase: React.CSSProperties = {
-  display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)',
-  textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.375rem',
-}
+import { BballClassDetailModal, BballClassFormModal, BballOccurrence, genderBadgeStyle } from '@/components/BballClassModal'
+import { getLocalDateString, bballOccurrencesInRange, formatTimeLabel, BballClassRow } from '@/lib/utils'
 
 function parseLocalDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number)
@@ -95,8 +86,6 @@ function ClassCard({ cls, userRole }: { cls: any; userRole: string }) {
   )
 }
 
-const DAYS_OF_WEEK = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday']
-
 export default function CalendarPage() {
   const router = useRouter()
   const supabase = createClient()
@@ -104,22 +93,15 @@ export default function CalendarPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [classes, setClasses] = useState<any[]>([])
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
-  const [showCreateModal, setShowCreateModal] = useState(false)
   const [userRole, setUserRole] = useState('')
   const [userId, setUserId] = useState<string | null>(null)
-  const [groups, setGroups] = useState<any[]>([])
+  const [gender, setGender] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [createError, setCreateError] = useState('')
   const [selectedClass, setSelectedClass] = useState<any>(null)
-
-  const [createForm, setCreateForm] = useState({
-    title: '', description: '', type: 'conditioning', group_id: '',
-    scheduled_date: getLocalDateString(),
-    start_time: '06:00', end_time: '07:00', location: '',
-    is_recurring: false, recurrence_rule: 'weekly',
-    recurrence_days: [] as string[], recurrence_end_date: '',
-  })
+  const [selectedBballOcc, setSelectedBballOcc] = useState<BballOccurrence | null>(null)
+  const [bballFormOpen, setBballFormOpen] = useState(false)
+  const [editingBballClass, setEditingBballClass] = useState<BballClassRow | null>(null)
+  const [bballClasses, setBballClasses] = useState<BballClassRow[]>([])
 
   const loadClasses = async () => {
     const year = currentMonth.getFullYear()
@@ -194,10 +176,42 @@ export default function CalendarPage() {
       is_recurring: false,
     }))
 
+    // Fetch bball_classes (basketball class slots) and expand into occurrences for this range
+    const { data: bballClassData } = await supabase.from('bball_classes').select('*')
+    const bballList: BballClassRow[] = bballClassData || []
+    setBballClasses(bballList)
+    const bballOccurrences = bballList.flatMap(c =>
+      bballOccurrencesInRange(c, startOfMonth, endOfMonth).map(date => ({
+        id: `bball-${c.id}-${date}`, classId: c.id, cls: c, date, isBballClass: true, count: 0, joined: false,
+      }))
+    )
+    if (bballOccurrences.length > 0) {
+      const classIds = Array.from(new Set(bballOccurrences.map(o => o.classId)))
+      const dates = Array.from(new Set(bballOccurrences.map(o => o.date)))
+      const { data: signups } = await supabase
+        .from('bball_class_signups')
+        .select('class_id, user_id, occurrence_date')
+        .in('class_id', classIds)
+        .in('occurrence_date', dates)
+      const countMap: Record<string, number> = {}
+      const joinedSet = new Set<string>()
+      for (const row of signups || []) {
+        const key = `${row.class_id}_${row.occurrence_date}`
+        countMap[key] = (countMap[key] || 0) + 1
+        if (row.user_id === userId) joinedSet.add(key)
+      }
+      for (const occ of bballOccurrences) {
+        const key = `${occ.classId}_${occ.date}`
+        occ.count = countMap[key] || 0
+        occ.joined = joinedSet.has(key)
+      }
+    }
+
     const allData = [
       ...(classData || []),
       ...dynamicInstances,
       ...normalizedPlans,
+      ...bballOccurrences,
     ]
     setClasses(allData)
   }
@@ -207,10 +221,9 @@ export default function CalendarPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
       setUserId(user.id)
-      const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+      const { data: prof } = await supabase.from('profiles').select('role, gender').eq('id', user.id).single()
       setUserRole(prof?.role ?? 'member')
-      const { data: grps } = await supabase.from('groups').select('id, name')
-      setGroups(grps ?? [])
+      setGender(prof?.gender ?? null)
 
       // Client-side catch-up only — an RSVP won't flip to 'absent' until this user next opens their
       // calendar, not on a schedule. Only touches this user's own attendee rows (member_id = user.id),
@@ -243,115 +256,6 @@ export default function CalendarPage() {
 
   const handleSelectDate = (dateStr: string) => {
     setSelectedDate(dateStr)
-    if (userRole === 'admin' || userRole === 'coach') {
-      setCreateForm(p => ({ ...p, scheduled_date: dateStr }))
-    }
-  }
-
-  const handleCreateClass = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setCreateError('')
-
-    if (!createForm.title.trim()) { setCreateError('Title is required.'); return }
-    if (!createForm.scheduled_date) { setCreateError('Date is required.'); return }
-    if (!createForm.start_time) { setCreateError('Start time is required.'); return }
-
-    if (createForm.is_recurring) {
-      if (!createForm.recurrence_end_date) {
-        setCreateError('End date is required for recurring classes.')
-        return
-      }
-      if (createForm.recurrence_end_date <= createForm.scheduled_date) {
-        setCreateError('End date must be after the start date.')
-        return
-      }
-      if (
-        (createForm.recurrence_rule === 'weekly' || createForm.recurrence_rule === 'biweekly')
-        && createForm.recurrence_days.length === 0
-      ) {
-        setCreateError('Select at least one day of the week for weekly/bi-weekly recurrence.')
-        return
-      }
-    }
-
-    setSaving(true)
-
-    const seriesId = createForm.is_recurring ? crypto.randomUUID() : null
-
-    const baseData = {
-      title: createForm.title.trim(),
-      description: createForm.description || null,
-      type: createForm.type,
-      group_id: createForm.group_id || null,
-      coach_id: userId,
-      start_time: createForm.start_time,
-      end_time: createForm.end_time || null,
-      location: createForm.location || null,
-      is_recurring: createForm.is_recurring,
-      recurrence_rule: createForm.is_recurring ? createForm.recurrence_rule : null,
-      recurrence_days: createForm.is_recurring && createForm.recurrence_days.length > 0
-        ? createForm.recurrence_days : null,
-      recurrence_end_date: createForm.is_recurring ? createForm.recurrence_end_date : null,
-      recurrence_series_id: seriesId,
-      created_by: userId,
-    }
-
-    const { data: parent, error: parentError } = await supabase
-      .from('scheduled_classes')
-      .insert({ ...baseData, scheduled_date: createForm.scheduled_date })
-      .select()
-      .single()
-
-    if (parentError) {
-      setCreateError(`Failed to create class: ${parentError.message}`)
-      setSaving(false)
-      return
-    }
-
-    if (createForm.is_recurring && parent && createForm.recurrence_end_date) {
-      const recurringDates = generateRecurringDates(
-        createForm.scheduled_date,
-        createForm.recurrence_end_date,
-        createForm.recurrence_rule,
-        createForm.recurrence_days
-      )
-      if (recurringDates.length > 0) {
-        const batchSize = 50
-        for (let i = 0; i < recurringDates.length; i += batchSize) {
-          const batch = recurringDates.slice(i, i + batchSize)
-          const { error: batchError } = await supabase.from('scheduled_classes').insert(
-            batch.map(date => ({
-              ...baseData,
-              scheduled_date: date,
-              parent_class_id: parent.id,
-            }))
-          )
-          if (batchError) {
-            console.error('Batch insert error:', batchError)
-          }
-        }
-      }
-    }
-
-    setShowCreateModal(false)
-    setCreateForm({
-      title: '', description: '', type: 'conditioning', group_id: '',
-      scheduled_date: selectedDate || getLocalDateString(),
-      start_time: '06:00', end_time: '07:00', location: '',
-      is_recurring: false, recurrence_rule: 'weekly',
-      recurrence_days: [], recurrence_end_date: '',
-    })
-    await loadClasses()
-    setSaving(false)
-  }
-
-  const toggleDay = (day: string) => {
-    setCreateForm(p => ({
-      ...p,
-      recurrence_days: p.recurrence_days.includes(day)
-        ? p.recurrence_days.filter(d => d !== day)
-        : [...p.recurrence_days, day],
-    }))
   }
 
   if (loading) {
@@ -376,9 +280,9 @@ export default function CalendarPage() {
               TRAINING CALENDAR
             </h1>
           </div>
-          {(userRole === 'admin' || userRole === 'coach') && (
-            <button onClick={() => setShowCreateModal(true)} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', minHeight: 44 }}>
-              <Plus size={16} /> Schedule Class
+          {userRole === 'admin' && (
+            <button onClick={() => { setEditingBballClass(null); setBballFormOpen(true) }} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', minHeight: 44 }}>
+              + Add Class
             </button>
           )}
         </div>
@@ -396,6 +300,13 @@ export default function CalendarPage() {
                   return (
                     <div key={c.id} onClick={e => { e.stopPropagation(); setSelectedClass(c) }} style={{ background: 'rgba(8,119,160,0.25)', color: '#34bac2', border: '1px dashed rgba(8,119,160,0.5)', borderRadius: '0.2rem', fontSize: '0.6rem', padding: '0.1rem 0.3rem', marginBottom: '0.15rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', cursor: 'pointer' }}>
                       {c.title}
+                    </div>
+                  )
+                }
+                if (c.isBballClass) {
+                  return (
+                    <div key={c.id} onClick={e => { e.stopPropagation(); setSelectedBballOcc(c as unknown as BballOccurrence) }} style={{ background: 'rgba(52,186,194,0.2)', color: '#34bac2', borderRadius: '0.2rem', fontSize: '0.6rem', padding: '0.1rem 0.3rem', marginBottom: '0.15rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', cursor: 'pointer' }}>
+                      🏀 {c.cls.start_time?.slice(0, 5)} {c.cls.title}
                     </div>
                   )
                 }
@@ -418,11 +329,6 @@ export default function CalendarPage() {
                 {selEntries.length === 0 ? (
                   <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center' }}>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No classes or plans scheduled.</p>
-                    {(userRole === 'admin' || userRole === 'coach') && (
-                      <button onClick={() => setShowCreateModal(true)} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', marginTop: '0.75rem' }}>
-                        + Add Class
-                      </button>
-                    )}
                   </div>
                 ) : (
                   <>
@@ -447,11 +353,35 @@ export default function CalendarPage() {
                         })}
                       </div>
                     )}
+                    {/* Basketball Classes */}
+                    {selEntries.filter(c => c.isBballClass).length > 0 && (
+                      <div style={{ marginBottom: '1rem' }}>
+                        <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--teal-secondary)', marginBottom: '0.5rem' }}>Basketball Classes</p>
+                        {selEntries.filter(c => c.isBballClass).map(occ => {
+                          const badge = genderBadgeStyle[occ.cls.gender_restriction]
+                          const full = occ.count >= occ.cls.max_slots
+                          return (
+                            <div key={occ.id} onClick={() => setSelectedBballOcc(occ as unknown as BballOccurrence)} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem', marginBottom: '0.5rem', cursor: 'pointer' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
+                                <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{occ.cls.title}</p>
+                                {badge && (
+                                  <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', background: badge.bg, color: badge.color, border: `1px solid ${badge.border}` }}>{badge.label}</span>
+                                )}
+                              </div>
+                              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.375rem' }}>
+                                {formatTimeLabel(occ.cls.start_time)} – {formatTimeLabel(occ.cls.end_time)} · {occ.count} / {occ.cls.max_slots} spots filled{full ? ' · Full' : ''}
+                              </p>
+                              <p style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', fontWeight: 600 }}>View Details →</p>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                     {/* Scheduled Classes */}
-                    {selEntries.filter(c => !c.isPlan).length > 0 && (
+                    {selEntries.filter(c => !c.isPlan && !c.isBballClass).length > 0 && (
                       <div>
                         <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Scheduled Classes</p>
-                        {selEntries.filter(c => !c.isPlan).map(cls => (
+                        {selEntries.filter(c => !c.isPlan && !c.isBballClass).map(cls => (
                           <div key={cls.id} onClick={() => setSelectedClass(cls)} style={{ cursor: 'pointer' }}>
                             <ClassCard cls={cls} userRole={userRole} />
                           </div>
@@ -480,141 +410,23 @@ export default function CalendarPage() {
         />
       )}
 
-      {/* Create Class Modal */}
-      {showCreateModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '1.5rem', width: '100%', maxWidth: '540px', maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-              <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>SCHEDULE CLASS</h2>
-              <button onClick={() => { setShowCreateModal(false); setCreateError('') }} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0 }}>
-                <X size={20} />
-              </button>
-            </div>
-
-            {createError && (
-              <div style={{ background: 'rgba(127,29,29,0.4)', color: '#fca5a5', border: '1px solid #7f1d1d', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
-                {createError}
-              </div>
-            )}
-
-            <form onSubmit={handleCreateClass} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <label style={labelBase}>Title *</label>
-                <input type="text" value={createForm.title} onChange={e => setCreateForm(p => ({ ...p, title: e.target.value }))} required style={inputBase} placeholder="e.g. Morning Conditioning" />
-              </div>
-
-              {/* Type pills */}
-              <div>
-                <label style={labelBase}>Type</label>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  {(['conditioning', 'basketball', 'both'] as const).map(t => (
-                    <button key={t} type="button" onClick={() => setCreateForm(p => ({ ...p, type: t }))} style={{
-                      flex: 1, padding: '0.5rem', borderRadius: '0.375rem', border: `1px solid ${createForm.type === t ? 'var(--teal-primary)' : '#1a2e34'}`,
-                      background: createForm.type === t ? 'rgba(8,119,160,0.2)' : '#0d1a1e',
-                      color: createForm.type === t ? 'var(--teal-secondary)' : 'var(--text-secondary)',
-                      fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize', minHeight: 0,
-                    }}>{t === 'conditioning' ? 'Cond.' : t === 'basketball' ? 'Ball' : 'Both'}</button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Group + Date */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                <div>
-                  <label style={labelBase}>Group</label>
-                  <select value={createForm.group_id} onChange={e => setCreateForm(p => ({ ...p, group_id: e.target.value }))} style={inputBase}>
-                    <option value="">All / Open</option>
-                    {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={labelBase}>Date</label>
-                  <input type="date" value={createForm.scheduled_date} onChange={e => setCreateForm(p => ({ ...p, scheduled_date: e.target.value }))} style={inputBase} />
-                </div>
-              </div>
-
-              {/* Start + End time */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                <div>
-                  <label style={labelBase}>Start Time</label>
-                  <input type="time" value={createForm.start_time} onChange={e => setCreateForm(p => ({ ...p, start_time: e.target.value }))} style={inputBase} />
-                </div>
-                <div>
-                  <label style={labelBase}>End Time</label>
-                  <input type="time" value={createForm.end_time} onChange={e => setCreateForm(p => ({ ...p, end_time: e.target.value }))} style={inputBase} />
-                </div>
-              </div>
-
-              <div>
-                <label style={labelBase}>Location</label>
-                <input type="text" value={createForm.location} onChange={e => setCreateForm(p => ({ ...p, location: e.target.value }))} style={inputBase} placeholder="e.g. Main Court, Gym Floor B" />
-              </div>
-
-              <div>
-                <label style={labelBase}>Description</label>
-                <textarea value={createForm.description} onChange={e => setCreateForm(p => ({ ...p, description: e.target.value }))} style={{ ...inputBase, minHeight: '60px', resize: 'vertical' }} placeholder="Optional class notes…" />
-              </div>
-
-              {/* Recurring toggle */}
-              <div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={createForm.is_recurring} onChange={e => setCreateForm(p => ({ ...p, is_recurring: e.target.checked }))} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
-                  <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Recurring class</span>
-                </label>
-              </div>
-
-              {createForm.is_recurring && (
-                <div style={{ background: '#0a1518', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {/* Frequency */}
-                  <div>
-                    <label style={labelBase}>Frequency</label>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      {(['daily', 'weekly', 'biweekly', 'monthly'] as const).map(r => (
-                        <button key={r} type="button" onClick={() => setCreateForm(p => ({ ...p, recurrence_rule: r }))} style={{
-                          padding: '0.35rem 0.75rem', borderRadius: '999px', border: `1px solid ${createForm.recurrence_rule === r ? 'var(--teal-primary)' : '#1a2e34'}`,
-                          background: createForm.recurrence_rule === r ? 'rgba(8,119,160,0.2)' : 'transparent',
-                          color: createForm.recurrence_rule === r ? 'var(--teal-secondary)' : 'var(--text-secondary)',
-                          fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize', minHeight: 0,
-                        }}>{r}</button>
-                      ))}
-                    </div>
-                  </div>
-                  {/* Days of week */}
-                  {(createForm.recurrence_rule === 'weekly' || createForm.recurrence_rule === 'biweekly') && (
-                    <div>
-                      <label style={labelBase}>Days of Week</label>
-                      <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
-                        {DAYS_OF_WEEK.map(day => (
-                          <button key={day} type="button" onClick={() => toggleDay(day)} style={{
-                            padding: '0.3rem 0.625rem', borderRadius: '0.375rem',
-                            border: `1px solid ${createForm.recurrence_days.includes(day) ? 'var(--teal-primary)' : '#1a2e34'}`,
-                            background: createForm.recurrence_days.includes(day) ? 'rgba(8,119,160,0.2)' : 'transparent',
-                            color: createForm.recurrence_days.includes(day) ? 'var(--teal-secondary)' : 'var(--text-secondary)',
-                            fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize', minHeight: 0,
-                          }}>{day.slice(0, 3)}</button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {/* End date */}
-                  <div>
-                    <label style={labelBase}>End Date <span style={{ color: '#f87171' }}>*</span></label>
-                    <input type="date" value={createForm.recurrence_end_date} onChange={e => setCreateForm(p => ({ ...p, recurrence_end_date: e.target.value }))} style={inputBase}
-                      min={createForm.scheduled_date ? new Date(new Date(createForm.scheduled_date + 'T00:00:00').getTime() + 86400000).toISOString().split('T')[0] : undefined}
-                    />
-                    {!createForm.recurrence_end_date && (
-                      <p style={{ fontSize: '0.7rem', color: '#f87171', marginTop: '0.25rem' }}>End date is required for recurring classes</p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <button type="submit" disabled={saving} style={{ background: saving ? '#0d1a1e' : 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.875rem', fontWeight: 700, fontSize: '1rem', cursor: saving ? 'not-allowed' : 'pointer', marginTop: '0.5rem' }}>
-                {saving ? 'Scheduling…' : 'Schedule Class'}
-              </button>
-            </form>
-          </div>
-        </div>
+      {selectedBballOcc && (
+        <BballClassDetailModal
+          occ={selectedBballOcc}
+          myUserId={userId || ''}
+          myGender={gender}
+          isAdmin={userRole === 'admin'}
+          onClose={() => setSelectedBballOcc(null)}
+          onJoinLeave={loadClasses}
+          onEdit={cls => { setSelectedBballOcc(null); setEditingBballClass(cls); setBballFormOpen(true) }}
+        />
+      )}
+      {bballFormOpen && userRole === 'admin' && (
+        <BballClassFormModal
+          editing={editingBballClass}
+          onClose={() => setBballFormOpen(false)}
+          onSaved={loadClasses}
+        />
       )}
     </div>
   )
