@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Trash2, ChevronDown, ChevronUp, Pencil, KeyRound, Timer, X, AlertTriangle, Target, CheckCircle2, Mars, Venus, Users, UserCog, Building2, Settings, Check, Volleyball } from 'lucide-react'
+import { Trash2, ChevronDown, ChevronUp, Pencil, KeyRound, Timer, X, AlertTriangle, Target, CheckCircle2, Mars, Venus, Users, UserCog, Building2, Settings, Check } from 'lucide-react'
+import BasketballIcon from '@/components/icons/BasketballIcon'
 import { getLocalDateString, BballClassRow } from '@/lib/utils'
 import { BballClassFormModal } from '@/components/BballClassModal'
 
@@ -680,7 +681,7 @@ export default function AdminPage() {
     { value: 'members', label: 'Members', icon: Users },
     { value: 'coaches', label: 'Coaches', icon: UserCog },
     { value: 'groups', label: 'Groups', icon: Building2 },
-    { value: 'classes', label: 'Classes', icon: Volleyball },
+    { value: 'classes', label: 'Classes', icon: BasketballIcon },
     { value: 'settings', label: 'Settings', icon: Settings },
   ]
 

@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { X, Users, Pencil } from 'lucide-react'
-import { DAY_NAMES, DAY_LABELS, formatTimeLabel, dayNameFromDate, BballClassRow } from '@/lib/utils'
+import { X, Users, Pencil, Trash2 } from 'lucide-react'
+import { DAY_NAMES, DAY_LABELS, formatTimeLabel, BballClassRow } from '@/lib/utils'
 
 const inputBase: React.CSSProperties = {
   background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem',
@@ -26,8 +26,12 @@ export interface BballOccurrence {
   joined: boolean
 }
 
+function formatRecurrenceEndDate(dateStr: string): string {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 export function BballClassDetailModal({
-  occ, myUserId, myGender, isAdmin, onClose, onJoinLeave, onEdit,
+  occ, myUserId, myGender, isAdmin, onClose, onJoinLeave, onEdit, onDelete,
 }: {
   occ: BballOccurrence
   myUserId: string
@@ -35,7 +39,8 @@ export function BballClassDetailModal({
   isAdmin: boolean
   onClose: () => void
   onJoinLeave: () => void
-  onEdit: (cls: BballClassRow) => void
+  onEdit?: (cls: BballClassRow) => void
+  onDelete?: (cls: BballClassRow) => void
 }) {
   const supabase = createClient()
   const [attendees, setAttendees] = useState<any[]>([])
@@ -102,10 +107,16 @@ export function BballClassDetailModal({
               {' · '}{formatTimeLabel(occ.cls.start_time)} – {formatTimeLabel(occ.cls.end_time)}
               {!occ.cls.is_recurring && <span style={{ marginLeft: '0.4rem', color: 'var(--text-secondary)' }}>· One-time</span>}
             </p>
+            {occ.cls.is_recurring && occ.cls.recurrence_end_date && (
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>Recurring until {formatRecurrenceEndDate(occ.cls.recurrence_end_date)}</p>
+            )}
           </div>
           <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
-            {isAdmin && (
+            {isAdmin && onEdit && (
               <button onClick={() => onEdit(occ.cls)} title="Edit class" style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', minHeight: 0 }}><Pencil size={14} /></button>
+            )}
+            {isAdmin && onDelete && (
+              <button onClick={() => onDelete(occ.cls)} title="Delete class" style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#ef4444', minHeight: 0 }}><Trash2 size={14} /></button>
             )}
             <button onClick={onClose} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', minHeight: 0 }}><X size={16} /></button>
           </div>
@@ -174,13 +185,14 @@ export function BballClassFormModal({
   const isEdit = !!editing
   const [form, setForm] = useState(() => editing ? {
     title: editing.title, description: editing.description || '',
-    is_recurring: editing.is_recurring, days: [editing.day_of_week] as string[],
-    specific_date: editing.specific_date || '',
+    days: [editing.day_of_week] as string[],
     start_time: editing.start_time?.slice(0, 5) || '18:00', end_time: editing.end_time?.slice(0, 5) || '19:00',
     gender_restriction: editing.gender_restriction, max_slots: editing.max_slots,
+    recurrence_end_date: editing.recurrence_end_date || '',
   } : {
-    title: '', description: '', is_recurring: true, days: ['monday'] as string[], specific_date: '',
+    title: '', description: '', days: ['monday'] as string[],
     start_time: '18:00', end_time: '19:00', gender_restriction: 'mixed', max_slots: 10,
+    recurrence_end_date: '',
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -192,7 +204,7 @@ export function BballClassFormModal({
     }))
   }
 
-  const canSubmit = form.title.trim().length > 0 && (form.is_recurring ? form.days.length > 0 : !!form.specific_date)
+  const canSubmit = form.title.trim().length > 0 && form.days.length > 0
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -205,22 +217,16 @@ export function BballClassFormModal({
       end_time: form.end_time,
       gender_restriction: form.gender_restriction,
       max_slots: Number(form.max_slots) || 1,
-      is_recurring: form.is_recurring,
+      is_recurring: true,
+      specific_date: null,
+      recurrence_end_date: form.recurrence_end_date || null,
     }
     if (isEdit) {
-      const payload = form.is_recurring
-        ? { ...base, day_of_week: form.days[0], specific_date: null }
-        : { ...base, day_of_week: dayNameFromDate(form.specific_date), specific_date: form.specific_date }
-      const { error: err } = await supabase.from('bball_classes').update(payload).eq('id', editing!.id)
-      if (err) { setError(err.message); setSaving(false); return }
-    } else if (form.is_recurring) {
-      const rows = form.days.map(day => ({ ...base, day_of_week: day, specific_date: null }))
-      const { error: err } = await supabase.from('bball_classes').insert(rows)
+      const { error: err } = await supabase.from('bball_classes').update({ ...base, day_of_week: form.days[0] }).eq('id', editing!.id)
       if (err) { setError(err.message); setSaving(false); return }
     } else {
-      const { error: err } = await supabase.from('bball_classes').insert({
-        ...base, day_of_week: dayNameFromDate(form.specific_date), specific_date: form.specific_date,
-      })
+      const rows = form.days.map(day => ({ ...base, day_of_week: day }))
+      const { error: err } = await supabase.from('bball_classes').insert(rows)
       if (err) { setError(err.message); setSaving(false); return }
     }
     setSaving(false)
@@ -248,41 +254,30 @@ export function BballClassFormModal({
           </div>
 
           <div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
-              <input type="checkbox" checked={form.is_recurring} onChange={e => setForm({ ...form, is_recurring: e.target.checked })} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
-              <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Recurring class</span>
-            </label>
-            <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-              {form.is_recurring ? 'Repeats every week on the selected day(s).' : 'Happens once, on a specific date.'}
-            </p>
+            <label style={labelBase}>{isEdit ? 'Day of Week' : 'Days of Week'}</label>
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              {DAY_NAMES.map(d => (
+                <button
+                  key={d} type="button" onClick={() => toggleDay(d)}
+                  style={{
+                    borderRadius: '999px', padding: '0.4rem 0.75rem', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
+                    border: `1px solid ${form.days.includes(d) ? 'var(--teal-primary)' : '#1a2e34'}`,
+                    background: form.days.includes(d) ? 'rgba(8,119,160,0.2)' : 'transparent',
+                    color: form.days.includes(d) ? 'var(--teal-secondary)' : 'var(--text-secondary)',
+                  }}
+                >
+                  {DAY_LABELS[d].slice(0, 3)}
+                </button>
+              ))}
+            </div>
+            {form.days.length === 0 && <p style={{ fontSize: '0.7rem', color: '#f87171', marginTop: '0.375rem' }}>Select at least one day.</p>}
           </div>
 
-          {form.is_recurring ? (
-            <div>
-              <label style={labelBase}>{isEdit ? 'Day of Week' : 'Days of Week'}</label>
-              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                {DAY_NAMES.map(d => (
-                  <button
-                    key={d} type="button" onClick={() => toggleDay(d)}
-                    style={{
-                      borderRadius: '999px', padding: '0.4rem 0.75rem', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
-                      border: `1px solid ${form.days.includes(d) ? 'var(--teal-primary)' : '#1a2e34'}`,
-                      background: form.days.includes(d) ? 'rgba(8,119,160,0.2)' : 'transparent',
-                      color: form.days.includes(d) ? 'var(--teal-secondary)' : 'var(--text-secondary)',
-                    }}
-                  >
-                    {DAY_LABELS[d].slice(0, 3)}
-                  </button>
-                ))}
-              </div>
-              {form.days.length === 0 && <p style={{ fontSize: '0.7rem', color: '#f87171', marginTop: '0.375rem' }}>Select at least one day.</p>}
-            </div>
-          ) : (
-            <div>
-              <label style={labelBase}>Date</label>
-              <input type="date" value={form.specific_date} onChange={e => setForm({ ...form, specific_date: e.target.value })} required style={inputBase} />
-            </div>
-          )}
+          <div>
+            <label style={labelBase}>Recurs Until <span style={{ textTransform: 'none', color: 'var(--text-secondary)' }}>(optional)</span></label>
+            <input type="date" value={form.recurrence_end_date} onChange={e => setForm({ ...form, recurrence_end_date: e.target.value })} style={inputBase} />
+            <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Leave blank to repeat every week indefinitely.</p>
+          </div>
 
           <div>
             <label style={labelBase}>Gender Restriction</label>
@@ -310,7 +305,7 @@ export function BballClassFormModal({
             background: saving || !canSubmit ? '#0d1a1e' : 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem',
             padding: '0.875rem', fontWeight: 700, fontSize: '0.875rem', cursor: saving || !canSubmit ? 'not-allowed' : 'pointer', marginTop: '0.25rem',
           }}>
-            {saving ? 'Saving…' : isEdit ? 'Save Changes' : !form.is_recurring ? 'Create Class' : form.days.length > 1 ? `Create Class (${form.days.length} days)` : 'Create Class'}
+            {saving ? 'Saving…' : isEdit ? 'Save Changes' : form.days.length > 1 ? `Create Class (${form.days.length} days)` : 'Create Class'}
           </button>
         </form>
       </div>

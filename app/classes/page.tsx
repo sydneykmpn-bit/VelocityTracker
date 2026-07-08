@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { ChevronLeft, ChevronRight, X, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, X, Plus, Pencil, Trash2 } from 'lucide-react'
 import { DAY_LABELS, formatTimeLabel, formatDateYMD, bballOccurrencesInRange, BballClassRow } from '@/lib/utils'
 import { BballClassDetailModal, BballClassFormModal, BballOccurrence, genderBadgeStyle } from '@/components/BballClassModal'
 
@@ -132,6 +132,14 @@ export default function ClassesPage() {
     setBusyKey(null)
   }
 
+  const handleDeleteClass = async (cls: BballClassRow) => {
+    if (!confirm(`Delete "${cls.title}"? This removes all signups for this class and cannot be undone.`)) return
+    setError('')
+    const { error: err } = await supabase.from('bball_classes').delete().eq('id', cls.id)
+    if (err) { setError(err.message); return }
+    await refreshClasses()
+  }
+
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--background)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -232,23 +240,48 @@ export default function ClassesPage() {
                       <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                         {DAY_LABELS[occ.cls.day_of_week]} · {formatTimeLabel(occ.cls.start_time)} – {formatTimeLabel(occ.cls.end_time)}
                       </p>
+                      {occ.cls.is_recurring && occ.cls.recurrence_end_date && (
+                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>
+                          Recurring until {new Date(occ.cls.recurrence_end_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </p>
+                      )}
                       <p style={{ fontSize: '0.75rem', color: full ? '#f87171' : 'var(--text-secondary)', marginTop: '0.25rem' }}>
                         {occ.count} / {occ.cls.max_slots} spots filled
                       </p>
                     </div>
-                    <button
-                      onClick={e => { e.stopPropagation(); occ.joined ? handleLeave(occ) : handleJoin(occ) }}
-                      disabled={busy || (!occ.joined && full)}
-                      style={{
-                        flexShrink: 0, borderRadius: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.8rem', fontWeight: 700,
-                        cursor: busy || (!occ.joined && full) ? 'not-allowed' : 'pointer', minHeight: '44px',
-                        background: occ.joined ? 'none' : full ? 'var(--border)' : 'var(--teal-primary)',
-                        color: occ.joined ? '#ef4444' : full ? 'var(--text-secondary)' : 'white',
-                        border: occ.joined ? '1px solid rgba(239,68,68,0.4)' : 'none',
-                      }}
-                    >
-                      {busy ? '…' : occ.joined ? 'Leave' : full ? 'Class Full' : 'Join'}
-                    </button>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem', flexShrink: 0 }}>
+                      {isAdmin && (
+                        <div style={{ display: 'flex', gap: '0.4rem' }}>
+                          <button
+                            onClick={e => { e.stopPropagation(); setEditingClass(occ.cls); setFormModalOpen(true) }}
+                            title="Edit class"
+                            style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', minHeight: 0 }}
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            onClick={e => { e.stopPropagation(); handleDeleteClass(occ.cls) }}
+                            title="Delete class"
+                            style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#ef4444', minHeight: 0 }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      )}
+                      <button
+                        onClick={e => { e.stopPropagation(); occ.joined ? handleLeave(occ) : handleJoin(occ) }}
+                        disabled={busy || (!occ.joined && full)}
+                        style={{
+                          borderRadius: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.8rem', fontWeight: 700,
+                          cursor: busy || (!occ.joined && full) ? 'not-allowed' : 'pointer', minHeight: '44px',
+                          background: occ.joined ? 'none' : full ? 'var(--border)' : 'var(--teal-primary)',
+                          color: occ.joined ? '#ef4444' : full ? 'var(--text-secondary)' : 'white',
+                          border: occ.joined ? '1px solid rgba(239,68,68,0.4)' : 'none',
+                        }}
+                      >
+                        {busy ? '…' : occ.joined ? 'Leave' : full ? 'Class Full' : 'Join'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )
@@ -266,6 +299,7 @@ export default function ClassesPage() {
           onClose={() => setSelectedOcc(null)}
           onJoinLeave={refreshCounts}
           onEdit={cls => { setSelectedOcc(null); setEditingClass(cls); setFormModalOpen(true) }}
+          onDelete={cls => { setSelectedOcc(null); handleDeleteClass(cls) }}
         />
       )}
       {formModalOpen && isAdmin && (

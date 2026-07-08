@@ -131,20 +131,24 @@ export interface BballClassRow {
   max_slots: number
   is_recurring: boolean
   specific_date: string | null
+  recurrence_end_date: string | null
 }
 
 // Occurrence date strings (YYYY-MM-DD) for a bball_classes row within [rangeStart, rangeEnd] inclusive.
-// Recurring classes emit one date per matching weekday in range; one-time classes emit their
-// specific_date if it falls in range (or nothing otherwise).
+// Recurring classes emit one date per matching weekday in range, capped at recurrence_end_date if
+// set (matching how scheduled_classes.recurrence_end_date already works elsewhere in this app).
+// One-time classes (legacy is_recurring=false rows) emit their specific_date if it falls in range.
 export function bballOccurrencesInRange(cls: BballClassRow, rangeStart: string, rangeEnd: string): string[] {
   if (!cls.is_recurring) {
     return cls.specific_date && cls.specific_date >= rangeStart && cls.specific_date <= rangeEnd ? [cls.specific_date] : []
   }
   const dayIdx = DAY_NAMES.indexOf(cls.day_of_week as any)
   if (dayIdx < 0) return []
+  const effectiveRangeEnd = cls.recurrence_end_date && cls.recurrence_end_date < rangeEnd ? cls.recurrence_end_date : rangeEnd
+  if (effectiveRangeEnd < rangeStart) return []
   const dates: string[] = []
   const cur = parseLocalDateStr(rangeStart)
-  const end = parseLocalDateStr(rangeEnd)
+  const end = parseLocalDateStr(effectiveRangeEnd)
   while (cur <= end) {
     if (cur.getDay() === dayIdx) dates.push(formatDateYMD(cur))
     cur.setDate(cur.getDate() + 1)

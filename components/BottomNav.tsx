@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { LayoutDashboard, ShieldCheck, Users, Dumbbell, Volleyball, CalendarDays, GraduationCap } from 'lucide-react'
+import { LayoutDashboard, ShieldCheck, Users, Dumbbell, CalendarDays, GraduationCap } from 'lucide-react'
+import BasketballIcon from '@/components/icons/BasketballIcon'
 
 const SECOND_TAB: Record<string, { href: string; label: string; icon: typeof Users }> = {
   admin: { href: '/admin', label: 'Admin', icon: ShieldCheck },
@@ -76,7 +77,7 @@ export default function BottomNav() {
         <span>{second.label}</span>
       </Link>
       <Link href="/classes" className={isActive('/classes') ? 'bottom-nav-item active' : 'bottom-nav-item'}>
-        <Volleyball size={22} />
+        <BasketballIcon size={22} />
         <span>Classes</span>
       </Link>
       <Link href="/workouts" className={isActive('/workouts') ? 'bottom-nav-item active' : 'bottom-nav-item'}>

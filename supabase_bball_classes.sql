@@ -11,6 +11,7 @@ create table if not exists bball_classes (
   max_slots int not null default 10,
   is_recurring boolean not null default true,
   specific_date date,
+  recurrence_end_date date,
   created_by uuid references profiles(id),
   created_at timestamptz default now(),
   constraint bball_classes_specific_date_check check (is_recurring or specific_date is not null)

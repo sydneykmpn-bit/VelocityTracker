@@ -6,8 +6,9 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { ChevronDown, ChevronUp, Trash2, Pencil, Plus, Calendar, Timer, Mars, Venus, Users, X, AlertTriangle, Target, CheckCircle2, Circle, XCircle, UserCog, ClipboardList, Check, Dumbbell, BicepsFlexed, Save, Pin, Eye, EyeOff, ArrowDown } from 'lucide-react'
 import BasketballIcon from '@/components/icons/BasketballIcon'
-import { getLocalDateString, formatLocalDate } from '@/lib/utils'
+import { getLocalDateString, formatLocalDate, bballOccurrencesInRange, formatTimeLabel, BballClassRow } from '@/lib/utils'
 import CalendarGrid, { CalendarEntry } from '@/components/CalendarGrid'
+import { BballClassDetailModal, BballOccurrence, genderBadgeStyle } from '@/components/BballClassModal'
 
 type Tab = 'members' | 'groups' | 'assign' | 'assigned' | 'calendar' | 'notes' | 'programs'
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -560,6 +561,7 @@ export default function CoachPage() {
   const router = useRouter()
   const supabase = createClient()
   const [userId, setUserId] = useState<string | null>(null)
+  const [gender, setGender] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('members')
   const [loading, setLoading] = useState(true)
 
@@ -657,6 +659,10 @@ export default function CoachPage() {
   const [loadingCalendarPlanExercises, setLoadingCalendarPlanExercises] = useState<string | null>(null)
   const [calendarMonth, setCalendarMonth] = useState(new Date())
   const [calendarSelectedDate, setCalendarSelectedDate] = useState<string | null>(null)
+  const [selectedBballOcc, setSelectedBballOcc] = useState<BballOccurrence | null>(null)
+  const [bballBusyKey, setBballBusyKey] = useState<string | null>(null)
+  const [bballError, setBballError] = useState('')
+  const [bballJoinBlockedMsg, setBballJoinBlockedMsg] = useState('')
 
   // Notes
   const [notes, setNotes] = useState<any[]>([])
@@ -793,17 +799,89 @@ export default function CoachPage() {
       member_name: p.member?.name,
     }))
 
-    setCalendarWorkouts([...loggedWorkouts, ...normalizedPlans])
+    // Basketball classes (bball_classes) — small, admin-managed list; expand into occurrences for
+    // this range the same way app/calendar/page.tsx does, so coaches see + can join them here too.
+    const { data: bballClassData } = await supabase.from('bball_classes').select('*')
+    const bballList: BballClassRow[] = bballClassData || []
+    const bballOccurrences = bballList.flatMap(c =>
+      bballOccurrencesInRange(c, startOfMonth, endStr).map(date => ({
+        id: `bball-${c.id}-${date}`, classId: c.id, cls: c, date, isBballClass: true, count: 0, joined: false,
+      }))
+    )
+    if (bballOccurrences.length > 0) {
+      const classIds = Array.from(new Set(bballOccurrences.map(o => o.classId)))
+      const dates = Array.from(new Set(bballOccurrences.map(o => o.date)))
+      const { data: signups } = await supabase
+        .from('bball_class_signups')
+        .select('class_id, user_id, occurrence_date')
+        .in('class_id', classIds)
+        .in('occurrence_date', dates)
+      const countMap: Record<string, number> = {}
+      const joinedSet = new Set<string>()
+      for (const row of signups || []) {
+        const key = `${row.class_id}_${row.occurrence_date}`
+        countMap[key] = (countMap[key] || 0) + 1
+        if (row.user_id === userId) joinedSet.add(key)
+      }
+      for (const occ of bballOccurrences) {
+        const key = `${occ.classId}_${occ.date}`
+        occ.count = countMap[key] || 0
+        occ.joined = joinedSet.has(key)
+      }
+    }
+
+    setCalendarWorkouts([...loggedWorkouts, ...normalizedPlans, ...bballOccurrences])
     setCalLoading(false)
+  }
+
+  const bballGenderMatches = (restriction: string) => {
+    if (restriction === 'mixed') return true
+    if (restriction === 'men') return gender === 'male'
+    if (restriction === 'women') return gender === 'female'
+    return true
+  }
+
+  const handleBballJoin = async (occ: BballOccurrence) => {
+    const key = `${occ.cls.id}_${occ.date}`
+    setBballError(''); setBballJoinBlockedMsg('')
+    if (!bballGenderMatches(occ.cls.gender_restriction)) {
+      const label = occ.cls.gender_restriction === 'men' ? 'men' : 'women'
+      setBballJoinBlockedMsg(`This class is for ${label} only.`)
+      return
+    }
+    setBballBusyKey(key)
+    const { error: err } = await supabase.from('bball_class_signups').insert({
+      class_id: occ.cls.id, user_id: userId, occurrence_date: occ.date,
+    })
+    if (err) {
+      setBballError(err.message.toLowerCase().includes('full') ? 'This class just filled up.' : err.message)
+      setBballBusyKey(null)
+      await loadCalendarWorkouts()
+      return
+    }
+    await loadCalendarWorkouts()
+    setBballBusyKey(null)
+  }
+
+  const handleBballLeave = async (occ: BballOccurrence) => {
+    const key = `${occ.cls.id}_${occ.date}`
+    setBballError('')
+    setBballBusyKey(key)
+    const { error: err } = await supabase.from('bball_class_signups')
+      .delete().eq('class_id', occ.cls.id).eq('user_id', userId).eq('occurrence_date', occ.date)
+    if (err) { setBballError(err.message); setBballBusyKey(null); return }
+    await loadCalendarWorkouts()
+    setBballBusyKey(null)
   }
 
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-      const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+      const { data: prof } = await supabase.from('profiles').select('role, gender').eq('id', user.id).single()
       if (prof?.role !== 'coach' && prof?.role !== 'admin') { router.push('/dashboard'); return }
       setUserId(user.id)
+      setGender(prof?.gender ?? null)
       const { data: membersData } = await supabase.from('profiles').select('id, name, email').eq('role', 'member')
       setAllMembers(membersData ?? [])
       const { data: tmpl } = await supabase
@@ -2476,6 +2554,13 @@ export default function CoachPage() {
         {/* ── WORKOUT CALENDAR TAB ── */}
         {activeTab === 'calendar' && (
           <div key="tab-calendar">
+            {bballError && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{bballError}</div>}
+            {bballJoinBlockedMsg && (
+              <div style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f59e0b', fontSize: '0.875rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
+                <span>{bballJoinBlockedMsg}</span>
+                <button onClick={() => setBballJoinBlockedMsg('')} style={{ background: 'none', border: 'none', color: '#f59e0b', cursor: 'pointer', minHeight: 0, padding: 0 }}><X size={14} /></button>
+              </div>
+            )}
             <CalendarGrid
               month={calendarMonth}
               onMonthChange={setCalendarMonth}
@@ -2504,8 +2589,15 @@ export default function CoachPage() {
               renderDayCellContent={(dayEntries) => (
                 <>
                   {dayEntries.slice(0, 2).map((w: any) => {
-                    const label = `${w.member_name?.split(' ')[0] ?? '—'}: ${w.title}`
                     const badgeStyle: React.CSSProperties = { borderRadius: '0.2rem', fontSize: '0.55rem', padding: '0.1rem 0.25rem', marginBottom: '0.1rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }
+                    if (w.isBballClass) {
+                      return (
+                        <div key={w.id} onClick={e => { e.stopPropagation(); setSelectedBballOcc(w as BballOccurrence) }} style={{ ...badgeStyle, background: 'rgba(52,186,194,0.2)', color: '#34bac2', cursor: 'pointer' }}>
+                          🏀 {w.cls.start_time?.slice(0, 5)} {w.cls.title}
+                        </div>
+                      )
+                    }
+                    const label = `${w.member_name?.split(' ')[0] ?? '—'}: ${w.title}`
                     if (w.isPlan) {
                       const isSkipped = w.status === 'skipped'
                       return (
@@ -2535,6 +2627,44 @@ export default function CoachPage() {
                           <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No workouts or plans on this date.</p>
                         </div>
                       ) : selEntries.map((w: any) => {
+                        if (w.isBballClass) {
+                          const occ = w as BballOccurrence & { id: string }
+                          const badge = genderBadgeStyle[occ.cls.gender_restriction]
+                          const full = occ.count >= occ.cls.max_slots
+                          const key = `${occ.cls.id}_${occ.date}`
+                          const busy = bballBusyKey === key
+                          return (
+                            <div key={w.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem' }}>
+                              <div onClick={() => setSelectedBballOcc(occ)} style={{ cursor: 'pointer' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
+                                  <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{occ.cls.title}</p>
+                                  {badge && (
+                                    <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', background: badge.bg, color: badge.color, border: `1px solid ${badge.border}` }}>{badge.label}</span>
+                                  )}
+                                </div>
+                                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.375rem' }}>
+                                  {formatTimeLabel(occ.cls.start_time)} – {formatTimeLabel(occ.cls.end_time)} · {occ.count} / {occ.cls.max_slots} spots filled{full ? ' · Full' : ''}
+                                </p>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <p onClick={() => setSelectedBballOcc(occ)} style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', fontWeight: 600, cursor: 'pointer' }}>View Details →</p>
+                                {occ.joined ? (
+                                  <button onClick={() => handleBballLeave(occ)} disabled={busy} style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 700, color: '#ef4444', cursor: busy ? 'not-allowed' : 'pointer' }}>
+                                    {busy ? 'Leaving…' : 'Leave'}
+                                  </button>
+                                ) : full ? (
+                                  <button disabled style={{ background: 'var(--border)', border: 'none', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', cursor: 'not-allowed' }}>
+                                    Class Full
+                                  </button>
+                                ) : (
+                                  <button onClick={() => handleBballJoin(occ)} disabled={busy} style={{ background: 'var(--teal-primary)', border: 'none', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 700, color: 'white', cursor: busy ? 'not-allowed' : 'pointer' }}>
+                                    {busy ? 'Joining…' : 'Join'}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        }
                         if (w.isPlan) {
                           const isSkipped = w.status === 'skipped'
                           const isCompleted = w.status === 'completed'
@@ -2617,6 +2747,17 @@ export default function CoachPage() {
               )}
             />
           </div>
+        )}
+
+        {selectedBballOcc && (
+          <BballClassDetailModal
+            occ={selectedBballOcc}
+            myUserId={userId || ''}
+            myGender={gender}
+            isAdmin={false}
+            onClose={() => setSelectedBballOcc(null)}
+            onJoinLeave={loadCalendarWorkouts}
+          />
         )}
 
         {/* ── NOTES TAB ── */}

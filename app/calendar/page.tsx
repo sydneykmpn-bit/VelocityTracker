@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { X } from 'lucide-react'
 import ClassDetailModal, { classTypeColor } from '@/components/ClassDetailModal'
 import CalendarGrid, { CalendarEntry } from '@/components/CalendarGrid'
-import { BballClassDetailModal, BballClassFormModal, BballOccurrence, genderBadgeStyle } from '@/components/BballClassModal'
+import { BballClassDetailModal, BballOccurrence, genderBadgeStyle } from '@/components/BballClassModal'
 import { getLocalDateString, bballOccurrencesInRange, formatTimeLabel, BballClassRow } from '@/lib/utils'
 
 function parseLocalDate(dateStr: string): Date {
@@ -99,9 +100,9 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true)
   const [selectedClass, setSelectedClass] = useState<any>(null)
   const [selectedBballOcc, setSelectedBballOcc] = useState<BballOccurrence | null>(null)
-  const [bballFormOpen, setBballFormOpen] = useState(false)
-  const [editingBballClass, setEditingBballClass] = useState<BballClassRow | null>(null)
-  const [bballClasses, setBballClasses] = useState<BballClassRow[]>([])
+  const [bballBusyKey, setBballBusyKey] = useState<string | null>(null)
+  const [bballError, setBballError] = useState('')
+  const [bballJoinBlockedMsg, setBballJoinBlockedMsg] = useState('')
 
   const loadClasses = async () => {
     const year = currentMonth.getFullYear()
@@ -179,7 +180,6 @@ export default function CalendarPage() {
     // Fetch bball_classes (basketball class slots) and expand into occurrences for this range
     const { data: bballClassData } = await supabase.from('bball_classes').select('*')
     const bballList: BballClassRow[] = bballClassData || []
-    setBballClasses(bballList)
     const bballOccurrences = bballList.flatMap(c =>
       bballOccurrencesInRange(c, startOfMonth, endOfMonth).map(date => ({
         id: `bball-${c.id}-${date}`, classId: c.id, cls: c, date, isBballClass: true, count: 0, joined: false,
@@ -258,6 +258,46 @@ export default function CalendarPage() {
     setSelectedDate(dateStr)
   }
 
+  const bballGenderMatches = (restriction: string) => {
+    if (restriction === 'mixed') return true
+    if (restriction === 'men') return gender === 'male'
+    if (restriction === 'women') return gender === 'female'
+    return true
+  }
+
+  const handleBballJoin = async (occ: BballOccurrence) => {
+    const key = `${occ.cls.id}_${occ.date}`
+    setBballError(''); setBballJoinBlockedMsg('')
+    if (!bballGenderMatches(occ.cls.gender_restriction)) {
+      const label = occ.cls.gender_restriction === 'men' ? 'men' : 'women'
+      setBballJoinBlockedMsg(`This class is for ${label} only.`)
+      return
+    }
+    setBballBusyKey(key)
+    const { error: err } = await supabase.from('bball_class_signups').insert({
+      class_id: occ.cls.id, user_id: userId, occurrence_date: occ.date,
+    })
+    if (err) {
+      setBballError(err.message.toLowerCase().includes('full') ? 'This class just filled up.' : err.message)
+      setBballBusyKey(null)
+      await loadClasses()
+      return
+    }
+    await loadClasses()
+    setBballBusyKey(null)
+  }
+
+  const handleBballLeave = async (occ: BballOccurrence) => {
+    const key = `${occ.cls.id}_${occ.date}`
+    setBballError('')
+    setBballBusyKey(key)
+    const { error: err } = await supabase.from('bball_class_signups')
+      .delete().eq('class_id', occ.cls.id).eq('user_id', userId).eq('occurrence_date', occ.date)
+    if (err) { setBballError(err.message); setBballBusyKey(null); return }
+    await loadClasses()
+    setBballBusyKey(null)
+  }
+
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--background)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -266,25 +306,18 @@ export default function CalendarPage() {
     )
   }
 
-  const entries: CalendarEntry[] = classes.map(c => ({ ...c, date: c.scheduled_date }))
+  const entries: CalendarEntry[] = classes.map(c => ({ ...c, date: c.scheduled_date || c.date }))
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '2rem 1rem' }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '2rem' }}>
-          <div>
-            <p style={{ color: 'var(--teal-secondary)', fontSize: '0.7rem', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Schedule</p>
-            <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: 'clamp(2.5rem, 6vw, 4rem)', letterSpacing: '0.03em' }}>
-              TRAINING CALENDAR
-            </h1>
-          </div>
-          {userRole === 'admin' && (
-            <button onClick={() => { setEditingBballClass(null); setBballFormOpen(true) }} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', minHeight: 44 }}>
-              + Add Class
-            </button>
-          )}
+        <div style={{ marginBottom: '2rem' }}>
+          <p style={{ color: 'var(--teal-secondary)', fontSize: '0.7rem', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Schedule</p>
+          <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: 'clamp(2.5rem, 6vw, 4rem)', letterSpacing: '0.03em' }}>
+            TRAINING CALENDAR
+          </h1>
         </div>
 
         <CalendarGrid
@@ -357,21 +390,48 @@ export default function CalendarPage() {
                     {selEntries.filter(c => c.isBballClass).length > 0 && (
                       <div style={{ marginBottom: '1rem' }}>
                         <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--teal-secondary)', marginBottom: '0.5rem' }}>Basketball Classes</p>
-                        {selEntries.filter(c => c.isBballClass).map(occ => {
+                        {bballError && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', marginBottom: '0.5rem', color: '#f87171', fontSize: '0.8rem' }}>{bballError}</div>}
+                        {bballJoinBlockedMsg && (
+                          <div style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', marginBottom: '0.5rem', color: '#f59e0b', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                            <span>{bballJoinBlockedMsg}</span>
+                            <button onClick={() => setBballJoinBlockedMsg('')} style={{ background: 'none', border: 'none', color: '#f59e0b', cursor: 'pointer', minHeight: 0, padding: 0 }}><X size={13} /></button>
+                          </div>
+                        )}
+                        {selEntries.filter(c => c.isBballClass).map((occAny: any) => {
+                          const occ = occAny as BballOccurrence & { id: string }
                           const badge = genderBadgeStyle[occ.cls.gender_restriction]
                           const full = occ.count >= occ.cls.max_slots
+                          const key = `${occ.cls.id}_${occ.date}`
+                          const busy = bballBusyKey === key
                           return (
-                            <div key={occ.id} onClick={() => setSelectedBballOcc(occ as unknown as BballOccurrence)} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem', marginBottom: '0.5rem', cursor: 'pointer' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
-                                <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{occ.cls.title}</p>
-                                {badge && (
-                                  <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', background: badge.bg, color: badge.color, border: `1px solid ${badge.border}` }}>{badge.label}</span>
+                            <div key={occAny.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem', marginBottom: '0.5rem' }}>
+                              <div onClick={() => setSelectedBballOcc(occ)} style={{ cursor: 'pointer' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
+                                  <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{occ.cls.title}</p>
+                                  {badge && (
+                                    <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', background: badge.bg, color: badge.color, border: `1px solid ${badge.border}` }}>{badge.label}</span>
+                                  )}
+                                </div>
+                                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.375rem' }}>
+                                  {formatTimeLabel(occ.cls.start_time)} – {formatTimeLabel(occ.cls.end_time)} · {occ.count} / {occ.cls.max_slots} spots filled{full ? ' · Full' : ''}
+                                </p>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <p onClick={() => setSelectedBballOcc(occ)} style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', fontWeight: 600, cursor: 'pointer' }}>View Details →</p>
+                                {occ.joined ? (
+                                  <button onClick={() => handleBballLeave(occ)} disabled={busy} style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 700, color: '#ef4444', cursor: busy ? 'not-allowed' : 'pointer' }}>
+                                    {busy ? 'Leaving…' : 'Leave'}
+                                  </button>
+                                ) : full ? (
+                                  <button disabled style={{ background: 'var(--border)', border: 'none', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', cursor: 'not-allowed' }}>
+                                    Class Full
+                                  </button>
+                                ) : (
+                                  <button onClick={() => handleBballJoin(occ)} disabled={busy} style={{ background: 'var(--teal-primary)', border: 'none', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 700, color: 'white', cursor: busy ? 'not-allowed' : 'pointer' }}>
+                                    {busy ? 'Joining…' : 'Join'}
+                                  </button>
                                 )}
                               </div>
-                              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.375rem' }}>
-                                {formatTimeLabel(occ.cls.start_time)} – {formatTimeLabel(occ.cls.end_time)} · {occ.count} / {occ.cls.max_slots} spots filled{full ? ' · Full' : ''}
-                              </p>
-                              <p style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', fontWeight: 600 }}>View Details →</p>
                             </div>
                           )
                         })}
@@ -415,17 +475,9 @@ export default function CalendarPage() {
           occ={selectedBballOcc}
           myUserId={userId || ''}
           myGender={gender}
-          isAdmin={userRole === 'admin'}
+          isAdmin={false}
           onClose={() => setSelectedBballOcc(null)}
           onJoinLeave={loadClasses}
-          onEdit={cls => { setSelectedBballOcc(null); setEditingBballClass(cls); setBballFormOpen(true) }}
-        />
-      )}
-      {bballFormOpen && userRole === 'admin' && (
-        <BballClassFormModal
-          editing={editingBballClass}
-          onClose={() => setBballFormOpen(false)}
-          onSaved={loadClasses}
         />
       )}
     </div>
