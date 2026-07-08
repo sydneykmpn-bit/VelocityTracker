@@ -71,12 +71,18 @@ export default function CalendarGrid({
   const selectedDateEntries = selectedDate ? entries.filter(e => e.date === selectedDate) : []
 
   const goPrev = () => {
+    window.scrollTo({ top: 0, behavior: 'instant' })
     if (viewMode === 'month') { onMonthChange(new Date(year, monthIndex - 1)); return }
     const d = new Date(month); d.setDate(d.getDate() - 7); onMonthChange(d)
   }
   const goNext = () => {
+    window.scrollTo({ top: 0, behavior: 'instant' })
     if (viewMode === 'month') { onMonthChange(new Date(year, monthIndex + 1)); return }
     const d = new Date(month); d.setDate(d.getDate() + 7); onMonthChange(d)
+  }
+  const changeViewMode = (mode: 'month' | 'week') => {
+    window.scrollTo({ top: 0, behavior: 'instant' })
+    setViewMode(mode)
   }
 
   let headerTitle: string
@@ -120,7 +126,7 @@ export default function CalendarGrid({
           {(['month', 'week'] as const).map(mode => (
             <button
               key={mode}
-              onClick={() => setViewMode(mode)}
+              onClick={() => changeViewMode(mode)}
               style={{
                 padding: '0.3rem 0.75rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700,
                 textTransform: 'capitalize', cursor: 'pointer', minHeight: 0,

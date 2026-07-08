@@ -256,12 +256,12 @@ export default function CalendarPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
-      <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '2rem 1rem' }}>
+      <main style={{ maxWidth: '1100px', margin: '0 auto', padding: 'max(2rem, env(safe-area-inset-top)) 1rem 2rem' }}>
 
         {/* Header */}
         <div style={{ marginBottom: '2rem' }}>
           <p style={{ color: 'var(--teal-secondary)', fontSize: '0.7rem', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Schedule</p>
-          <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: 'clamp(2.5rem, 6vw, 4rem)', letterSpacing: '0.03em' }}>
+          <h1 style={{ fontFamily: 'var(--font-bebas)', fontSize: 'clamp(2rem, 8vw, 4rem)', letterSpacing: '0.03em' }}>
             TRAINING CALENDAR
           </h1>
         </div>
