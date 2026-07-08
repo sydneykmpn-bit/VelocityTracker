@@ -275,7 +275,9 @@ export default function LeaderboardPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!exercise.trim() || !value || !userId) return
+    if (!userId) return
+    if (!exercise.trim()) { setError('Please select an exercise.'); return }
+    if (!value) { setError('Please enter a value.'); return }
     setSubmitting(true); setError(''); setSuccess('')
     const { error: err } = await supabase.from('personal_records').insert({
       user_id: userId,

@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { ChevronLeft, ChevronRight, X, Plus, Pencil, Trash2 } from 'lucide-react'
-import { DAY_LABELS, formatTimeLabel, formatDateYMD, bballOccurrencesInRange, BballClassRow } from '@/lib/utils'
+import { formatTimeLabel, formatDateYMD, bballOccurrencesInRange, BballClassRow } from '@/lib/utils'
 import { BballClassDetailModal, BballClassFormModal, BballOccurrence, genderBadgeStyle } from '@/components/BballClassModal'
 
 function getWeekStart(weekOffset: number): Date {
@@ -239,13 +239,8 @@ export default function ClassesPage() {
                         </p>
                       )}
                       <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                        {DAY_LABELS[occ.cls.day_of_week]} · {formatTimeLabel(occ.cls.start_time)} – {formatTimeLabel(occ.cls.end_time)}
+                        {new Date(occ.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })} · {formatTimeLabel(occ.cls.start_time)} – {formatTimeLabel(occ.cls.end_time)}
                       </p>
-                      {occ.cls.is_recurring && occ.cls.recurrence_end_date && (
-                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>
-                          Recurring until {new Date(occ.cls.recurrence_end_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </p>
-                      )}
                       <p style={{ fontSize: '0.75rem', color: full ? '#f87171' : 'var(--text-secondary)', marginTop: '0.25rem' }}>
                         {occ.count} / {occ.cls.max_slots} spots filled
                       </p>

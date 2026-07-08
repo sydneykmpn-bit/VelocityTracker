@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Plus, Trash2, Dumbbell, BicepsFlexed } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Dumbbell, BicepsFlexed, X } from 'lucide-react'
 import BasketballIcon from '@/components/icons/BasketballIcon'
 import { createClient } from '@/lib/supabase/client'
 import { getLocalDateString } from '@/lib/utils'
@@ -15,6 +15,38 @@ interface ExerciseRow {
 }
 
 const blank = (): ExerciseRow => ({ name: '', sets: '', reps: '', weight: '', duration: '', distance: '', speed: '', isRunning: false, notes: '' })
+
+interface SetRow {
+  reps: string
+  weight: string
+}
+
+function blankSetRow(): SetRow {
+  return { reps: '', weight: '' }
+}
+
+// sets = row count, weight = the max weight across rows, reps = the reps recorded on that max-weight row.
+function summarizeSetRows(rows: SetRow[]): { sets: number; reps: number | null; weight: number | null; set_details: { set_number: number; reps: number | null; weight: number | null }[] } {
+  let maxWeight: number | null = null
+  let repsAtMax: number | null = null
+  rows.forEach(r => {
+    const w = r.weight ? parseFloat(r.weight) : 0
+    if (maxWeight === null || w > maxWeight) {
+      maxWeight = w
+      repsAtMax = r.reps ? parseInt(r.reps) : null
+    }
+  })
+  return {
+    sets: rows.length,
+    reps: repsAtMax,
+    weight: maxWeight,
+    set_details: rows.map((r, i) => ({
+      set_number: i + 1,
+      reps: r.reps ? parseInt(r.reps) : null,
+      weight: r.weight ? parseFloat(r.weight) : null,
+    })),
+  }
+}
 
 const inputBase: React.CSSProperties = {
   width: '100%', background: '#0d1a1e', border: '1px solid #1a2e34',
@@ -78,6 +110,8 @@ export default function EditWorkoutPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [activeSuggestion, setActiveSuggestion] = useState<number | null>(null)
+  const [advancedExercises, setAdvancedExercises] = useState<Record<number, boolean>>({})
+  const [setRows, setSetRows] = useState<Record<number, SetRow[]>>({})
 
   useEffect(() => {
     async function load() {
@@ -106,6 +140,23 @@ export default function EditWorkoutPage() {
           isRunning: false,
           notes: ex.notes ?? '',
         })))
+
+        const advanced: Record<number, boolean> = {}
+        const rows: Record<number, SetRow[]> = {}
+        exs.forEach((ex, idx) => {
+          if (ex.set_details && Array.isArray(ex.set_details) && ex.set_details.length > 0) {
+            advanced[idx] = true
+            rows[idx] = ex.set_details
+              .slice()
+              .sort((a: any, b: any) => (a.set_number ?? 0) - (b.set_number ?? 0))
+              .map((sd: any) => ({
+                reps: sd.reps != null ? String(sd.reps) : '',
+                weight: sd.weight != null ? String(sd.weight) : '',
+              }))
+          }
+        })
+        setAdvancedExercises(advanced)
+        setSetRows(rows)
       }
       setLoading(false)
     }
@@ -121,8 +172,49 @@ export default function EditWorkoutPage() {
     })
   }
 
+  const reindexAfterRemoval = <T,>(map: Record<number, T>, removedIdx: number): Record<number, T> => {
+    const next: Record<number, T> = {}
+    Object.entries(map).forEach(([k, v]) => {
+      const n = Number(k)
+      if (n < removedIdx) next[n] = v
+      else if (n > removedIdx) next[n - 1] = v
+    })
+    return next
+  }
+
   const removeExercise = (indexToRemove: number) => {
     setExercises(prev => prev.filter((_, i) => i !== indexToRemove))
+    setAdvancedExercises(prev => reindexAfterRemoval(prev, indexToRemove))
+    setSetRows(prev => reindexAfterRemoval(prev, indexToRemove))
+  }
+
+  const toggleAdvanced = (idx: number) => {
+    setAdvancedExercises(prev => {
+      const isAdvanced = !!prev[idx]
+      const next = { ...prev }
+      if (isAdvanced) {
+        delete next[idx]
+      } else {
+        next[idx] = true
+        setSetRows(sr => ({ ...sr, [idx]: sr[idx] && sr[idx].length > 0 ? sr[idx] : [blankSetRow()] }))
+      }
+      return next
+    })
+  }
+
+  const addSetRow = (idx: number) => {
+    setSetRows(prev => ({ ...prev, [idx]: [...(prev[idx] || []), blankSetRow()] }))
+  }
+
+  const removeSetRow = (idx: number, rowIdx: number) => {
+    setSetRows(prev => ({ ...prev, [idx]: (prev[idx] || []).filter((_, i) => i !== rowIdx) }))
+  }
+
+  const updateSetRow = (idx: number, rowIdx: number, field: keyof SetRow, val: string) => {
+    setSetRows(prev => ({
+      ...prev,
+      [idx]: (prev[idx] || []).map((r, i) => i === rowIdx ? { ...r, [field]: val } : r),
+    }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -143,20 +235,27 @@ export default function EditWorkoutPage() {
       const { error: deleteErr } = await supabase.from('exercises').delete().eq('workout_id', id)
       if (deleteErr) throw deleteErr
 
-      const valid = exercises.filter(ex => ex.name.trim())
+      const valid = exercises
+        .map((ex, idx) => ({ ex, idx }))
+        .filter(({ ex }) => ex.name.trim())
       if (valid.length > 0) {
         const { error: insertErr } = await supabase.from('exercises').insert(
-          valid.map(ex => ({
-            workout_id: id,
-            name: ex.name.trim(),
-            sets: ex.sets ? parseInt(ex.sets) : null,
-            reps: ex.reps ? parseInt(ex.reps) : null,
-            weight: ex.weight ? parseFloat(ex.weight) : null,
-            duration: ex.duration ? parseInt(ex.duration) : null,
-            distance: ex.distance ? parseFloat(ex.distance) : null,
-            speed: ex.speed ? parseFloat(ex.speed) : null,
-            notes: ex.notes.trim() || null,
-          }))
+          valid.map(({ ex, idx }) => {
+            const isAdvanced = advancedExercises[idx] && (setRows[idx] || []).length > 0
+            const advanced = isAdvanced ? summarizeSetRows(setRows[idx]) : null
+            return {
+              workout_id: id,
+              name: ex.name.trim(),
+              sets: advanced ? advanced.sets : (ex.sets ? parseInt(ex.sets) : null),
+              reps: advanced ? advanced.reps : (ex.reps ? parseInt(ex.reps) : null),
+              weight: advanced ? advanced.weight : (ex.weight ? parseFloat(ex.weight) : null),
+              duration: ex.duration ? parseInt(ex.duration) : null,
+              distance: ex.distance ? parseFloat(ex.distance) : null,
+              speed: ex.speed ? parseFloat(ex.speed) : null,
+              notes: ex.notes.trim() || null,
+              set_details: advanced ? advanced.set_details : null,
+            }
+          })
         )
         if (insertErr) throw insertErr
       }
@@ -306,14 +405,44 @@ export default function EditWorkoutPage() {
                             <input type="number" value={ex.speed} onChange={e => update(idx, 'speed', e.target.value)} style={inputBase} placeholder="10" step="0.1" min="0" />
                           </div>
                         </div>
+                      ) : advancedExercises[idx] ? (
+                        <div style={{ marginBottom: '0.5rem' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {(setRows[idx] || []).map((row, rowIdx) => (
+                              <div key={rowIdx} style={{ display: 'grid', gridTemplateColumns: '48px 1fr 1fr 28px', gap: '0.5rem', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 700 }}>Set {rowIdx + 1}</span>
+                                <input type="number" value={row.reps} onChange={e => updateSetRow(idx, rowIdx, 'reps', e.target.value)} style={inputBase} placeholder="Reps" min="0" />
+                                <input type="number" value={row.weight} onChange={e => updateSetRow(idx, rowIdx, 'weight', e.target.value)} style={inputBase} placeholder="Weight (kg)" step="0.5" min="0" />
+                                {(setRows[idx] || []).length > 1 && (
+                                  <button type="button" onClick={() => removeSetRow(idx, rowIdx)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', justifyContent: 'center' }}>
+                                    <X size={14} />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                          <button type="button" onClick={() => addSetRow(idx)} style={{ background: 'none', border: 'none', color: 'var(--teal-secondary)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', padding: 0, marginTop: '0.5rem' }}>
+                            + Add Set
+                          </button>
+                          <div style={{ marginTop: '0.375rem' }}>
+                            <button type="button" onClick={() => toggleAdvanced(idx)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '0.7rem', textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>
+                              Switch to simple mode
+                            </button>
+                          </div>
+                        </div>
                       ) : (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                          {(['sets', 'reps', 'weight'] as const).map(f => (
-                            <div key={f}>
-                              <label style={labelBase}>{f === 'weight' ? 'Weight (kg)' : f.charAt(0).toUpperCase() + f.slice(1)}</label>
-                              <input type="number" value={ex[f]} onChange={e => update(idx, f, e.target.value)} style={inputBase} placeholder={f === 'weight' ? '50' : f === 'sets' ? '3' : '10'} step={f === 'weight' ? '0.5' : '1'} min="0" />
-                            </div>
-                          ))}
+                        <div style={{ marginBottom: '0.5rem' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+                            {(['sets', 'reps', 'weight'] as const).map(f => (
+                              <div key={f}>
+                                <label style={labelBase}>{f === 'weight' ? 'Weight (kg)' : f.charAt(0).toUpperCase() + f.slice(1)}</label>
+                                <input type="number" value={ex[f]} onChange={e => update(idx, f, e.target.value)} style={inputBase} placeholder={f === 'weight' ? '50' : f === 'sets' ? '3' : '10'} step={f === 'weight' ? '0.5' : '1'} min="0" />
+                              </div>
+                            ))}
+                          </div>
+                          <button type="button" onClick={() => toggleAdvanced(idx)} style={{ background: 'none', border: 'none', color: 'var(--teal-secondary)', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', padding: 0, marginTop: '0.375rem' }}>
+                            + Per-set details
+                          </button>
                         </div>
                       )}
                       <div>

@@ -201,7 +201,26 @@ export default function StudentPage() {
         .eq('member_id', user.id)
         .limit(1)
         .maybeSingle()
-      if (membership?.groups?.profiles) setCoach(membership.groups.profiles)
+      if (membership?.groups?.profiles) {
+        setCoach(membership.groups.profiles)
+      } else {
+        // Not in a group — fall back to coach_students, the authoritative "who's my coach" link
+        // for students a coach added directly (e.g. via My Students > + Add Student) without a group.
+        const { data: coachLink } = await supabase
+          .from('coach_students')
+          .select('coach_id')
+          .eq('member_id', user.id)
+          .limit(1)
+          .maybeSingle()
+        if (coachLink?.coach_id) {
+          const { data: coachProfile } = await supabase
+            .from('profiles')
+            .select('name')
+            .eq('id', coachLink.coach_id)
+            .maybeSingle()
+          if (coachProfile) setCoach(coachProfile)
+        }
+      }
 
       const { data: plans } = await supabase
         .from('workout_plans')
