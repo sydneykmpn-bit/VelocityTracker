@@ -24,8 +24,9 @@ export default function BottomNav() {
     const cachedIsAthlete = sessionStorage.getItem('vel_is_athlete')
     if (cachedRole) setRole(cachedRole)
     if (cachedIsAthlete !== null) setIsAthlete(cachedIsAthlete === 'true')
-    if (cachedRole) return
+  }, [])
 
+  useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return

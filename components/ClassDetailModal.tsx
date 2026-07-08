@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Trash2, Repeat, ClipboardList, Pencil, X, MapPin, Flag, Check, CheckCircle2, SkipForward } from 'lucide-react'
+import { genderBadgeStyle } from '@/components/BballClassModal'
 
 export function classTypeColor(type: string): { bg: string; color: string } {
   if (type === 'basketball') return { bg: 'rgba(30,58,95,0.8)', color: '#60a5fa' }
@@ -49,6 +50,7 @@ export default function ClassDetailModal({
   const [loadingPlanExercises, setLoadingPlanExercises] = useState(false)
   const [completeDurationMinutes, setCompleteDurationMinutes] = useState('')
   const [planActionError, setPlanActionError] = useState('')
+  const [myGender, setMyGender] = useState<string | null>(null)
 
   const classId = cls.is_dynamic ? cls.parent_class_id : cls.id
 
@@ -78,6 +80,18 @@ export default function ClassDetailModal({
       .then(({ data }) => setCoaches(data || []))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Fetch the current user's gender, needed to enforce cls.gender_restriction on RSVP
+  useEffect(() => {
+    if (!userId) return
+    supabase
+      .from('profiles')
+      .select('gender')
+      .eq('id', userId)
+      .single()
+      .then(({ data }) => setMyGender(data?.gender ?? null))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
 
   // Fetch member candidates for "Add Attendee" (admin/coach only). Intentionally unscoped to
   // all members for now — could be narrowed later (e.g. to members in groups where groups.coach_id = userId).
@@ -153,6 +167,18 @@ export default function ClassDetailModal({
       if (existing) {
         await loadAttendees()
       } else {
+        const restriction = cls.gender_restriction
+        if (restriction === 'men' && myGender !== 'male') {
+          setRsvpError('This class is for men only.')
+          setRsvpLoading(false)
+          return
+        }
+        if (restriction === 'women' && myGender !== 'female') {
+          setRsvpError('This class is for women only.')
+          setRsvpLoading(false)
+          return
+        }
+
         const { data, error } = await supabase
           .from('class_attendees')
           .insert({
@@ -319,6 +345,14 @@ export default function ClassDetailModal({
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '999px', textTransform: 'uppercase', background: tc.bg, color: tc.color }}>{cls.type?.toUpperCase()}</span>
+                {genderBadgeStyle[cls.gender_restriction] && (() => {
+                  const badge = genderBadgeStyle[cls.gender_restriction]
+                  return (
+                    <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.06em', background: badge.bg, color: badge.color, border: `1px solid ${badge.border}` }}>
+                      {badge.label}
+                    </span>
+                  )
+                })()}
                 {cls.is_recurring && <span style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem', borderRadius: '999px', background: 'var(--surface-raised)', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}><Repeat size={10} /> Recurring {cls.recurrence_rule}</span>}
                 {cls.isPlan && <span style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem', borderRadius: '999px', background: 'rgba(8,119,160,0.2)', color: 'var(--teal-secondary)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}><ClipboardList size={10} /> Workout Plan</span>}
               </div>

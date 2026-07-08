@@ -156,6 +156,52 @@ export function bballOccurrencesInRange(cls: BballClassRow, rangeStart: string, 
   return dates
 }
 
+// Expand a scheduled_classes recurring series into its instance dates within [startDate, endDate]
+// exclusive of startDate itself (matching the parent row's own date). rule is one of
+// 'daily'|'weekly'|'biweekly'|'monthly'; days is a list of lowercase day names, only consulted for
+// weekly/biweekly (empty = every day). Shared by app/calendar/page.tsx (viewing existing series) and
+// app/admin/page.tsx (creating new ones).
+export function generateRecurringDates(
+  startDate: string,
+  endDate: string,
+  rule: string,
+  days: string[]
+): string[] {
+  if (!endDate || !startDate) return []
+  const dates: string[] = []
+  const start = parseLocalDateStr(startDate)
+  const end = parseLocalDateStr(endDate)
+  if (end <= start) return []
+  const current = parseLocalDateStr(startDate)
+  current.setDate(current.getDate() + 1)
+  const normalizedDays = days.map(d => d.toLowerCase().trim())
+  while (current <= end) {
+    const dayName = DAY_NAMES[current.getDay()]
+    const dateStr = formatDateYMD(current)
+    const msDiff = current.getTime() - start.getTime()
+    const daysDiff = Math.floor(msDiff / (24 * 60 * 60 * 1000))
+    const weeksDiff = Math.floor(daysDiff / 7)
+    let include = false
+    switch (rule) {
+      case 'daily':
+        include = true
+        break
+      case 'weekly':
+        include = normalizedDays.length === 0 || normalizedDays.includes(dayName)
+        break
+      case 'biweekly':
+        include = weeksDiff % 2 === 0 && (normalizedDays.length === 0 || normalizedDays.includes(dayName))
+        break
+      case 'monthly':
+        include = current.getDate() === start.getDate()
+        break
+    }
+    if (include) dates.push(dateStr)
+    current.setDate(current.getDate() + 1)
+  }
+  return dates
+}
+
 // Workout streak calculation (weekly)
 export function calculateStreak(workoutDates: string[]): number {
   if (!workoutDates.length) return 0

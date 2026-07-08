@@ -7,61 +7,7 @@ import { X } from 'lucide-react'
 import ClassDetailModal, { classTypeColor } from '@/components/ClassDetailModal'
 import CalendarGrid, { CalendarEntry } from '@/components/CalendarGrid'
 import { BballClassDetailModal, BballOccurrence, genderBadgeStyle } from '@/components/BballClassModal'
-import { getLocalDateString, bballOccurrencesInRange, formatTimeLabel, BballClassRow } from '@/lib/utils'
-
-function parseLocalDate(dateStr: string): Date {
-  const [y, m, d] = dateStr.split('-').map(Number)
-  return new Date(y, m - 1, d)
-}
-
-function formatLocalDate(date: Date): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-
-function generateRecurringDates(
-  startDate: string,
-  endDate: string,
-  rule: string,
-  days: string[]
-): string[] {
-  if (!endDate || !startDate) return []
-  const dates: string[] = []
-  const start = parseLocalDate(startDate)
-  const end = parseLocalDate(endDate)
-  if (end <= start) return []
-  const current = parseLocalDate(startDate)
-  current.setDate(current.getDate() + 1)
-  const dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday']
-  const normalizedDays = days.map(d => d.toLowerCase().trim())
-  while (current <= end) {
-    const dayName = dayNames[current.getDay()]
-    const dateStr = formatLocalDate(current)
-    const msDiff = current.getTime() - start.getTime()
-    const daysDiff = Math.floor(msDiff / (24 * 60 * 60 * 1000))
-    const weeksDiff = Math.floor(daysDiff / 7)
-    let include = false
-    switch (rule) {
-      case 'daily':
-        include = true
-        break
-      case 'weekly':
-        include = normalizedDays.length === 0 || normalizedDays.includes(dayName)
-        break
-      case 'biweekly':
-        include = weeksDiff % 2 === 0 && (normalizedDays.length === 0 || normalizedDays.includes(dayName))
-        break
-      case 'monthly':
-        include = current.getDate() === start.getDate()
-        break
-    }
-    if (include) dates.push(dateStr)
-    current.setDate(current.getDate() + 1)
-  }
-  return dates
-}
+import { getLocalDateString, bballOccurrencesInRange, formatTimeLabel, formatDateYMD as formatLocalDate, generateRecurringDates, BballClassRow } from '@/lib/utils'
 
 function ClassCard({ cls, userRole }: { cls: any; userRole: string }) {
   const tc = classTypeColor(cls.type)
