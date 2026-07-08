@@ -119,11 +119,12 @@ export async function POST(request: NextRequest) {
         await adminClient.from('class_attendees').delete().eq('member_id', userId)
       })(),
 
-      // Chain J: groups.coach_id -> null, scheduled_classes.coach_id/created_by -> null
+      // Chain J: groups.coach_id -> null, scheduled_classes.coach_id/created_by -> null, bball_classes.created_by -> null
       (async () => {
         await adminClient.from('groups').update({ coach_id: null }).eq('coach_id', userId)
         await adminClient.from('scheduled_classes').update({ coach_id: null }).eq('coach_id', userId)
         await adminClient.from('scheduled_classes').update({ created_by: null }).eq('created_by', userId)
+        await adminClient.from('bball_classes').update({ created_by: null }).eq('created_by', userId)
       })(),
 
       // Chain K: program_assignments as member, attendance_history

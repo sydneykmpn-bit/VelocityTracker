@@ -4,13 +4,13 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { LayoutDashboard, ShieldCheck, Users, Dumbbell, CalendarDays, GraduationCap } from 'lucide-react'
+import { LayoutDashboard, ShieldCheck, Users, Dumbbell, CalendarDays, GraduationCap, Trophy } from 'lucide-react'
 import BasketballIcon from '@/components/icons/BasketballIcon'
 
 const SECOND_TAB: Record<string, { href: string; label: string; icon: typeof Users }> = {
   admin: { href: '/admin', label: 'Admin', icon: ShieldCheck },
   coach: { href: '/coach', label: 'Coach', icon: Users },
-  member: { href: '/workouts', label: 'Workouts', icon: Dumbbell },
+  member: { href: '/leaderboard', label: 'Board', icon: Trophy },
 }
 
 export default function BottomNav() {

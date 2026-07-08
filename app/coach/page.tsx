@@ -970,6 +970,32 @@ export default function CoachPage() {
     await loadMyMembers(userId)
   }
 
+  const handleDeleteGroup = async (groupId: string, groupName: string) => {
+    if (!userId) return
+    if (!confirm(`Delete "${groupName}"? This removes all its members. This cannot be undone.`)) return
+    setError('')
+
+    const { error: gmError } = await supabase.from('group_members').delete().eq('group_id', groupId)
+    if (gmError) { setError(gmError.message); return }
+
+    const { error: groupError } = await supabase.from('groups').delete().eq('id', groupId)
+    if (groupError) {
+      if (groupError.code === '23503') {
+        setError('This group has scheduled classes linked to it — remove those first.')
+      } else {
+        setError(groupError.message)
+      }
+      return
+    }
+
+    setGroupMembers(prev => {
+      const next = { ...prev }
+      delete next[groupId]
+      return next
+    })
+    await loadMyGroups(userId)
+  }
+
   const handleRemoveAthlete = async (athleteId: string, athleteName: string) => {
     if (!userId) return
     if (!confirm(`Remove ${athleteName} as your athlete? This deletes their upcoming plans/programs and your notes about them. Completed workout history is kept. This cannot be undone.`)) return
@@ -1863,13 +1889,22 @@ export default function CoachPage() {
                     const memberCount = groupMembers[g.id] ? groupMembers[g.id].length : ((g.group_members as any[])?.[0]?.count ?? 0)
                     return (
                       <div key={g.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', overflow: 'hidden' }}>
-                        <button onClick={() => toggleGroup(g.id)} style={{ width: '100%', background: 'none', border: 'none', padding: '1rem 1.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#F2F2F2' }}>
-                          <div style={{ textAlign: 'left' }}>
-                            <h3 style={{ fontWeight: 600, marginBottom: '0.15rem' }}>{g.name}</h3>
-                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{memberCount} members</p>
-                          </div>
-                          {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)' }} />}
-                        </button>
+                        <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', gap: '0.5rem' }}>
+                          <button onClick={() => toggleGroup(g.id)} style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#F2F2F2', textAlign: 'left', minHeight: 0 }}>
+                            <div style={{ textAlign: 'left' }}>
+                              <h3 style={{ fontWeight: 600, marginBottom: '0.15rem' }}>{g.name}</h3>
+                              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{memberCount} members</p>
+                            </div>
+                            {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)' }} />}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteGroup(g.id, g.name)}
+                            title="Delete group"
+                            style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.4rem', color: '#f87171', cursor: 'pointer', display: 'flex', alignItems: 'center', minHeight: 0, flexShrink: 0 }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                         {isExpanded && (
                           <div style={{ borderTop: '1px solid var(--border)', padding: '1rem 1.25rem' }}>
                             {gms.length === 0 ? <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.75rem' }}>No members yet.</p> : (

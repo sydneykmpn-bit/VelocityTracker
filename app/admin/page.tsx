@@ -658,7 +658,7 @@ export default function AdminPage() {
     await loadBballClasses()
   }
 
-  const coaches = allUsers.filter(p => p.role === 'coach' || p.role === 'admin')
+  const coaches = allUsers.filter(p => p.role === 'coach')
   const members = allUsers.filter(p => p.role === 'member')
   const adminCount = allUsers.filter(p => p.role === 'admin').length
   const recentUsers = allUsers.slice(0, 4)
