@@ -270,9 +270,6 @@ export default function RegisterForm() {
             Already have an account?{' '}
             <Link href="/login" style={{ color: 'var(--teal-secondary)', textDecoration: 'none', minHeight: 0, display: 'inline' }}>Sign in</Link>
           </p>
-          <p style={{ textAlign: 'center', marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-            Contact your coach or admin to update your role.
-          </p>
         </div>
       </div>
     </div>
