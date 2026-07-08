@@ -3,10 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Trash2, ChevronDown, ChevronUp, Pencil, KeyRound, Timer, X, AlertTriangle, Target, CheckCircle2, Mars, Venus, Users, UserCog, Building2, Settings, Check } from 'lucide-react'
+import { Trash2, ChevronDown, ChevronUp, Pencil, KeyRound, Timer, X, AlertTriangle, Target, CheckCircle2, Mars, Venus, Users, UserCog, Building2, Settings, Check, Volleyball } from 'lucide-react'
 import { getLocalDateString } from '@/lib/utils'
 
-type AdminTab = 'members' | 'coaches' | 'groups' | 'settings'
+type AdminTab = 'members' | 'coaches' | 'groups' | 'classes' | 'settings'
 type Role = 'member' | 'coach' | 'admin'
 
 const inputBase: React.CSSProperties = {
@@ -398,6 +398,13 @@ export default function AdminPage() {
   // Leaderboard (still used by Settings tab PR management)
   const [allPRs, setAllPRs] = useState<any[]>([])
 
+  // Classes tab (bball_classes)
+  const [bballClasses, setBballClasses] = useState<any[]>([])
+  const emptyClassForm = { title: '', description: '', day_of_week: 'monday', start_time: '18:00', end_time: '19:00', gender_restriction: 'mixed', max_slots: 10 }
+  const [classForm, setClassForm] = useState(emptyClassForm)
+  const [classSaving, setClassSaving] = useState(false)
+  const [editingClassId, setEditingClassId] = useState<string | null>(null)
+
   // Coaches state
   const [coachStats, setCoachStats] = useState<Record<string, { groups: number; athletes: number; plansAssigned: number }>>({})
   const [classesThisMonthCount, setClassesThisMonthCount] = useState(0)
@@ -429,6 +436,11 @@ export default function AdminPage() {
     setGroups(data ?? [])
   }
 
+  const loadBballClasses = async () => {
+    const { data } = await supabase.from('bball_classes').select('*').order('day_of_week').order('start_time')
+    setBballClasses(data ?? [])
+  }
+
   const loadGroupMembers = async (groupId: string) => {
     const { data } = await supabase
       .from('group_members')
@@ -454,6 +466,7 @@ export default function AdminPage() {
 
       await Promise.all([
         loadGroups(),
+        loadBballClasses(),
         supabase.from('personal_records').select('*, profiles(name, gender)').order('value', { ascending: false }).then(({ data }) => setAllPRs(data ?? [])),
       ])
 
@@ -637,6 +650,55 @@ export default function AdminPage() {
     await loadGroups()
   }
 
+  const handleClassFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!classForm.title.trim()) return
+    setClassSaving(true)
+    setError('')
+    const payload = {
+      title: classForm.title.trim(),
+      description: classForm.description.trim() || null,
+      day_of_week: classForm.day_of_week,
+      start_time: classForm.start_time,
+      end_time: classForm.end_time,
+      gender_restriction: classForm.gender_restriction,
+      max_slots: Number(classForm.max_slots) || 1,
+    }
+    const { error: err } = editingClassId
+      ? await supabase.from('bball_classes').update(payload).eq('id', editingClassId)
+      : await supabase.from('bball_classes').insert({ ...payload, created_by: currentUser?.id })
+    if (err) { setError(err.message) } else {
+      setSuccess(editingClassId ? 'Class updated!' : 'Class created!')
+      setClassForm(emptyClassForm)
+      setEditingClassId(null)
+      await loadBballClasses()
+    }
+    setClassSaving(false)
+  }
+
+  const handleEditClass = (c: any) => {
+    setEditingClassId(c.id)
+    setClassForm({
+      title: c.title ?? '', description: c.description ?? '', day_of_week: c.day_of_week,
+      start_time: c.start_time?.slice(0, 5) ?? '18:00', end_time: c.end_time?.slice(0, 5) ?? '19:00',
+      gender_restriction: c.gender_restriction ?? 'mixed', max_slots: c.max_slots ?? 10,
+    })
+  }
+
+  const handleCancelEditClass = () => {
+    setEditingClassId(null)
+    setClassForm(emptyClassForm)
+  }
+
+  const handleDeleteClass = async (c: any) => {
+    if (!confirm(`Delete "${c.title}"? This removes all signups for this class and cannot be undone.`)) return
+    setError('')
+    const { error: err } = await supabase.from('bball_classes').delete().eq('id', c.id)
+    if (err) { setError(err.message); return }
+    if (editingClassId === c.id) handleCancelEditClass()
+    await loadBballClasses()
+  }
+
   const coaches = allUsers.filter(p => p.role === 'coach' || p.role === 'admin')
   const members = allUsers.filter(p => p.role === 'member')
   const adminCount = allUsers.filter(p => p.role === 'admin').length
@@ -660,6 +722,7 @@ export default function AdminPage() {
     { value: 'members', label: 'Members', icon: Users },
     { value: 'coaches', label: 'Coaches', icon: UserCog },
     { value: 'groups', label: 'Groups & Classes', icon: Building2 },
+    { value: 'classes', label: 'Classes', icon: Volleyball },
     { value: 'settings', label: 'Settings', icon: Settings },
   ]
 
@@ -1090,6 +1153,94 @@ export default function AdminPage() {
         )}
 
         {/* ── SETTINGS TAB ── */}
+        {/* ── CLASSES TAB (bball_classes, admin-only) ── */}
+        {activeTab === 'classes' && (
+          <div key="tab-classes">
+            <form onSubmit={handleClassFormSubmit} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.875rem', maxWidth: '540px' }}>
+              <p style={{ fontWeight: 700, fontSize: '0.95rem' }}>{editingClassId ? 'Edit Class' : 'New Class'}</p>
+              <div>
+                <label style={labelBase}>Title</label>
+                <input type="text" value={classForm.title} onChange={e => setClassForm({ ...classForm, title: e.target.value })} required style={{ ...inputBase, width: '100%' }} placeholder="e.g. Open Run" />
+              </div>
+              <div>
+                <label style={labelBase}>Description</label>
+                <textarea value={classForm.description} onChange={e => setClassForm({ ...classForm, description: e.target.value })} rows={2} style={{ ...inputBase, width: '100%', resize: 'vertical', fontFamily: 'inherit' }} placeholder="Optional details" />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={labelBase}>Day of Week</label>
+                  <select value={classForm.day_of_week} onChange={e => setClassForm({ ...classForm, day_of_week: e.target.value })} style={{ ...inputBase, width: '100%', cursor: 'pointer' }}>
+                    {['sunday','monday','tuesday','wednesday','thursday','friday','saturday'].map(d => (
+                      <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelBase}>Gender Restriction</label>
+                  <select value={classForm.gender_restriction} onChange={e => setClassForm({ ...classForm, gender_restriction: e.target.value })} style={{ ...inputBase, width: '100%', cursor: 'pointer' }}>
+                    <option value="mixed">Mixed</option>
+                    <option value="men">Men Only</option>
+                    <option value="women">Women Only</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={labelBase}>Start Time</label>
+                  <input type="time" value={classForm.start_time} onChange={e => setClassForm({ ...classForm, start_time: e.target.value })} required style={{ ...inputBase, width: '100%' }} />
+                </div>
+                <div>
+                  <label style={labelBase}>End Time</label>
+                  <input type="time" value={classForm.end_time} onChange={e => setClassForm({ ...classForm, end_time: e.target.value })} required style={{ ...inputBase, width: '100%' }} />
+                </div>
+              </div>
+              <div>
+                <label style={labelBase}>Max Slots</label>
+                <input type="number" min={1} value={classForm.max_slots} onChange={e => setClassForm({ ...classForm, max_slots: Number(e.target.value) })} required style={{ ...inputBase, width: '100%' }} />
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button type="submit" disabled={classSaving} style={{
+                  background: classSaving ? '#0d1a1e' : 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem',
+                  padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.875rem', cursor: classSaving ? 'not-allowed' : 'pointer', flex: 1,
+                }}>
+                  {classSaving ? 'Saving…' : editingClassId ? 'Save Changes' : 'Create Class'}
+                </button>
+                {editingClassId && (
+                  <button type="button" onClick={handleCancelEditClass} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.875rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </form>
+
+            <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+              Existing Classes ({bballClasses.length})
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {bballClasses.length === 0 ? (
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No classes created yet.</p>
+              ) : bballClasses.map(c => (
+                <div key={c.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{c.title}</p>
+                    <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.15rem', textTransform: 'capitalize' }}>
+                      {c.day_of_week} · {c.start_time?.slice(0, 5)}–{c.end_time?.slice(0, 5)} · {c.gender_restriction} · {c.max_slots} slots
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                    <button onClick={() => handleEditClass(c)} style={{ width: '32px', height: '32px', borderRadius: '0.375rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                      <Pencil size={14} />
+                    </button>
+                    <button onClick={() => handleDeleteClass(c)} style={{ width: '32px', height: '32px', borderRadius: '0.375rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: '#ef4444', cursor: 'pointer' }}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {activeTab === 'settings' && (
           <div key="tab-settings" style={{ maxWidth: '540px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             {settingsSaved && (

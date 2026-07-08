@@ -54,6 +54,8 @@ Core (documented in detail — keep this section accurate):
 	•	scheduled_classes (id, title, description, type, group_id, coach_id, scheduled_date, start_time, end_time, location, is_recurring, recurrence_rule, recurrence_days, recurrence_end_date, parent_class_id, created_by, created_at)
 	•	class_attendees (id, class_id, member_id, status, occurrence_date) — occurrence_date scopes attendance to one specific date of a recurring class series, not the whole series
 	•	coach_students (coach_id, member_id) — explicit coach-adds-student link, independent of groups/plans/programs; feeds My Students (myMembers) and Student Panel access (isStudent)
+	•	bball_classes (id, title, description, day_of_week, start_time, end_time, gender_restriction, max_slots, created_by, created_at) — admin-only browsable basketball class slots, separate from scheduled_classes/coach-scheduling; day_of_week is a lowercase text day name ('sunday'..'saturday')
+	•	bball_class_signups (id, class_id, user_id, occurrence_date, created_at) — member sign-ups for a specific weekly occurrence of a bball_class; capacity enforced by a DB trigger (check_bball_class_capacity) that raises on insert once max_slots is reached
 
 Additional feature tables (exist and are in active use — ask before making schema assumptions about these, details not fully spec'd here):
 	•	body_measurements — weight/body-fat/circumference tracking over time, feeds /analytics "body" tab
@@ -81,6 +83,7 @@ Pages (kept in sync with the repo — update this list whenever a page is added/
 	•	/coach — coach dashboard (members, groups, assign plans/programs, notes, workout calendar)
 	•	/admin — admin panel (members, groups, workouts, leaderboard, create/delete users)
 	•	/calendar — training calendar for all users, admin/coach can schedule classes
+	•	/classes — browsable weekly basketball class slots (bball_classes) with capacity + gender restrictions; join/leave per occurrence, admin manages classes from /admin
 
 API routes (server-side only — see exception below):
 
@@ -113,6 +116,8 @@ When I ask for code changes:
 
 Recent Changes:
 
+	•	New /classes page + bball_classes/bball_class_signups tables (SQL in supabase_bball_classes.sql, not yet run): admin-only basketball class slots browsable by all roles, week-by-week occurrence view, join/leave with gender-restriction + capacity checks (capacity enforced by a DB trigger, race condition caught client-side as "This class just filled up"), click-through modal shows attendee list. Admin manages classes from a new "Classes" tab in /admin (app/admin/page.tsx), completely separate from the existing coach "Schedule Class" flow (scheduled_classes)
+	•	Mobile bottom nav (components/BottomNav.tsx): restructured to a fixed 5-tab layout — Home, role-panel (Athlete/Coach/Admin), Classes, Workouts (always, no more Board/Athlete-conditional 4th slot), Calendar; removed the floating "Log" action button and its bottom-nav-log CSS entirely, Classes is a normal tab. Navbar.tsx desktop nav + hamburger de-dup logic updated to match; Leaderboard/Board no longer appears in the bottom nav for any role (still reachable via hamburger)
 	•	Profile page (/profile): added a "Change Password" section — verifies current password via signInWithPassword, then calls supabase.auth.updateUser({ password }) to set the new one
 	•	profiles gained preferred_weight_unit (text, default 'kg') — a separate toggle in /profile, distinct from weight_unit (body weight). Phase 1: stored/displayed only, not yet read by any weight-rendering component (PRs, exercise logs, plan exercises)
 	•	Student Panel (/student): removed Class Schedule and Progress tabs (and their now-dead upcomingClasses/groupIds/workoutHistory state+queries); Assigned Plans tab now shows Missed above Upcoming/Pending with a Date ↑/↓ sort toggle, and pending plan cards collapse to a compact row on mobile (accordion, one expanded at a time)

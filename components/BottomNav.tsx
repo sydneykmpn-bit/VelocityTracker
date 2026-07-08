@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { LayoutDashboard, ShieldCheck, Users, Dumbbell, Plus, Trophy, CalendarDays, GraduationCap } from 'lucide-react'
+import { LayoutDashboard, ShieldCheck, Users, Dumbbell, Volleyball, CalendarDays, GraduationCap } from 'lucide-react'
 
 const SECOND_TAB: Record<string, { href: string; label: string; icon: typeof Users }> = {
   admin: { href: '/admin', label: 'Admin', icon: ShieldCheck },
@@ -65,15 +65,6 @@ export default function BottomNav() {
     : (SECOND_TAB[role] ?? SECOND_TAB.member)
   const SecondIcon = second.icon
 
-  const fourth = showAthleteTabs
-    ? { href: '/workouts', label: 'Workouts', icon: Dumbbell }
-    : role === 'admin'
-    ? (isAthlete
-        ? { href: '/student', label: 'Athlete', icon: GraduationCap }
-        : { href: '/workouts', label: 'Workouts', icon: Dumbbell })
-    : { href: '/leaderboard', label: 'Board', icon: Trophy }
-  const FourthIcon = fourth.icon
-
   return (
     <nav className="bottom-nav" aria-label="Primary">
       <Link href="/dashboard" className={isActive('/dashboard') ? 'bottom-nav-item active' : 'bottom-nav-item'}>
@@ -84,15 +75,13 @@ export default function BottomNav() {
         <SecondIcon size={22} />
         <span>{second.label}</span>
       </Link>
-      <Link href="/workouts/new" aria-label="Log workout" className={isActive('/workouts/new') ? 'bottom-nav-item active' : 'bottom-nav-item'}>
-        <span className="bottom-nav-log">
-          <Plus size={26} strokeWidth={2.5} />
-        </span>
-        <span>Log</span>
+      <Link href="/classes" className={isActive('/classes') ? 'bottom-nav-item active' : 'bottom-nav-item'}>
+        <Volleyball size={22} />
+        <span>Classes</span>
       </Link>
-      <Link href={fourth.href} className={isActive(fourth.href) ? 'bottom-nav-item active' : 'bottom-nav-item'}>
-        <FourthIcon size={22} />
-        <span>{fourth.label}</span>
+      <Link href="/workouts" className={isActive('/workouts') ? 'bottom-nav-item active' : 'bottom-nav-item'}>
+        <Dumbbell size={22} />
+        <span>Workouts</span>
       </Link>
       <Link href="/calendar" className={isActive('/calendar') ? 'bottom-nav-item active' : 'bottom-nav-item'}>
         <CalendarDays size={22} />

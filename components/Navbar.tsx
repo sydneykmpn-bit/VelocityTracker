@@ -104,6 +104,7 @@ export default function Navbar() {
     if (userRole === 'admin') return [
       { href: '/workouts', label: 'My Workouts' },
       { href: '/admin', label: 'Admin Panel', badge: pendingCount > 0 ? pendingCount : 0 },
+      { href: '/classes', label: 'Classes' },
       { href: '/calendar', label: 'Calendar' },
       { href: '/leaderboard', label: 'Leaderboard' },
       { href: '/analytics', label: 'Analytics' },
@@ -112,6 +113,7 @@ export default function Navbar() {
     if (userRole === 'coach') return [
       { href: '/workouts', label: 'My Workouts' },
       { href: '/coach', label: 'Coach Panel' },
+      { href: '/classes', label: 'Classes' },
       { href: '/calendar', label: 'Calendar' },
       { href: '/leaderboard', label: 'Leaderboard' },
       { href: '/analytics', label: 'Analytics' },
@@ -119,6 +121,7 @@ export default function Navbar() {
     ]
     const base: NavLink[] = [
       { href: '/workouts', label: 'My Workouts' },
+      { href: '/classes', label: 'Classes' },
       { href: '/calendar', label: 'Calendar' },
       { href: '/leaderboard', label: 'Leaderboard' },
       { href: '/analytics', label: 'Analytics' },
@@ -132,21 +135,15 @@ export default function Navbar() {
   const isActive = (href: string) => pathname === href || (href !== '/dashboard' && pathname.startsWith(href + '/'))
 
   // Exclude whatever BottomNav (mobile) is currently showing so links aren't duplicated on mobile.
-  // BottomNav always shows /dashboard, /workouts/new, /calendar, plus a role/athlete-dependent
-  // second and fourth tab — mirror that logic exactly (see components/BottomNav.tsx).
-  const bottomNavHrefs = new Set<string>(['/dashboard', '/workouts/new', '/calendar'])
-  if (userRole === 'admin') {
+  // BottomNav always shows /dashboard, /classes, /workouts, /calendar, plus a role/athlete-dependent
+  // second tab — mirror that logic exactly (see components/BottomNav.tsx).
+  const bottomNavHrefs = new Set<string>(['/dashboard', '/classes', '/workouts', '/calendar'])
+  if (userRole === 'member' && isAthlete) {
+    bottomNavHrefs.add('/student')
+  } else if (userRole === 'admin') {
     bottomNavHrefs.add('/admin')
-    bottomNavHrefs.add(isAthlete ? '/student' : '/workouts')
   } else if (userRole === 'coach') {
     bottomNavHrefs.add('/coach')
-    bottomNavHrefs.add('/leaderboard')
-  } else if (isAthlete) {
-    bottomNavHrefs.add('/student')
-    bottomNavHrefs.add('/workouts')
-  } else {
-    bottomNavHrefs.add('/workouts')
-    bottomNavHrefs.add('/leaderboard')
   }
   const hamburgerLinks = navLinks.filter(link => !bottomNavHrefs.has(link.href))
 
