@@ -18,6 +18,7 @@ export default function BottomNav() {
   const supabase = createClient()
   const [role, setRole] = useState('member')
   const [isAthlete, setIsAthlete] = useState(false)
+  const [classesPendingCount, setClassesPendingCount] = useState(0)
 
   useEffect(() => {
     const cachedRole = sessionStorage.getItem('vel_role')
@@ -35,6 +36,14 @@ export default function BottomNav() {
 
       setRole(profile.role)
       sessionStorage.setItem('vel_role', profile.role)
+
+      if (profile.role === 'admin' || profile.role === 'coach') {
+        const [{ count: bballPending }, { count: scheduledPending }] = await Promise.all([
+          supabase.from('bball_class_signups').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+          supabase.from('class_attendees').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+        ])
+        setClassesPendingCount((bballPending || 0) + (scheduledPending || 0))
+      }
 
       if (profile.role === 'member' || profile.role === 'admin' || profile.role === 'coach') {
         const [membershipResult, workoutPlansResult, programAssignmentsResult, coachAthletesResult] = await Promise.all([
@@ -77,9 +86,20 @@ export default function BottomNav() {
         <SecondIcon size={22} />
         <span>{second.label}</span>
       </Link>
-      <Link href="/classes" className={isActive('/classes') ? 'bottom-nav-item active' : 'bottom-nav-item'}>
+      <Link href="/classes" className={isActive('/classes') ? 'bottom-nav-item active' : 'bottom-nav-item'} style={{ position: 'relative' }}>
         <BasketballIcon size={22} />
         <span>Classes</span>
+        {(role === 'admin' || role === 'coach') && classesPendingCount > 0 && (
+          <span style={{
+            position: 'absolute', top: '4px', right: '18px',
+            width: '16px', height: '16px', borderRadius: '50%',
+            background: '#f59e0b', color: '#000',
+            fontSize: '10px', fontWeight: 700,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {classesPendingCount}
+          </span>
+        )}
       </Link>
       <Link href="/workouts" className={isActive('/workouts') ? 'bottom-nav-item active' : 'bottom-nav-item'}>
         <Dumbbell size={22} />

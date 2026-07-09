@@ -5,12 +5,14 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { ChevronLeft, ChevronRight, X, Plus, Pencil, Trash2 } from 'lucide-react'
 import { formatTimeLabel, formatDateYMD, bballOccurrencesInRange, joinBballClass, PAYMENT_STATUS_LABELS, BballClassRow } from '@/lib/utils'
+import { logAction } from '@/lib/auditLog'
 import { BballClassDetailModal, BballClassFormModal, BballOccurrence, genderBadgeStyle } from '@/components/BballClassModal'
+import ConfirmModal from '@/components/ConfirmModal'
 
 function getWeekStart(weekOffset: number): Date {
   const now = new Date()
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  start.setDate(start.getDate() - start.getDay() + weekOffset * 7)
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7) + weekOffset * 7)
   return start
 }
 
@@ -32,6 +34,7 @@ export default function ClassesPage() {
   const [joinBlockedMsg, setJoinBlockedMsg] = useState('')
   const [joinInfoMsg, setJoinInfoMsg] = useState('')
   const [selectedOcc, setSelectedOcc] = useState<BballOccurrence | null>(null)
+  const [pendingJoinOcc, setPendingJoinOcc] = useState<BballOccurrence | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [formModalOpen, setFormModalOpen] = useState(false)
   const [editingClass, setEditingClass] = useState<BballClassRow | null>(null)
@@ -109,14 +112,8 @@ export default function ClassesPage() {
     return true
   }
 
-  const handleJoin = async (occ: BballOccurrence) => {
+  const doJoin = async (occ: BballOccurrence) => {
     const key = `${occ.cls.id}_${occ.date}`
-    setError(''); setJoinBlockedMsg(''); setJoinInfoMsg('')
-    if (!genderMatches(occ.cls.gender_restriction)) {
-      const label = occ.cls.gender_restriction === 'men' ? 'men' : 'women'
-      setJoinBlockedMsg(`This class is for ${label} only.`)
-      return
-    }
     setBusyKey(key)
     const { status, error: err } = await joinBballClass(supabase, occ.cls.id, userId, occ.date)
     if (err) {
@@ -129,6 +126,16 @@ export default function ClassesPage() {
     else if (status === 'waitlist') setJoinInfoMsg("You're on the waitlist — you'll have a spot if one opens up.")
     await refreshCounts()
     setBusyKey(null)
+  }
+
+  const handleJoin = (occ: BballOccurrence) => {
+    setError(''); setJoinBlockedMsg(''); setJoinInfoMsg('')
+    if (!genderMatches(occ.cls.gender_restriction)) {
+      const label = occ.cls.gender_restriction === 'men' ? 'men' : 'women'
+      setJoinBlockedMsg(`This class is for ${label} only.`)
+      return
+    }
+    setPendingJoinOcc(occ)
   }
 
   const handleLeave = async (occ: BballOccurrence) => {
@@ -147,6 +154,10 @@ export default function ClassesPage() {
     setError('')
     const { error: err } = await supabase.from('bball_classes').delete().eq('id', cls.id)
     if (err) { setError(err.message); return }
+    await logAction(supabase, {
+      category: 'classes', action_type: 'delete_class', target_type: 'bball_classes', target_id: cls.id,
+      details: { target_name: cls.title },
+    })
     await refreshClasses()
   }
 
@@ -327,6 +338,15 @@ export default function ClassesPage() {
           editing={editingClass}
           onClose={() => setFormModalOpen(false)}
           onSaved={refreshClasses}
+        />
+      )}
+      {pendingJoinOcc && (
+        <ConfirmModal
+          title="Limited Slots"
+          message="Slots are limited. Joining doesn't guarantee a spot until approved by a coach or admin. Continue?"
+          confirmLabel="Join Anyway"
+          onConfirm={() => { const occ = pendingJoinOcc; setPendingJoinOcc(null); doJoin(occ) }}
+          onCancel={() => setPendingJoinOcc(null)}
         />
       )}
     </div>

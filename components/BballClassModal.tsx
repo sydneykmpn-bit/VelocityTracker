@@ -4,6 +4,9 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { X, Users, Pencil, Trash2 } from 'lucide-react'
 import { DAY_NAMES, DAY_LABELS, formatTimeLabel, joinBballClass, PAYMENT_STATUS_LABELS, BballClassRow } from '@/lib/utils'
+import { logAction } from '@/lib/auditLog'
+
+const DAY_NAMES_MON_FIRST = [...DAY_NAMES.slice(1), DAY_NAMES[0]]
 
 const inputBase: React.CSSProperties = {
   background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem',
@@ -234,10 +237,18 @@ export function BballClassFormModal({
     if (isEdit) {
       const { error: err } = await supabase.from('bball_classes').update({ ...base, day_of_week: form.days[0] }).eq('id', editing!.id)
       if (err) { setError(err.message); setSaving(false); return }
+      await logAction(supabase, {
+        category: 'classes', action_type: 'edit_class', target_type: 'bball_classes', target_id: editing!.id,
+        details: { target_name: base.title },
+      })
     } else {
       const rows = form.days.map(day => ({ ...base, day_of_week: day }))
       const { error: err } = await supabase.from('bball_classes').insert(rows)
       if (err) { setError(err.message); setSaving(false); return }
+      await logAction(supabase, {
+        category: 'classes', action_type: 'create_class', target_type: 'bball_classes',
+        details: { target_name: base.title, days: form.days },
+      })
     }
     setSaving(false)
     onSaved()
@@ -266,7 +277,7 @@ export function BballClassFormModal({
           <div>
             <label style={labelBase}>{isEdit ? 'Day of Week' : 'Days of Week'}</label>
             <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-              {DAY_NAMES.map(d => (
+              {DAY_NAMES_MON_FIRST.map(d => (
                 <button
                   key={d} type="button" onClick={() => toggleDay(d)}
                   style={{

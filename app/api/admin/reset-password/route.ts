@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { logAction } from '@/lib/auditLog'
 
 export async function POST(request: NextRequest) {
   try {
@@ -46,6 +47,12 @@ export async function POST(request: NextRequest) {
       console.error('reset-password failed:', updateError)
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
+
+    const { data: targetProfile } = await adminClient.from('profiles').select('name').eq('id', userId).single()
+    await logAction(adminClient, {
+      actorId: user.id, category: 'other', action_type: 'reset_password', target_type: 'profiles', target_id: userId,
+      details: { target_name: targetProfile?.name },
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {

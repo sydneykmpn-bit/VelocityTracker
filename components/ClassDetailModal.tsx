@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Trash2, Repeat, ClipboardList, Pencil, X, MapPin, Flag, Check, CheckCircle2, SkipForward } from 'lucide-react'
 import { genderBadgeStyle } from '@/components/BballClassModal'
+import ConfirmModal from '@/components/ConfirmModal'
 
 export function classTypeColor(type: string): { bg: string; color: string } {
   if (type === 'basketball') return { bg: 'rgba(30,58,95,0.8)', color: '#60a5fa' }
@@ -51,6 +52,7 @@ export default function ClassDetailModal({
   const [completeDurationMinutes, setCompleteDurationMinutes] = useState('')
   const [planActionError, setPlanActionError] = useState('')
   const [myGender, setMyGender] = useState<string | null>(null)
+  const [showJoinConfirm, setShowJoinConfirm] = useState(false)
 
   const classId = cls.is_dynamic ? cls.parent_class_id : cls.id
 
@@ -510,7 +512,7 @@ export default function ClassDetailModal({
                   </div>
                 )}
                 <button
-                  onClick={handleRSVP}
+                  onClick={() => myAttendance ? handleRSVP() : setShowJoinConfirm(true)}
                   disabled={rsvpLoading}
                   style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 700, fontSize: '0.9rem', cursor: rsvpLoading ? 'not-allowed' : 'pointer', background: myAttendance ? 'transparent' : 'var(--teal-primary)', color: myAttendance ? '#ef4444' : 'white', border: myAttendance ? '1px solid rgba(239,68,68,0.4)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
                 >
@@ -807,6 +809,16 @@ export default function ClassDetailModal({
           </div>
         )}
       </div>
+
+      {showJoinConfirm && (
+        <ConfirmModal
+          title="Limited Slots"
+          message="Slots are limited. Joining doesn't guarantee a spot until approved by a coach or admin. Continue?"
+          confirmLabel="Join Anyway"
+          onConfirm={() => { setShowJoinConfirm(false); handleRSVP() }}
+          onCancel={() => setShowJoinConfirm(false)}
+        />
+      )}
     </div>
   )
 }

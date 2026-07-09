@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { ArrowLeft, Check, ChevronDown, ChevronUp, Search, Trash2, UserPlus, X } from 'lucide-react'
 import { formatTimeLabel, PAYMENT_STATUS_LABELS } from '@/lib/utils'
+import { logAction } from '@/lib/auditLog'
 
 type SystemKey = 'bball' | 'scheduled'
 
@@ -43,7 +44,7 @@ const labelBase: React.CSSProperties = {
   textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '0.375rem',
 }
 
-type Tab = 'pending' | 'booked' | 'waitlist' | 'no_show'
+type Tab = 'all' | 'pending' | 'booked' | 'waitlist' | 'no_show'
 
 function attendeeName(row: any): string {
   return row.profiles?.name || row.guest_name || 'Unknown'
@@ -125,7 +126,9 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
   const waitlistCount = rows.filter(r => r.status === cfg.waitlistStatus).length
   const noShowCount = rows.filter(r => r.status === cfg.noShowStatus).length
 
-  const bucketFor = (t: Tab) => t === 'pending'
+  const bucketFor = (t: Tab) => t === 'all'
+    ? rows
+    : t === 'pending'
     ? rows.filter(r => r.status === cfg.pendingStatus)
     : t === 'booked'
     ? rows.filter(r => cfg.bookedStatuses.includes(r.status))
@@ -145,11 +148,28 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
     await loadRows()
   }
 
-  const handleRemove = async (row: any) => {
-    if (!confirm(`Remove ${attendeeName(row)} from this class?`)) return
+  const handleRemove = async (row: any, logType: 'remove_attendee' | 'reject_signup' = 'remove_attendee') => {
+    const name = attendeeName(row)
+    const confirmMsg = logType === 'reject_signup' ? `Reject ${name}'s request?` : `Remove ${name} from this class?`
+    if (!confirm(confirmMsg)) return
     setError('')
     const { error: err } = await supabase.from(cfg.signupTable).delete().eq('id', row.id)
     if (err) { setError(err.message); return }
+    await logAction(supabase, {
+      category: 'classes', action_type: logType, target_type: cfg.signupTable, target_id: row.id,
+      details: { target_name: name, class_title: classRow.title, date },
+    })
+    await loadRows()
+  }
+
+  const handleApprove = async (row: any) => {
+    setError('')
+    const { error: err } = await supabase.from(cfg.signupTable).update({ status: cfg.defaultStatus }).eq('id', row.id)
+    if (err) { setError(err.message); return }
+    await logAction(supabase, {
+      category: 'classes', action_type: 'approve_signup', target_type: cfg.signupTable, target_id: row.id,
+      details: { target_name: attendeeName(row), class_title: classRow.title, date },
+    })
     await loadRows()
   }
 
@@ -181,10 +201,15 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
       .eq('class_id', id).eq('occurrence_date', date).eq(cfg.memberCol, memberId)
       .maybeSingle()
     if (!existing) {
-      const { error: err } = await supabase.from(cfg.signupTable).insert({
+      const { data: inserted, error: err } = await supabase.from(cfg.signupTable).insert({
         class_id: id, occurrence_date: date, [cfg.memberCol]: memberId,
-      })
+      }).select('id').single()
       if (err) { setAddError(err.message); setAddLoading(false); return }
+      const member = memberCandidates.find(m => m.id === memberId)
+      await logAction(supabase, {
+        category: 'classes', action_type: 'add_attendee', target_type: cfg.signupTable, target_id: inserted?.id,
+        details: { target_name: member?.name, class_title: classRow.title, date },
+      })
     }
     setAddSearch('')
     setAddLoading(false)
@@ -194,10 +219,14 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
   const handleAddGuest = async () => {
     if (!guestName.trim()) return
     setAddLoading(true); setAddError('')
-    const { error: err } = await supabase.from(cfg.signupTable).insert({
+    const { data: inserted, error: err } = await supabase.from(cfg.signupTable).insert({
       class_id: id, occurrence_date: date, guest_name: guestName.trim(),
-    })
+    }).select('id').single()
     if (err) { setAddError(err.message); setAddLoading(false); return }
+    await logAction(supabase, {
+      category: 'classes', action_type: 'add_attendee', target_type: cfg.signupTable, target_id: inserted?.id,
+      details: { target_name: guestName.trim(), guest: true, class_title: classRow.title, date },
+    })
     setGuestName('')
     setAddLoading(false)
     await loadRows()
@@ -208,6 +237,7 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
     : `${classRow.start_time?.slice(0, 5)}${classRow.end_time ? ` – ${classRow.end_time.slice(0, 5)}` : ''}`
 
   const tabs: { key: Tab; label: string; count: number }[] = [
+    { key: 'all', label: 'All', count: rows.length },
     { key: 'pending', label: 'Pending', count: pendingCount },
     { key: 'booked', label: 'Booked', count: bookedCount },
     { key: 'waitlist', label: 'Waitlist', count: waitlistCount },
@@ -294,7 +324,21 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
 
               {addMode === 'existing' ? (
                 <>
-                  <input value={addSearch} onChange={e => setAddSearch(e.target.value)} placeholder="Type a name…" style={inputBase} autoFocus />
+                  <label style={labelBase}>Pick from list</label>
+                  <select
+                    value=""
+                    onChange={e => { if (e.target.value) handleAddAttendee(e.target.value) }}
+                    disabled={addLoading}
+                    style={{ ...inputBase, cursor: addLoading ? 'not-allowed' : 'pointer', marginBottom: '0.625rem' }}
+                    size={6}
+                  >
+                    <option value="" disabled>Select a member…</option>
+                    {memberCandidates
+                      .filter(m => !rows.some(r => r[cfg.memberCol] === m.id && r.status !== cfg.noShowStatus))
+                      .map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                  <label style={labelBase}>Or search</label>
+                  <input value={addSearch} onChange={e => setAddSearch(e.target.value)} placeholder="Type a name…" style={inputBase} />
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginTop: '0.625rem', maxHeight: '200px', overflowY: 'auto' }}>
                     {memberCandidates
                       .filter(m => !rows.some(r => r[cfg.memberCol] === m.id && r.status !== cfg.noShowStatus))
@@ -377,16 +421,16 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
                       </button>
 
                       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', paddingTop: '0.25rem', borderTop: '1px solid var(--border)' }}>
-                        {tab === 'pending' ? (
+                        {row.status === cfg.pendingStatus ? (
                           <>
                             <button
-                              onClick={() => updateRow(row.id, { status: cfg.defaultStatus })}
+                              onClick={() => handleApprove(row)}
                               style={{ flex: '1 1 auto', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.375rem', padding: '0.5rem 0.75rem', color: '#4ade80', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
                             >
                               Approve
                             </button>
                             <button
-                              onClick={() => handleRemove(row)}
+                              onClick={() => handleRemove(row, 'reject_signup')}
                               style={{ flex: '1 1 auto', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.375rem', padding: '0.5rem 0.75rem', color: '#f87171', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
                             >
                               Reject

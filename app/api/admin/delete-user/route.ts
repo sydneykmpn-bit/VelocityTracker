@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { logAction } from '@/lib/auditLog'
 
 // Safety margin only — takes effect on Vercel plans that support it (Pro/Enterprise can go higher);
 // Hobby is capped lower than 60s regardless of this setting.
@@ -38,6 +39,8 @@ export async function POST(request: NextRequest) {
     const adminClient = createSupabaseClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     })
+
+    const { data: targetProfile } = await adminClient.from('profiles').select('name, role').eq('id', userId).single()
 
     await Promise.all([
       // Chain A: workouts -> exercises
@@ -142,6 +145,11 @@ export async function POST(request: NextRequest) {
     if (deleteError) {
       return NextResponse.json({ error: deleteError.message }, { status: 500 })
     }
+
+    await logAction(adminClient, {
+      actorId: user.id, category: 'other', action_type: 'delete_user', target_type: 'profiles', target_id: userId,
+      details: { target_name: targetProfile?.name, role: targetProfile?.role },
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {

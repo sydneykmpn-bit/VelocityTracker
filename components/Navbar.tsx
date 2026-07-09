@@ -17,6 +17,7 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [avatarOpen, setAvatarOpen] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
+  const [classesPendingCount, setClassesPendingCount] = useState(0)
   const avatarRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -56,10 +57,18 @@ export default function Navbar() {
       )
 
       let pending = 0
+      let classesPending = 0
       if (profile.role === 'admin') {
         const { count } = await supabase
           .from('profiles').select('id', { count: 'exact', head: true }).eq('approved', false)
         pending = count || 0
+      }
+      if (profile.role === 'admin' || profile.role === 'coach') {
+        const [{ count: bballPending }, { count: scheduledPending }] = await Promise.all([
+          supabase.from('bball_class_signups').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+          supabase.from('class_attendees').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+        ])
+        classesPending = (bballPending || 0) + (scheduledPending || 0)
       }
 
       // Set ALL state at once — prevents double render / flicker
@@ -67,6 +76,7 @@ export default function Navbar() {
       setUserName(profile.name || '')
       setIsAthlete(athleteStatus)
       setPendingCount(pending)
+      setClassesPendingCount(classesPending)
 
       // Cache so next page navigation loads instantly without re-fetching
       sessionStorage.setItem('vel_role', profile.role ?? 'member')
@@ -104,7 +114,7 @@ export default function Navbar() {
     if (userRole === 'admin') return [
       { href: '/workouts', label: 'My Workouts' },
       { href: '/admin', label: 'Admin Panel', badge: pendingCount > 0 ? pendingCount : 0 },
-      { href: '/classes', label: 'Classes' },
+      { href: '/classes', label: 'Classes', badge: classesPendingCount > 0 ? classesPendingCount : 0 },
       { href: '/calendar', label: 'Calendar' },
       { href: '/leaderboard', label: 'Leaderboard' },
       { href: '/analytics', label: 'Analytics' },
@@ -113,7 +123,7 @@ export default function Navbar() {
     if (userRole === 'coach') return [
       { href: '/workouts', label: 'My Workouts' },
       { href: '/coach', label: 'Coach Panel' },
-      { href: '/classes', label: 'Classes' },
+      { href: '/classes', label: 'Classes', badge: classesPendingCount > 0 ? classesPendingCount : 0 },
       { href: '/calendar', label: 'Calendar' },
       { href: '/leaderboard', label: 'Leaderboard' },
       { href: '/analytics', label: 'Analytics' },

@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Trash2, ChevronDown, ChevronUp, Pencil, KeyRound, Timer, X, AlertTriangle, Target, CheckCircle2, Mars, Venus, Users, Building2, Settings, Check } from 'lucide-react'
+import { Trash2, ChevronDown, ChevronUp, Pencil, KeyRound, Timer, X, AlertTriangle, Target, CheckCircle2, Mars, Venus, Users, Building2, Settings, Check, History } from 'lucide-react'
 import { getLocalDateString } from '@/lib/utils'
+import { logAction } from '@/lib/auditLog'
 
-type AdminTab = 'members' | 'groups' | 'settings'
+type AdminTab = 'members' | 'groups' | 'activity' | 'settings'
 type Role = 'member' | 'coach' | 'admin'
 
 const inputBase: React.CSSProperties = {
@@ -410,6 +411,26 @@ export default function AdminPage() {
   const [resetPasswordValue, setResetPasswordValue] = useState('')
   const [resetPasswordLoading, setResetPasswordLoading] = useState(false)
 
+  const [activityLog, setActivityLog] = useState<any[]>([])
+  const [activityLogLoading, setActivityLogLoading] = useState(false)
+  const [activityLogFilter, setActivityLogFilter] = useState<'all' | 'classes' | 'other'>('all')
+
+  const loadActivityLog = async () => {
+    setActivityLogLoading(true)
+    const { data } = await supabase
+      .from('audit_log')
+      .select('*, profiles(name)')
+      .order('created_at', { ascending: false })
+      .limit(200)
+    setActivityLog(data || [])
+    setActivityLogLoading(false)
+  }
+
+  useEffect(() => {
+    if (activeTab === 'activity' && activityLog.length === 0 && !activityLogLoading) loadActivityLog()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
+
   const refreshMembers = async () => {
     const [pendingResult, allResult] = await Promise.all([
       supabase.from('profiles').select('*').eq('approved', false).order('created_at', { ascending: false }),
@@ -641,6 +662,7 @@ export default function AdminPage() {
   const adminTabs: { value: AdminTab; label: string; icon: typeof Users }[] = [
     { value: 'members', label: 'Members', icon: Users },
     { value: 'groups', label: 'Groups', icon: Building2 },
+    { value: 'activity', label: 'Activity Log', icon: History },
     { value: 'settings', label: 'Settings', icon: Settings },
   ]
 
@@ -794,6 +816,10 @@ export default function AdminPage() {
                             const newRole = e.target.value
                             await supabase.from('profiles').update({ role: newRole }).eq('id', u.id)
                             setAllUsers(prev => prev.map(p => p.id === u.id ? { ...p, role: newRole } : p))
+                            await logAction(supabase, {
+                              category: 'other', action_type: 'role_change', target_type: 'profiles', target_id: u.id,
+                              details: { target_name: u.name, old_value: u.role, new_value: newRole },
+                            })
                           }}
                           style={{ ...inputBase, padding: '0.25rem 0.5rem', fontSize: '0.75rem', cursor: 'pointer',
                             color: u.role === 'admin' ? '#c084fc' : u.role === 'coach' ? '#34bac2' : 'var(--text-secondary)' }}
@@ -1010,6 +1036,55 @@ export default function AdminPage() {
                 .admin-groups-grid { grid-template-columns: 1fr; }
               }
             `}</style>
+          </div>
+        )}
+
+        {/* ── ACTIVITY LOG TAB ── */}
+        {activeTab === 'activity' && (
+          <div key="tab-activity">
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
+              {(['all', 'classes', 'other'] as const).map(f => (
+                <button key={f} onClick={() => setActivityLogFilter(f)} style={{
+                  background: activityLogFilter === f ? 'rgba(8,119,160,0.2)' : 'none',
+                  border: `1px solid ${activityLogFilter === f ? 'var(--teal-primary)' : 'var(--border)'}`,
+                  borderRadius: '999px', padding: '0.35rem 0.875rem', fontSize: '0.75rem',
+                  color: activityLogFilter === f ? 'var(--teal-secondary)' : 'var(--text-secondary)',
+                  cursor: 'pointer', fontWeight: activityLogFilter === f ? 700 : 400, textTransform: 'capitalize',
+                }}>
+                  {f === 'all' ? 'All' : f}
+                </button>
+              ))}
+            </div>
+
+            {activityLogLoading ? (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Loading…</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {activityLog
+                  .filter(a => activityLogFilter === 'all' || a.category === activityLogFilter)
+                  .map(a => (
+                    <div key={a.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>
+                          {a.profiles?.name || 'Unknown'} <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>— {a.action_type.replace(/_/g, ' ')}</span>
+                        </p>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
+                          {a.target_type && <span>{a.target_type}{a.details?.target_name ? ` · ${a.details.target_name}` : ''}</span>}
+                          {a.details && Object.keys(a.details).length > 0 && (
+                            <span> {Object.entries(a.details).filter(([k]) => k !== 'target_name').map(([k, v]) => `${k}: ${v}`).join(', ')}</span>
+                          )}
+                        </p>
+                      </div>
+                      <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', flexShrink: 0 }}>
+                        {new Date(a.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  ))}
+                {activityLog.filter(a => activityLogFilter === 'all' || a.category === activityLogFilter).length === 0 && (
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No activity recorded yet.</p>
+                )}
+              </div>
+            )}
           </div>
         )}
 
