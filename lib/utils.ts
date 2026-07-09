@@ -156,6 +156,26 @@ export function bballOccurrencesInRange(cls: BballClassRow, rangeStart: string, 
   return dates
 }
 
+export const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  unpaid: 'Unpaid', paid_online: 'Paid Online', paid_cash: 'Paid Cash',
+}
+
+// Insert a bball_class_signups row and report back whether the DB trigger (check_bball_class_capacity)
+// auto-waitlisted it. Centralizes the insert so every join entry point (classes list, calendar,
+// coach calendar, the detail modal) reads back the same resulting status instead of pattern-matching
+// a "class is full" error string, which is now dead — the trigger no longer rejects full classes.
+export async function joinBballClass(
+  supabase: any, classId: string, userId: string, occurrenceDate: string
+): Promise<{ status?: 'booked' | 'waitlist'; error?: string }> {
+  const { data, error } = await supabase
+    .from('bball_class_signups')
+    .insert({ class_id: classId, user_id: userId, occurrence_date: occurrenceDate })
+    .select('status')
+    .single()
+  if (error) return { error: error.message }
+  return { status: data?.status }
+}
+
 // Expand a scheduled_classes recurring series into its instance dates within [startDate, endDate]
 // exclusive of startDate itself (matching the parent row's own date). rule is one of
 // 'daily'|'weekly'|'biweekly'|'monthly'; days is a list of lowercase day names, only consulted for

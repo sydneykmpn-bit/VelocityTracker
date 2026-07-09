@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { ChevronLeft, ChevronRight, X, Plus, Pencil, Trash2 } from 'lucide-react'
-import { formatTimeLabel, formatDateYMD, bballOccurrencesInRange, BballClassRow } from '@/lib/utils'
+import { formatTimeLabel, formatDateYMD, bballOccurrencesInRange, joinBballClass, PAYMENT_STATUS_LABELS, BballClassRow } from '@/lib/utils'
 import { BballClassDetailModal, BballClassFormModal, BballOccurrence, genderBadgeStyle } from '@/components/BballClassModal'
 
 function getWeekStart(weekOffset: number): Date {
@@ -20,13 +20,17 @@ export default function ClassesPage() {
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState('')
   const [gender, setGender] = useState<string | null>(null)
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [role, setRole] = useState('member')
+  const isAdmin = role === 'admin'
+  const isCoachOrAdmin = role === 'admin' || role === 'coach'
   const [weekOffset, setWeekOffset] = useState(0)
   const [classes, setClasses] = useState<BballClassRow[]>([])
   const [counts, setCounts] = useState<Record<string, number>>({})
   const [myJoins, setMyJoins] = useState<Set<string>>(new Set())
+  const [mySignups, setMySignups] = useState<Record<string, { status: string; payment_status: string }>>({})
   const [error, setError] = useState('')
   const [joinBlockedMsg, setJoinBlockedMsg] = useState('')
+  const [joinInfoMsg, setJoinInfoMsg] = useState('')
   const [selectedOcc, setSelectedOcc] = useState<BballOccurrence | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [formModalOpen, setFormModalOpen] = useState(false)
@@ -45,19 +49,24 @@ export default function ClassesPage() {
     if (dates.length === 0) { setCounts({}); setMyJoins(new Set()); return }
     const { data, error: err } = await supabase
       .from('bball_class_signups')
-      .select('class_id, user_id, occurrence_date')
+      .select('class_id, user_id, occurrence_date, status, payment_status')
       .in('class_id', classIds)
       .in('occurrence_date', dates)
     if (err) { setError(err.message); return }
     const countMap: Record<string, number> = {}
     const joined = new Set<string>()
+    const mine: Record<string, { status: string; payment_status: string }> = {}
     for (const row of data || []) {
       const key = `${row.class_id}_${row.occurrence_date}`
-      countMap[key] = (countMap[key] || 0) + 1
-      if (row.user_id === uid) joined.add(key)
+      if (row.status === 'booked') countMap[key] = (countMap[key] || 0) + 1
+      if (row.user_id === uid && row.status !== 'no_show') {
+        joined.add(key)
+        mine[key] = { status: row.status, payment_status: row.payment_status }
+      }
     }
     setCounts(countMap)
     setMyJoins(joined)
+    setMySignups(mine)
   }, [supabase, weekStartStr, weekEndStr])
 
   const loadClasses = useCallback(async (uid: string) => {
@@ -75,7 +84,7 @@ export default function ClassesPage() {
       setUserId(user.id)
       const { data: profile } = await supabase.from('profiles').select('gender, role').eq('id', user.id).single()
       setGender(profile?.gender || null)
-      setIsAdmin(profile?.role === 'admin')
+      setRole(profile?.role || 'member')
 
       await loadClasses(user.id)
       setLoading(false)
@@ -102,22 +111,21 @@ export default function ClassesPage() {
 
   const handleJoin = async (occ: BballOccurrence) => {
     const key = `${occ.cls.id}_${occ.date}`
-    setError(''); setJoinBlockedMsg('')
+    setError(''); setJoinBlockedMsg(''); setJoinInfoMsg('')
     if (!genderMatches(occ.cls.gender_restriction)) {
       const label = occ.cls.gender_restriction === 'men' ? 'men' : 'women'
       setJoinBlockedMsg(`This class is for ${label} only.`)
       return
     }
     setBusyKey(key)
-    const { error: err } = await supabase.from('bball_class_signups').insert({
-      class_id: occ.cls.id, user_id: userId, occurrence_date: occ.date,
-    })
+    const { status, error: err } = await joinBballClass(supabase, occ.cls.id, userId, occ.date)
     if (err) {
-      setError(err.message.toLowerCase().includes('full') ? 'This class just filled up.' : err.message)
+      setError(err)
       setBusyKey(null)
       await refreshCounts()
       return
     }
+    if (status === 'waitlist') setJoinInfoMsg("You're on the waitlist — you'll have a spot if one opens up.")
     await refreshCounts()
     setBusyKey(null)
   }
@@ -201,6 +209,12 @@ export default function ClassesPage() {
             <button onClick={() => setJoinBlockedMsg('')} style={{ background: 'none', border: 'none', color: '#f59e0b', cursor: 'pointer', minHeight: 0, padding: 0 }}><X size={14} /></button>
           </div>
         )}
+        {joinInfoMsg && (
+          <div style={{ background: 'rgba(8,119,160,0.1)', border: '1px solid rgba(8,119,160,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: 'var(--teal-secondary)', fontSize: '0.875rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
+            <span>{joinInfoMsg}</span>
+            <button onClick={() => setJoinInfoMsg('')} style={{ background: 'none', border: 'none', color: 'var(--teal-secondary)', cursor: 'pointer', minHeight: 0, padding: 0 }}><X size={14} /></button>
+          </div>
+        )}
 
         {occurrences.length === 0 ? (
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>No classes have been scheduled yet.</p>
@@ -211,10 +225,11 @@ export default function ClassesPage() {
               const full = occ.count >= occ.cls.max_slots
               const key = `${occ.cls.id}_${occ.date}`
               const busy = busyKey === key
+              const mine = mySignups[key]
               return (
                 <div
                   key={key}
-                  onClick={() => setSelectedOcc(occ)}
+                  onClick={() => isCoachOrAdmin ? router.push(`/classes/${occ.cls.id}?date=${occ.date}`) : setSelectedOcc(occ)}
                   className="card-interactive"
                   style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', cursor: 'pointer' }}
                 >
@@ -242,8 +257,15 @@ export default function ClassesPage() {
                         {new Date(occ.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })} · {formatTimeLabel(occ.cls.start_time)} – {formatTimeLabel(occ.cls.end_time)}
                       </p>
                       <p style={{ fontSize: '0.75rem', color: full ? '#f87171' : 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                        {occ.count} / {occ.cls.max_slots} spots filled
+                        {isCoachOrAdmin
+                          ? `${occ.count} / ${occ.cls.max_slots} spots filled`
+                          : `${Math.max(0, occ.cls.max_slots - occ.count)} spots left`}
                       </p>
+                      {mine && (
+                        <p style={{ fontSize: '0.7rem', marginTop: '0.2rem', fontWeight: 600, color: mine.status === 'waitlist' ? '#f59e0b' : mine.payment_status === 'unpaid' ? 'var(--text-secondary)' : '#4ade80' }}>
+                          {mine.status === 'waitlist' ? "You're on the waitlist" : PAYMENT_STATUS_LABELS[mine.payment_status]}
+                        </p>
+                      )}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem', flexShrink: 0 }}>
                       {isAdmin && (
@@ -266,16 +288,16 @@ export default function ClassesPage() {
                       )}
                       <button
                         onClick={e => { e.stopPropagation(); occ.joined ? handleLeave(occ) : handleJoin(occ) }}
-                        disabled={busy || (!occ.joined && full)}
+                        disabled={busy}
                         style={{
                           borderRadius: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.8rem', fontWeight: 700,
-                          cursor: busy || (!occ.joined && full) ? 'not-allowed' : 'pointer', minHeight: '44px',
-                          background: occ.joined ? 'none' : full ? 'var(--border)' : 'var(--teal-primary)',
-                          color: occ.joined ? '#ef4444' : full ? 'var(--text-secondary)' : 'white',
+                          cursor: busy ? 'not-allowed' : 'pointer', minHeight: '44px',
+                          background: occ.joined ? 'none' : 'var(--teal-primary)',
+                          color: occ.joined ? '#ef4444' : 'white',
                           border: occ.joined ? '1px solid rgba(239,68,68,0.4)' : 'none',
                         }}
                       >
-                        {busy ? '…' : occ.joined ? 'Leave' : full ? 'Class Full' : 'Join'}
+                        {busy ? '…' : occ.joined ? 'Leave' : full ? 'Join Waitlist' : 'Join'}
                       </button>
                     </div>
                   </div>
@@ -292,6 +314,7 @@ export default function ClassesPage() {
           myUserId={userId}
           myGender={gender}
           isAdmin={isAdmin}
+          viewerRole={role}
           onClose={() => setSelectedOcc(null)}
           onJoinLeave={refreshCounts}
           onEdit={cls => { setSelectedOcc(null); setEditingClass(cls); setFormModalOpen(true) }}

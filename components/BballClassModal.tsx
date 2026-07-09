@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { X, Users, Pencil, Trash2 } from 'lucide-react'
-import { DAY_NAMES, DAY_LABELS, formatTimeLabel, BballClassRow } from '@/lib/utils'
+import { DAY_NAMES, DAY_LABELS, formatTimeLabel, joinBballClass, PAYMENT_STATUS_LABELS, BballClassRow } from '@/lib/utils'
 
 const inputBase: React.CSSProperties = {
   background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem',
@@ -31,12 +31,13 @@ function formatRecurrenceEndDate(dateStr: string): string {
 }
 
 export function BballClassDetailModal({
-  occ, myUserId, myGender, isAdmin, onClose, onJoinLeave, onEdit, onDelete,
+  occ, myUserId, myGender, isAdmin, viewerRole, onClose, onJoinLeave, onEdit, onDelete,
 }: {
   occ: BballOccurrence
   myUserId: string
   myGender: string | null
   isAdmin: boolean
+  viewerRole: string
   onClose: () => void
   onJoinLeave: () => void
   onEdit?: (cls: BballClassRow) => void
@@ -46,13 +47,14 @@ export function BballClassDetailModal({
   const [attendees, setAttendees] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [infoMsg, setInfoMsg] = useState('')
   const [busy, setBusy] = useState(false)
 
   const loadAttendees = useCallback(async () => {
     setLoading(true)
     const { data, error: err } = await supabase
       .from('bball_class_signups')
-      .select('id, user_id, profiles(name)')
+      .select('id, user_id, status, payment_status, profiles(name)')
       .eq('class_id', occ.cls.id)
       .eq('occurrence_date', occ.date)
     if (err) setError(err.message)
@@ -63,23 +65,25 @@ export function BballClassDetailModal({
   useEffect(() => { loadAttendees() }, [loadAttendees])
 
   const badge = genderBadgeStyle[occ.cls.gender_restriction]
-  const full = occ.count >= occ.cls.max_slots
-  const alreadyJoined = attendees.some(a => a.user_id === myUserId)
+  const bookedCount = attendees.filter(a => a.status === 'booked').length
+  const full = bookedCount >= occ.cls.max_slots
+  const mine = attendees.find(a => a.user_id === myUserId && a.status !== 'no_show')
+  const alreadyJoined = !!mine
+  const isMember = viewerRole === 'member'
 
   const handleJoin = async () => {
-    setError('')
+    setError(''); setInfoMsg('')
     const restriction = occ.cls.gender_restriction
     if (restriction === 'men' && myGender !== 'male') { setError('This class is for men only.'); return }
     if (restriction === 'women' && myGender !== 'female') { setError('This class is for women only.'); return }
     setBusy(true)
-    const { error: err } = await supabase.from('bball_class_signups').insert({
-      class_id: occ.cls.id, user_id: myUserId, occurrence_date: occ.date,
-    })
+    const { status, error: err } = await joinBballClass(supabase, occ.cls.id, myUserId, occ.date)
     if (err) {
-      setError(err.message.toLowerCase().includes('full') ? 'This class just filled up.' : err.message)
+      setError(err)
       setBusy(false)
       return
     }
+    if (status === 'waitlist') setInfoMsg("You're on the waitlist — you'll have a spot if one opens up.")
     await loadAttendees()
     onJoinLeave()
     setBusy(false)
@@ -133,42 +137,48 @@ export function BballClassDetailModal({
         )}
 
         {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', marginBottom: '0.75rem', color: '#f87171', fontSize: '0.8rem' }}>{error}</div>}
+        {infoMsg && <div style={{ background: 'rgba(8,119,160,0.1)', border: '1px solid rgba(8,119,160,0.3)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', marginBottom: '0.75rem', color: 'var(--teal-secondary)', fontSize: '0.8rem' }}>{infoMsg}</div>}
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
           <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-            <Users size={12} /> {attendees.length} / {occ.cls.max_slots} spots filled
+            <Users size={12} /> {isMember ? `${Math.max(0, occ.cls.max_slots - bookedCount)} spots left` : `${bookedCount} / ${occ.cls.max_slots} spots filled`}
           </p>
           {alreadyJoined ? (
             <button onClick={handleLeave} disabled={busy} style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', cursor: busy ? 'not-allowed' : 'pointer' }}>
               {busy ? 'Leaving…' : 'Leave'}
             </button>
-          ) : full ? (
-            <button disabled style={{ background: 'var(--border)', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', cursor: 'not-allowed' }}>
-              Class Full
-            </button>
           ) : (
             <button onClick={handleJoin} disabled={busy} style={{ background: 'var(--teal-primary)', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.8rem', fontWeight: 700, color: 'white', cursor: busy ? 'not-allowed' : 'pointer' }}>
-              {busy ? 'Joining…' : 'Join'}
+              {busy ? 'Joining…' : full ? 'Join Waitlist' : 'Join'}
             </button>
           )}
         </div>
 
-        <div>
-          <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Attendees</p>
-          {loading ? (
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Loading…</p>
-          ) : attendees.length === 0 ? (
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No one has joined yet.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              {attendees.map(a => (
-                <div key={a.id} style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', fontSize: '0.875rem' }}>
-                  {(a.profiles as any)?.name || 'Unknown'}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        {mine && (
+          <p style={{ fontSize: '0.75rem', fontWeight: 600, marginTop: '-0.5rem', marginBottom: '1rem', color: mine.status === 'waitlist' ? '#f59e0b' : mine.payment_status === 'unpaid' ? 'var(--text-secondary)' : '#4ade80' }}>
+            {mine.status === 'waitlist' ? "You're on the waitlist" : PAYMENT_STATUS_LABELS[mine.payment_status]}
+          </p>
+        )}
+
+        {!isMember && (
+          <div>
+            <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Attendees</p>
+            {loading ? (
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Loading…</p>
+            ) : attendees.length === 0 ? (
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No one has joined yet.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                {attendees.map(a => (
+                  <div key={a.id} style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', fontSize: '0.875rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                    <span>{(a.profiles as any)?.name || 'Unknown'}</span>
+                    {a.status === 'waitlist' && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#f59e0b' }}>Waitlist</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

@@ -7,7 +7,7 @@ import { X } from 'lucide-react'
 import ClassDetailModal, { classTypeColor } from '@/components/ClassDetailModal'
 import CalendarGrid, { CalendarEntry } from '@/components/CalendarGrid'
 import { BballClassDetailModal, BballOccurrence, genderBadgeStyle } from '@/components/BballClassModal'
-import { getLocalDateString, bballOccurrencesInRange, formatTimeLabel, formatDateYMD as formatLocalDate, generateRecurringDates, BballClassRow } from '@/lib/utils'
+import { getLocalDateString, bballOccurrencesInRange, formatTimeLabel, formatDateYMD as formatLocalDate, generateRecurringDates, joinBballClass, BballClassRow } from '@/lib/utils'
 
 function ClassCard({ cls, userRole }: { cls: any; userRole: string }) {
   const tc = classTypeColor(cls.type)
@@ -49,6 +49,14 @@ export default function CalendarPage() {
   const [bballBusyKey, setBballBusyKey] = useState<string | null>(null)
   const [bballError, setBballError] = useState('')
   const [bballJoinBlockedMsg, setBballJoinBlockedMsg] = useState('')
+  const [bballJoinInfoMsg, setBballJoinInfoMsg] = useState('')
+  const isCoachOrAdmin = userRole === 'admin' || userRole === 'coach'
+
+  const goToClass = (c: any) => {
+    if (c.isBballClass) { router.push(`/classes/${c.cls.id}?date=${c.date}`); return }
+    const classId = c.is_dynamic ? c.parent_class_id : c.id
+    router.push(`/calendar/classes/${classId}?date=${c.scheduled_date}`)
+  }
 
   const loadClasses = async () => {
     const year = currentMonth.getFullYear()
@@ -213,22 +221,21 @@ export default function CalendarPage() {
 
   const handleBballJoin = async (occ: BballOccurrence) => {
     const key = `${occ.cls.id}_${occ.date}`
-    setBballError(''); setBballJoinBlockedMsg('')
+    setBballError(''); setBballJoinBlockedMsg(''); setBballJoinInfoMsg('')
     if (!bballGenderMatches(occ.cls.gender_restriction)) {
       const label = occ.cls.gender_restriction === 'men' ? 'men' : 'women'
       setBballJoinBlockedMsg(`This class is for ${label} only.`)
       return
     }
     setBballBusyKey(key)
-    const { error: err } = await supabase.from('bball_class_signups').insert({
-      class_id: occ.cls.id, user_id: userId, occurrence_date: occ.date,
-    })
+    const { status, error: err } = await joinBballClass(supabase, occ.cls.id, userId || '', occ.date)
     if (err) {
-      setBballError(err.message.toLowerCase().includes('full') ? 'This class just filled up.' : err.message)
+      setBballError(err)
       setBballBusyKey(null)
       await loadClasses()
       return
     }
+    if (status === 'waitlist') setBballJoinInfoMsg("You're on the waitlist — you'll have a spot if one opens up.")
     await loadClasses()
     setBballBusyKey(null)
   }
@@ -284,14 +291,14 @@ export default function CalendarPage() {
                 }
                 if (c.isBballClass) {
                   return (
-                    <div key={c.id} onClick={e => { e.stopPropagation(); setSelectedBballOcc(c as unknown as BballOccurrence) }} style={{ background: 'rgba(52,186,194,0.2)', color: '#34bac2', borderRadius: '0.2rem', fontSize: '0.6rem', padding: '0.1rem 0.3rem', marginBottom: '0.15rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', cursor: 'pointer' }}>
+                    <div key={c.id} onClick={e => { e.stopPropagation(); isCoachOrAdmin ? goToClass(c) : setSelectedBballOcc(c as unknown as BballOccurrence) }} style={{ background: 'rgba(52,186,194,0.2)', color: '#34bac2', borderRadius: '0.2rem', fontSize: '0.6rem', padding: '0.1rem 0.3rem', marginBottom: '0.15rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', cursor: 'pointer' }}>
                       🏀 {c.cls.start_time?.slice(0, 5)} {c.cls.title}
                     </div>
                   )
                 }
                 const tc = classTypeColor(c.type)
                 return (
-                  <div key={c.id} onClick={e => { e.stopPropagation(); setSelectedClass(c) }} style={{ ...tc, borderRadius: '0.2rem', fontSize: '0.6rem', padding: '0.1rem 0.3rem', marginBottom: '0.15rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', cursor: 'pointer' }}>
+                  <div key={c.id} onClick={e => { e.stopPropagation(); isCoachOrAdmin ? goToClass(c) : setSelectedClass(c) }} style={{ ...tc, borderRadius: '0.2rem', fontSize: '0.6rem', padding: '0.1rem 0.3rem', marginBottom: '0.15rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', cursor: 'pointer' }}>
                     {c.start_time?.slice(0, 5)} {c.title}
                   </div>
                 )
@@ -343,15 +350,22 @@ export default function CalendarPage() {
                             <button onClick={() => setBballJoinBlockedMsg('')} style={{ background: 'none', border: 'none', color: '#f59e0b', cursor: 'pointer', minHeight: 0, padding: 0 }}><X size={13} /></button>
                           </div>
                         )}
+                        {bballJoinInfoMsg && (
+                          <div style={{ background: 'rgba(8,119,160,0.1)', border: '1px solid rgba(8,119,160,0.3)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', marginBottom: '0.5rem', color: 'var(--teal-secondary)', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                            <span>{bballJoinInfoMsg}</span>
+                            <button onClick={() => setBballJoinInfoMsg('')} style={{ background: 'none', border: 'none', color: 'var(--teal-secondary)', cursor: 'pointer', minHeight: 0, padding: 0 }}><X size={13} /></button>
+                          </div>
+                        )}
                         {selEntries.filter(c => c.isBballClass).map((occAny: any) => {
                           const occ = occAny as BballOccurrence & { id: string }
                           const badge = genderBadgeStyle[occ.cls.gender_restriction]
                           const full = occ.count >= occ.cls.max_slots
                           const key = `${occ.cls.id}_${occ.date}`
                           const busy = bballBusyKey === key
+                          const onRowClick = () => isCoachOrAdmin ? goToClass(occAny) : setSelectedBballOcc(occ)
                           return (
                             <div key={occAny.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem', marginBottom: '0.5rem' }}>
-                              <div onClick={() => setSelectedBballOcc(occ)} style={{ cursor: 'pointer' }}>
+                              <div onClick={onRowClick} style={{ cursor: 'pointer' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
                                   <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{occ.cls.title}</p>
                                   {badge && (
@@ -359,22 +373,18 @@ export default function CalendarPage() {
                                   )}
                                 </div>
                                 <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.375rem' }}>
-                                  {formatTimeLabel(occ.cls.start_time)} – {formatTimeLabel(occ.cls.end_time)} · {occ.count} / {occ.cls.max_slots} spots filled{full ? ' · Full' : ''}
+                                  {formatTimeLabel(occ.cls.start_time)} – {formatTimeLabel(occ.cls.end_time)} · {isCoachOrAdmin ? `${occ.count} / ${occ.cls.max_slots} spots filled` : `${Math.max(0, occ.cls.max_slots - occ.count)} spots left`}
                                 </p>
                               </div>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <p onClick={() => setSelectedBballOcc(occ)} style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', fontWeight: 600, cursor: 'pointer' }}>View Details →</p>
+                                <p onClick={onRowClick} style={{ fontSize: '0.7rem', color: 'var(--teal-secondary)', fontWeight: 600, cursor: 'pointer' }}>View Details →</p>
                                 {occ.joined ? (
                                   <button onClick={() => handleBballLeave(occ)} disabled={busy} style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 700, color: '#ef4444', cursor: busy ? 'not-allowed' : 'pointer' }}>
                                     {busy ? 'Leaving…' : 'Leave'}
                                   </button>
-                                ) : full ? (
-                                  <button disabled style={{ background: 'var(--border)', border: 'none', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', cursor: 'not-allowed' }}>
-                                    Class Full
-                                  </button>
                                 ) : (
                                   <button onClick={() => handleBballJoin(occ)} disabled={busy} style={{ background: 'var(--teal-primary)', border: 'none', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 700, color: 'white', cursor: busy ? 'not-allowed' : 'pointer' }}>
-                                    {busy ? 'Joining…' : 'Join'}
+                                    {busy ? 'Joining…' : full ? 'Join Waitlist' : 'Join'}
                                   </button>
                                 )}
                               </div>
@@ -388,7 +398,7 @@ export default function CalendarPage() {
                       <div>
                         <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Scheduled Classes</p>
                         {selEntries.filter(c => !c.isPlan && !c.isBballClass).map(cls => (
-                          <div key={cls.id} onClick={() => setSelectedClass(cls)} style={{ cursor: 'pointer' }}>
+                          <div key={cls.id} onClick={() => isCoachOrAdmin ? goToClass(cls) : setSelectedClass(cls)} style={{ cursor: 'pointer' }}>
                             <ClassCard cls={cls} userRole={userRole} />
                           </div>
                         ))}
@@ -422,6 +432,7 @@ export default function CalendarPage() {
           myUserId={userId || ''}
           myGender={gender}
           isAdmin={false}
+          viewerRole={userRole}
           onClose={() => setSelectedBballOcc(null)}
           onJoinLeave={loadClasses}
         />
