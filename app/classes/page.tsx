@@ -125,7 +125,8 @@ export default function ClassesPage() {
       await refreshCounts()
       return
     }
-    if (status === 'waitlist') setJoinInfoMsg("You're on the waitlist — you'll have a spot if one opens up.")
+    if (status === 'pending') setJoinInfoMsg('Your spot request is pending approval.')
+    else if (status === 'waitlist') setJoinInfoMsg("You're on the waitlist — you'll have a spot if one opens up.")
     await refreshCounts()
     setBusyKey(null)
   }
@@ -262,8 +263,8 @@ export default function ClassesPage() {
                           : `${Math.max(0, occ.cls.max_slots - occ.count)} spots left`}
                       </p>
                       {mine && (
-                        <p style={{ fontSize: '0.7rem', marginTop: '0.2rem', fontWeight: 600, color: mine.status === 'waitlist' ? '#f59e0b' : mine.payment_status === 'unpaid' ? 'var(--text-secondary)' : '#4ade80' }}>
-                          {mine.status === 'waitlist' ? "You're on the waitlist" : PAYMENT_STATUS_LABELS[mine.payment_status]}
+                        <p style={{ fontSize: '0.7rem', marginTop: '0.2rem', fontWeight: 600, color: mine.status === 'pending' || mine.status === 'waitlist' ? '#f59e0b' : mine.payment_status === 'unpaid' ? 'var(--text-secondary)' : '#4ade80' }}>
+                          {mine.status === 'pending' ? 'Pending approval' : mine.status === 'waitlist' ? "You're on the waitlist" : PAYMENT_STATUS_LABELS[mine.payment_status]}
                         </p>
                       )}
                     </div>
@@ -297,7 +298,7 @@ export default function ClassesPage() {
                           border: occ.joined ? '1px solid rgba(239,68,68,0.4)' : 'none',
                         }}
                       >
-                        {busy ? '…' : occ.joined ? 'Leave' : full ? 'Join Waitlist' : 'Join'}
+                        {busy ? '…' : occ.joined ? (mine?.status === 'pending' ? 'Cancel Request' : 'Leave') : 'Join'}
                       </button>
                     </div>
                   </div>

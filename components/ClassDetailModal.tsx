@@ -186,7 +186,6 @@ export default function ClassDetailModal({
             class_id: attendanceClassId,
             occurrence_date: cls.scheduled_date,
             member_id: userId,
-            status: 'scheduled',
           })
           .select('*, profiles(name, email, gender)')
           .single()
@@ -254,7 +253,7 @@ export default function ClassDetailModal({
   }
 
   const handleRemoveAttendee = async (attendee: any) => {
-    if (!confirm(`Remove ${attendee.profiles?.name} from this class?`)) return
+    if (!confirm(`Remove ${attendee.profiles?.name || attendee.guest_name} from this class?`)) return
 
     setAttendeeActionError('')
     const { error } = await supabase.from('class_attendees').delete().eq('id', attendee.id)
@@ -515,9 +514,13 @@ export default function ClassDetailModal({
                   disabled={rsvpLoading}
                   style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 700, fontSize: '0.9rem', cursor: rsvpLoading ? 'not-allowed' : 'pointer', background: myAttendance ? 'transparent' : 'var(--teal-primary)', color: myAttendance ? '#ef4444' : 'white', border: myAttendance ? '1px solid rgba(239,68,68,0.4)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
                 >
-                  {rsvpLoading ? '…' : myAttendance ? <><X size={15} /> Remove Attendance</> : <><Check size={15} /> I&apos;m Attending</>}
+                  {rsvpLoading ? '…' : myAttendance ? <><X size={15} /> {myAttendance.status === 'pending' ? 'Cancel Request' : 'Remove Attendance'}</> : <><Check size={15} /> I&apos;m Attending</>}
                 </button>
-                {myAttendance && <p style={{ fontSize: '0.75rem', textAlign: 'center', marginTop: '0.5rem', color: '#4ade80', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem' }}><CheckCircle2 size={13} /> You&apos;re marked as attending this class</p>}
+                {myAttendance && (
+                  <p style={{ fontSize: '0.75rem', textAlign: 'center', marginTop: '0.5rem', color: myAttendance.status === 'pending' || myAttendance.status === 'waitlist' ? '#f59e0b' : '#4ade80', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem' }}>
+                    {myAttendance.status === 'pending' ? <>Your request is pending approval</> : myAttendance.status === 'waitlist' ? <>You&apos;re on the waitlist</> : <><CheckCircle2 size={13} /> You&apos;re marked as attending this class</>}
+                  </p>
+                )}
               </>
             )}
           </div>
@@ -765,16 +768,16 @@ export default function ClassDetailModal({
                   <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.75rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                       <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--teal-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.875rem', fontWeight: 700, flexShrink: 0 }}>
-                        {a.profiles?.name?.charAt(0)?.toUpperCase() || '?'}
+                        {(a.profiles?.name || a.guest_name)?.charAt(0)?.toUpperCase() || '?'}
                       </div>
                       <div>
-                        <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>{a.profiles?.name}</p>
+                        <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>{a.profiles?.name || a.guest_name}</p>
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
                       {userRole === 'member' && a.member_id === userId && (
                         <span style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '999px', background: a.status === 'attended' ? 'rgba(34,197,94,0.2)' : 'rgba(8,119,160,0.2)', color: a.status === 'attended' ? '#4ade80' : 'var(--teal-secondary)' }}>
-                          {a.status === 'attended' ? 'Attended' : 'Attending'}
+                          {a.status === 'attended' ? 'Attended' : a.status === 'pending' ? 'Pending' : a.status === 'waitlist' ? 'Waitlist' : 'Attending'}
                         </span>
                       )}
                       {(userRole === 'coach' || userRole === 'admin') && (

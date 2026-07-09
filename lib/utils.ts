@@ -166,7 +166,7 @@ export const PAYMENT_STATUS_LABELS: Record<string, string> = {
 // a "class is full" error string, which is now dead — the trigger no longer rejects full classes.
 export async function joinBballClass(
   supabase: any, classId: string, userId: string, occurrenceDate: string
-): Promise<{ status?: 'booked' | 'waitlist'; error?: string }> {
+): Promise<{ status?: 'pending' | 'booked' | 'waitlist'; error?: string }> {
   const { data, error } = await supabase
     .from('bball_class_signups')
     .insert({ class_id: classId, user_id: userId, occurrence_date: occurrenceDate })

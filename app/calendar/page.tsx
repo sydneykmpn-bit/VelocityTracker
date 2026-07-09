@@ -235,7 +235,8 @@ export default function CalendarPage() {
       await loadClasses()
       return
     }
-    if (status === 'waitlist') setBballJoinInfoMsg("You're on the waitlist — you'll have a spot if one opens up.")
+    if (status === 'pending') setBballJoinInfoMsg('Your spot request is pending approval.')
+    else if (status === 'waitlist') setBballJoinInfoMsg("You're on the waitlist — you'll have a spot if one opens up.")
     await loadClasses()
     setBballBusyKey(null)
   }
@@ -359,7 +360,6 @@ export default function CalendarPage() {
                         {selEntries.filter(c => c.isBballClass).map((occAny: any) => {
                           const occ = occAny as BballOccurrence & { id: string }
                           const badge = genderBadgeStyle[occ.cls.gender_restriction]
-                          const full = occ.count >= occ.cls.max_slots
                           const key = `${occ.cls.id}_${occ.date}`
                           const busy = bballBusyKey === key
                           const onRowClick = () => isCoachOrAdmin ? goToClass(occAny) : setSelectedBballOcc(occ)
@@ -384,7 +384,7 @@ export default function CalendarPage() {
                                   </button>
                                 ) : (
                                   <button onClick={() => handleBballJoin(occ)} disabled={busy} style={{ background: 'var(--teal-primary)', border: 'none', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 700, color: 'white', cursor: busy ? 'not-allowed' : 'pointer' }}>
-                                    {busy ? 'Joining…' : full ? 'Join Waitlist' : 'Join'}
+                                    {busy ? 'Joining…' : 'Join'}
                                   </button>
                                 )}
                               </div>

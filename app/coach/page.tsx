@@ -705,7 +705,8 @@ export default function CoachPage() {
       await loadCalendarWorkouts()
       return
     }
-    if (status === 'waitlist') setBballJoinInfoMsg("You're on the waitlist — you'll have a spot if one opens up.")
+    if (status === 'pending') setBballJoinInfoMsg('Your spot request is pending approval.')
+    else if (status === 'waitlist') setBballJoinInfoMsg("You're on the waitlist — you'll have a spot if one opens up.")
     await loadCalendarWorkouts()
     setBballBusyKey(null)
   }
@@ -2388,7 +2389,7 @@ export default function CoachPage() {
                                   </button>
                                 ) : (
                                   <button onClick={() => handleBballJoin(occ)} disabled={busy} style={{ background: 'var(--teal-primary)', border: 'none', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 700, color: 'white', cursor: busy ? 'not-allowed' : 'pointer' }}>
-                                    {busy ? 'Joining…' : full ? 'Join Waitlist' : 'Join'}
+                                    {busy ? 'Joining…' : 'Join'}
                                   </button>
                                 )}
                               </div>

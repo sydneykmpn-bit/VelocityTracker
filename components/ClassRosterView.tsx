@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { ArrowLeft, ChevronDown, ChevronUp, Search, Trash2, UserPlus, X } from 'lucide-react'
+import { ArrowLeft, Check, ChevronDown, ChevronUp, Search, Trash2, UserPlus, X } from 'lucide-react'
 import { formatTimeLabel, PAYMENT_STATUS_LABELS } from '@/lib/utils'
 
 type SystemKey = 'bball' | 'scheduled'
@@ -13,6 +13,7 @@ const CONFIG: Record<SystemKey, {
   classTable: string
   signupTable: string
   memberCol: string
+  pendingStatus: string
   bookedStatuses: string[]
   waitlistStatus: string
   noShowStatus: string
@@ -23,12 +24,12 @@ const CONFIG: Record<SystemKey, {
 }> = {
   bball: {
     classTable: 'bball_classes', signupTable: 'bball_class_signups', memberCol: 'user_id',
-    bookedStatuses: ['booked'], waitlistStatus: 'waitlist', noShowStatus: 'no_show', defaultStatus: 'booked',
+    pendingStatus: 'pending', bookedStatuses: ['booked'], waitlistStatus: 'waitlist', noShowStatus: 'no_show', defaultStatus: 'booked',
     hasLocation: false, backHref: '/classes', backLabel: 'Back to Classes',
   },
   scheduled: {
     classTable: 'scheduled_classes', signupTable: 'class_attendees', memberCol: 'member_id',
-    bookedStatuses: ['scheduled', 'attended'], waitlistStatus: 'waitlist', noShowStatus: 'absent', defaultStatus: 'scheduled',
+    pendingStatus: 'pending', bookedStatuses: ['scheduled', 'attended'], waitlistStatus: 'waitlist', noShowStatus: 'absent', defaultStatus: 'scheduled',
     hasLocation: true, backHref: '/calendar', backLabel: 'Back to Calendar',
   },
 }
@@ -42,7 +43,11 @@ const labelBase: React.CSSProperties = {
   textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '0.375rem',
 }
 
-type Tab = 'booked' | 'waitlist' | 'no_show'
+type Tab = 'pending' | 'booked' | 'waitlist' | 'no_show'
+
+function attendeeName(row: any): string {
+  return row.profiles?.name || row.guest_name || 'Unknown'
+}
 
 export default function ClassRosterView({ system }: { system: SystemKey }) {
   const cfg = CONFIG[system]
@@ -55,17 +60,20 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
   const [loading, setLoading] = useState(true)
   const [classRow, setClassRow] = useState<any>(null)
   const [rows, setRows] = useState<any[]>([])
-  const [tab, setTab] = useState<Tab>('booked')
+  const [tab, setTab] = useState<Tab>('pending')
   const [search, setSearch] = useState('')
-  const [sortBy, setSortBy] = useState<'name' | 'time'>('time')
   const [paymentFilter, setPaymentFilter] = useState('all')
-  const [amountMin, setAmountMin] = useState('')
-  const [amountMax, setAmountMax] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [draftPaymentStatus, setDraftPaymentStatus] = useState('unpaid')
+  const [draftAmountPaid, setDraftAmountPaid] = useState('')
+  const [savingRow, setSavingRow] = useState<string | null>(null)
+  const [savedRowId, setSavedRowId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [showAddAttendee, setShowAddAttendee] = useState(false)
+  const [addMode, setAddMode] = useState<'existing' | 'guest'>('existing')
   const [memberCandidates, setMemberCandidates] = useState<any[]>([])
   const [addSearch, setAddSearch] = useState('')
+  const [guestName, setGuestName] = useState('')
   const [addError, setAddError] = useState('')
   const [addLoading, setAddLoading] = useState(false)
 
@@ -98,11 +106,11 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
   }, [id, date])
 
   useEffect(() => {
-    if (!showAddAttendee) return
+    if (!showAddAttendee || addMode !== 'existing') return
     supabase.from('profiles').select('id, name, email').eq('role', 'member').order('name')
       .then(({ data }) => setMemberCandidates(data || []))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showAddAttendee])
+  }, [showAddAttendee, addMode])
 
   if (loading || !classRow) {
     return (
@@ -112,29 +120,23 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
     )
   }
 
+  const pendingCount = rows.filter(r => r.status === cfg.pendingStatus).length
   const bookedCount = rows.filter(r => cfg.bookedStatuses.includes(r.status)).length
   const waitlistCount = rows.filter(r => r.status === cfg.waitlistStatus).length
   const noShowCount = rows.filter(r => r.status === cfg.noShowStatus).length
 
-  const bucketFor = (t: Tab) => t === 'booked'
+  const bucketFor = (t: Tab) => t === 'pending'
+    ? rows.filter(r => r.status === cfg.pendingStatus)
+    : t === 'booked'
     ? rows.filter(r => cfg.bookedStatuses.includes(r.status))
     : t === 'waitlist'
     ? rows.filter(r => r.status === cfg.waitlistStatus)
     : rows.filter(r => r.status === cfg.noShowStatus)
 
   const visibleRows = bucketFor(tab)
-    .filter(r => !search.trim() || r.profiles?.name?.toLowerCase().includes(search.toLowerCase()))
+    .filter(r => !search.trim() || attendeeName(r).toLowerCase().includes(search.toLowerCase()))
     .filter(r => paymentFilter === 'all' || r.payment_status === paymentFilter)
-    .filter(r => {
-      const amt = Number(r.amount_paid) || 0
-      if (amountMin.trim() && amt < Number(amountMin)) return false
-      if (amountMax.trim() && amt > Number(amountMax)) return false
-      return true
-    })
-    .sort((a, b) => sortBy === 'name'
-      ? (a.profiles?.name || '').localeCompare(b.profiles?.name || '')
-      : (a.created_at || '').localeCompare(b.created_at || '')
-    )
+    .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''))
 
   const updateRow = async (rowId: string, payload: any) => {
     setError('')
@@ -144,10 +146,31 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
   }
 
   const handleRemove = async (row: any) => {
-    if (!confirm(`Remove ${row.profiles?.name || 'this attendee'} from this class?`)) return
+    if (!confirm(`Remove ${attendeeName(row)} from this class?`)) return
     setError('')
     const { error: err } = await supabase.from(cfg.signupTable).delete().eq('id', row.id)
     if (err) { setError(err.message); return }
+    await loadRows()
+  }
+
+  const toggleExpand = (row: any) => {
+    if (expandedId === row.id) { setExpandedId(null); return }
+    setExpandedId(row.id)
+    setDraftPaymentStatus(row.payment_status || 'unpaid')
+    setDraftAmountPaid(row.amount_paid != null ? String(row.amount_paid) : '')
+    setSavedRowId(null)
+  }
+
+  const handleSavePayment = async (row: any) => {
+    setSavingRow(row.id); setError(''); setSavedRowId(null)
+    const { error: err } = await supabase.from(cfg.signupTable).update({
+      payment_status: draftPaymentStatus,
+      amount_paid: draftAmountPaid.trim() === '' ? null : Number(draftAmountPaid),
+    }).eq('id', row.id)
+    setSavingRow(null)
+    if (err) { setError(err.message); return }
+    setSavedRowId(row.id)
+    setTimeout(() => setSavedRowId(prev => prev === row.id ? null : prev), 1500)
     await loadRows()
   }
 
@@ -168,11 +191,24 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
     await loadRows()
   }
 
+  const handleAddGuest = async () => {
+    if (!guestName.trim()) return
+    setAddLoading(true); setAddError('')
+    const { error: err } = await supabase.from(cfg.signupTable).insert({
+      class_id: id, occurrence_date: date, guest_name: guestName.trim(),
+    })
+    if (err) { setAddError(err.message); setAddLoading(false); return }
+    setGuestName('')
+    setAddLoading(false)
+    await loadRows()
+  }
+
   const timeLabel = system === 'bball'
     ? `${formatTimeLabel(classRow.start_time)} – ${formatTimeLabel(classRow.end_time)}`
     : `${classRow.start_time?.slice(0, 5)}${classRow.end_time ? ` – ${classRow.end_time.slice(0, 5)}` : ''}`
 
   const tabs: { key: Tab; label: string; count: number }[] = [
+    { key: 'pending', label: 'Pending', count: pendingCount },
     { key: 'booked', label: 'Booked', count: bookedCount },
     { key: 'waitlist', label: 'Waitlist', count: waitlistCount },
     { key: 'no_show', label: 'No Show', count: noShowCount },
@@ -222,16 +258,10 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
               style={{ ...inputBase, paddingLeft: '2rem' }}
             />
           </div>
-          <select value={sortBy} onChange={e => setSortBy(e.target.value as any)} style={{ ...inputBase, width: 'auto', cursor: 'pointer' }}>
-            <option value="time">Sort: Signup Time</option>
-            <option value="name">Sort: Name</option>
-          </select>
           <select value={paymentFilter} onChange={e => setPaymentFilter(e.target.value)} style={{ ...inputBase, width: 'auto', cursor: 'pointer' }}>
             <option value="all">All Payment Statuses</option>
             {Object.entries(PAYMENT_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
-          <input type="number" value={amountMin} onChange={e => setAmountMin(e.target.value)} placeholder="Min ₱" style={{ ...inputBase, width: '90px' }} />
-          <input type="number" value={amountMax} onChange={e => setAmountMax(e.target.value)} placeholder="Max ₱" style={{ ...inputBase, width: '90px' }} />
         </div>
 
         {/* Add attendee */}
@@ -245,21 +275,52 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
           {showAddAttendee && (
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem', marginTop: '0.75rem' }}>
               {addError && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.375rem', padding: '0.5rem 0.625rem', color: '#f87171', fontSize: '0.75rem', marginBottom: '0.5rem' }}>{addError}</div>}
-              <input value={addSearch} onChange={e => setAddSearch(e.target.value)} placeholder="Type a name…" style={inputBase} autoFocus />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginTop: '0.625rem', maxHeight: '200px', overflowY: 'auto' }}>
-                {memberCandidates
-                  .filter(m => !rows.some(r => r[cfg.memberCol] === m.id && r.status !== cfg.noShowStatus))
-                  .filter(m => m.name?.toLowerCase().includes(addSearch.toLowerCase()))
-                  .map(m => (
-                    <button
-                      key={m.id} onClick={() => handleAddAttendee(m.id)} disabled={addLoading}
-                      style={{ display: 'flex', justifyContent: 'space-between', width: '100%', textAlign: 'left', background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.5rem 0.75rem', cursor: addLoading ? 'not-allowed' : 'pointer', fontSize: '0.8rem', color: 'var(--text-primary)', minHeight: 0 }}
-                    >
-                      <span>{m.name}</span>
-                      <span style={{ color: 'var(--teal-primary)', fontWeight: 700 }}>+ Add</span>
-                    </button>
-                  ))}
+
+              <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.75rem' }}>
+                {(['existing', 'guest'] as const).map(m => (
+                  <button
+                    key={m} type="button" onClick={() => { setAddMode(m); setAddError('') }}
+                    style={{
+                      flex: 1, borderRadius: '0.375rem', padding: '0.45rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer',
+                      border: `1px solid ${addMode === m ? 'var(--teal-primary)' : 'var(--border)'}`,
+                      background: addMode === m ? 'rgba(8,119,160,0.2)' : 'var(--surface-raised)',
+                      color: addMode === m ? 'var(--teal-secondary)' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {m === 'existing' ? 'Existing Member' : 'Custom Name'}
+                  </button>
+                ))}
               </div>
+
+              {addMode === 'existing' ? (
+                <>
+                  <input value={addSearch} onChange={e => setAddSearch(e.target.value)} placeholder="Type a name…" style={inputBase} autoFocus />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginTop: '0.625rem', maxHeight: '200px', overflowY: 'auto' }}>
+                    {memberCandidates
+                      .filter(m => !rows.some(r => r[cfg.memberCol] === m.id && r.status !== cfg.noShowStatus))
+                      .filter(m => m.name?.toLowerCase().includes(addSearch.toLowerCase()))
+                      .map(m => (
+                        <button
+                          key={m.id} onClick={() => handleAddAttendee(m.id)} disabled={addLoading}
+                          style={{ display: 'flex', justifyContent: 'space-between', width: '100%', textAlign: 'left', background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.5rem 0.75rem', cursor: addLoading ? 'not-allowed' : 'pointer', fontSize: '0.8rem', color: 'var(--text-primary)', minHeight: 0 }}
+                        >
+                          <span>{m.name}</span>
+                          <span style={{ color: 'var(--teal-primary)', fontWeight: 700 }}>+ Add</span>
+                        </button>
+                      ))}
+                  </div>
+                </>
+              ) : (
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input value={guestName} onChange={e => setGuestName(e.target.value)} placeholder="Walk-in's name" style={inputBase} autoFocus />
+                  <button
+                    onClick={handleAddGuest} disabled={addLoading || !guestName.trim()}
+                    style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.6rem 1rem', fontSize: '0.8rem', fontWeight: 700, cursor: addLoading || !guestName.trim() ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
+                  >
+                    {addLoading ? 'Adding…' : 'Add'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -274,11 +335,11 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
               return (
                 <div key={row.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', overflow: 'hidden' }}>
                   <div
-                    onClick={() => setExpandedId(expanded ? null : row.id)}
+                    onClick={() => toggleExpand(row)}
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.875rem 1rem', cursor: 'pointer' }}
                   >
                     <div style={{ minWidth: 0 }}>
-                      <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>{row.profiles?.name || 'Unknown'}</p>
+                      <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>{attendeeName(row)}</p>
                       <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
                         {PAYMENT_STATUS_LABELS[row.payment_status] || 'Unpaid'}
                         {row.amount_paid != null ? ` · ₱${row.amount_paid}` : ''}
@@ -292,8 +353,8 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
                       <div>
                         <label style={labelBase}>Payment Status</label>
                         <select
-                          defaultValue={row.payment_status}
-                          onChange={e => updateRow(row.id, { payment_status: e.target.value })}
+                          value={draftPaymentStatus}
+                          onChange={e => setDraftPaymentStatus(e.target.value)}
                           style={{ ...inputBase, cursor: 'pointer' }}
                         >
                           {Object.entries(PAYMENT_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -302,34 +363,61 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
                       <div>
                         <label style={labelBase}>Amount Paid</label>
                         <input
-                          type="number" defaultValue={row.amount_paid ?? ''} placeholder="0.00"
-                          onBlur={e => updateRow(row.id, { amount_paid: e.target.value === '' ? null : Number(e.target.value) })}
+                          type="number" value={draftAmountPaid} placeholder="0.00"
+                          onChange={e => setDraftAmountPaid(e.target.value)}
                           style={inputBase}
                         />
                       </div>
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        {row.status !== cfg.noShowStatus && (
-                          <button
-                            onClick={() => updateRow(row.id, { status: cfg.noShowStatus })}
-                            style={{ flex: '1 1 auto', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.375rem', padding: '0.5rem 0.75rem', color: '#f87171', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
-                          >
-                            Mark No Show
-                          </button>
+                      <button
+                        onClick={() => handleSavePayment(row)}
+                        disabled={savingRow === row.id}
+                        style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.5rem 0.875rem', fontSize: '0.8rem', fontWeight: 700, cursor: savingRow === row.id ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
+                      >
+                        {savingRow === row.id ? 'Saving…' : savedRowId === row.id ? <><Check size={14} /> Saved</> : 'Save'}
+                      </button>
+
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', paddingTop: '0.25rem', borderTop: '1px solid var(--border)' }}>
+                        {tab === 'pending' ? (
+                          <>
+                            <button
+                              onClick={() => updateRow(row.id, { status: cfg.defaultStatus })}
+                              style={{ flex: '1 1 auto', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.375rem', padding: '0.5rem 0.75rem', color: '#4ade80', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => handleRemove(row)}
+                              style={{ flex: '1 1 auto', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.375rem', padding: '0.5rem 0.75rem', color: '#f87171', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
+                            >
+                              Reject
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {row.status !== cfg.noShowStatus && (
+                              <button
+                                onClick={() => updateRow(row.id, { status: cfg.noShowStatus })}
+                                style={{ flex: '1 1 auto', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.375rem', padding: '0.5rem 0.75rem', color: '#f87171', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
+                              >
+                                Mark No Show
+                              </button>
+                            )}
+                            {!cfg.bookedStatuses.includes(row.status) && (
+                              <button
+                                onClick={() => updateRow(row.id, { status: cfg.defaultStatus })}
+                                style={{ flex: '1 1 auto', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.375rem', padding: '0.5rem 0.75rem', color: '#4ade80', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
+                              >
+                                Move to Booked
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleRemove(row)}
+                              style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.5rem 0.75rem', color: '#f87171', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                            >
+                              <Trash2 size={13} /> Remove
+                            </button>
+                          </>
                         )}
-                        {!cfg.bookedStatuses.includes(row.status) && (
-                          <button
-                            onClick={() => updateRow(row.id, { status: cfg.defaultStatus })}
-                            style={{ flex: '1 1 auto', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.375rem', padding: '0.5rem 0.75rem', color: '#4ade80', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
-                          >
-                            Move to Booked
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleRemove(row)}
-                          style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.5rem 0.75rem', color: '#f87171', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
-                        >
-                          <Trash2 size={13} /> Remove
-                        </button>
                       </div>
                     </div>
                   )}

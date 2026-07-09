@@ -54,7 +54,7 @@ export function BballClassDetailModal({
     setLoading(true)
     const { data, error: err } = await supabase
       .from('bball_class_signups')
-      .select('id, user_id, status, payment_status, profiles(name)')
+      .select('id, user_id, guest_name, status, payment_status, profiles(name)')
       .eq('class_id', occ.cls.id)
       .eq('occurrence_date', occ.date)
     if (err) setError(err.message)
@@ -66,7 +66,6 @@ export function BballClassDetailModal({
 
   const badge = genderBadgeStyle[occ.cls.gender_restriction]
   const bookedCount = attendees.filter(a => a.status === 'booked').length
-  const full = bookedCount >= occ.cls.max_slots
   const mine = attendees.find(a => a.user_id === myUserId && a.status !== 'no_show')
   const alreadyJoined = !!mine
   const isMember = viewerRole === 'member'
@@ -83,7 +82,8 @@ export function BballClassDetailModal({
       setBusy(false)
       return
     }
-    if (status === 'waitlist') setInfoMsg("You're on the waitlist — you'll have a spot if one opens up.")
+    if (status === 'pending') setInfoMsg('Your spot request is pending approval.')
+    else if (status === 'waitlist') setInfoMsg("You're on the waitlist — you'll have a spot if one opens up.")
     await loadAttendees()
     onJoinLeave()
     setBusy(false)
@@ -145,18 +145,18 @@ export function BballClassDetailModal({
           </p>
           {alreadyJoined ? (
             <button onClick={handleLeave} disabled={busy} style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', cursor: busy ? 'not-allowed' : 'pointer' }}>
-              {busy ? 'Leaving…' : 'Leave'}
+              {busy ? '…' : mine?.status === 'pending' ? 'Cancel Request' : 'Leave'}
             </button>
           ) : (
             <button onClick={handleJoin} disabled={busy} style={{ background: 'var(--teal-primary)', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.8rem', fontWeight: 700, color: 'white', cursor: busy ? 'not-allowed' : 'pointer' }}>
-              {busy ? 'Joining…' : full ? 'Join Waitlist' : 'Join'}
+              {busy ? 'Joining…' : 'Join'}
             </button>
           )}
         </div>
 
         {mine && (
-          <p style={{ fontSize: '0.75rem', fontWeight: 600, marginTop: '-0.5rem', marginBottom: '1rem', color: mine.status === 'waitlist' ? '#f59e0b' : mine.payment_status === 'unpaid' ? 'var(--text-secondary)' : '#4ade80' }}>
-            {mine.status === 'waitlist' ? "You're on the waitlist" : PAYMENT_STATUS_LABELS[mine.payment_status]}
+          <p style={{ fontSize: '0.75rem', fontWeight: 600, marginTop: '-0.5rem', marginBottom: '1rem', color: mine.status === 'pending' || mine.status === 'waitlist' ? '#f59e0b' : mine.payment_status === 'unpaid' ? 'var(--text-secondary)' : '#4ade80' }}>
+            {mine.status === 'pending' ? 'Pending approval' : mine.status === 'waitlist' ? "You're on the waitlist" : PAYMENT_STATUS_LABELS[mine.payment_status]}
           </p>
         )}
 
@@ -171,8 +171,8 @@ export function BballClassDetailModal({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                 {attendees.map(a => (
                   <div key={a.id} style={{ background: 'var(--surface-raised)', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', fontSize: '0.875rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
-                    <span>{(a.profiles as any)?.name || 'Unknown'}</span>
-                    {a.status === 'waitlist' && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#f59e0b' }}>Waitlist</span>}
+                    <span>{(a.profiles as any)?.name || a.guest_name || 'Unknown'}</span>
+                    {(a.status === 'waitlist' || a.status === 'pending') && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#f59e0b' }}>{a.status === 'pending' ? 'Pending' : 'Waitlist'}</span>}
                   </div>
                 ))}
               </div>

@@ -3,12 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Trash2, ChevronDown, ChevronUp, Pencil, KeyRound, Timer, X, AlertTriangle, Target, CheckCircle2, Mars, Venus, Users, UserCog, Building2, Settings, Check } from 'lucide-react'
-import BasketballIcon from '@/components/icons/BasketballIcon'
-import { getLocalDateString, BballClassRow } from '@/lib/utils'
-import { BballClassFormModal } from '@/components/BballClassModal'
+import { Trash2, ChevronDown, ChevronUp, Pencil, KeyRound, Timer, X, AlertTriangle, Target, CheckCircle2, Mars, Venus, Users, Building2, Settings, Check } from 'lucide-react'
+import { getLocalDateString } from '@/lib/utils'
 
-type AdminTab = 'members' | 'coaches' | 'groups' | 'classes' | 'settings'
+type AdminTab = 'members' | 'groups' | 'settings'
 type Role = 'member' | 'coach' | 'admin'
 
 const inputBase: React.CSSProperties = {
@@ -400,13 +398,6 @@ export default function AdminPage() {
   // Leaderboard (still used by Settings tab PR management)
   const [allPRs, setAllPRs] = useState<any[]>([])
 
-  // Classes tab (bball_classes)
-  const [bballClasses, setBballClasses] = useState<BballClassRow[]>([])
-  const [classFormOpen, setClassFormOpen] = useState(false)
-  const [editingClass, setEditingClass] = useState<BballClassRow | null>(null)
-
-  // Coaches state
-  const [coachStats, setCoachStats] = useState<Record<string, { groups: number; athletes: number; plansAssigned: number }>>({})
   const [classesThisMonthCount, setClassesThisMonthCount] = useState(0)
   const [settings, setSettings] = useState({ require_approval: true, instagram_handle: '', public_pr_exercises: [] as string[] })
   const [settingsSaved, setSettingsSaved] = useState(false)
@@ -436,11 +427,6 @@ export default function AdminPage() {
     setGroups(data ?? [])
   }
 
-  const loadBballClasses = async () => {
-    const { data } = await supabase.from('bball_classes').select('*').order('day_of_week').order('start_time')
-    setBballClasses(data ?? [])
-  }
-
   const loadGroupMembers = async (groupId: string) => {
     const { data } = await supabase
       .from('group_members')
@@ -466,7 +452,6 @@ export default function AdminPage() {
 
       await Promise.all([
         loadGroups(),
-        loadBballClasses(),
         supabase.from('personal_records').select('*, profiles(name, gender)').order('value', { ascending: false }).then(({ data }) => setAllPRs(data ?? [])),
       ])
 
@@ -480,22 +465,6 @@ export default function AdminPage() {
         .gte('scheduled_date', startOfMonth)
         .lte('scheduled_date', endOfMonth)
       setClassesThisMonthCount(classesCount || 0)
-
-      // Coach stats
-      const coachUsers = (allResult.data || []).filter((u: any) => u.role === 'coach')
-      const cStats: Record<string, { groups: number; athletes: number; plansAssigned: number }> = {}
-      for (const coach of coachUsers) {
-        const coachGroupIds = (await supabase.from('groups').select('id').eq('coach_id', coach.id)).data?.map((g: any) => g.id) || []
-        const [{ count: gCount }, { count: sCount }, { count: pCount }] = await Promise.all([
-          supabase.from('groups').select('id', { count: 'exact', head: true }).eq('coach_id', coach.id),
-          coachGroupIds.length > 0
-            ? supabase.from('group_members').select('id', { count: 'exact', head: true }).in('group_id', coachGroupIds)
-            : Promise.resolve({ count: 0 }),
-          supabase.from('workout_plans').select('id', { count: 'exact', head: true }).eq('coach_id', coach.id),
-        ])
-        cStats[coach.id] = { groups: gCount || 0, athletes: sCount || 0, plansAssigned: pCount || 0 }
-      }
-      setCoachStats(cStats)
 
       // Settings
       const { data: appSettings } = await supabase.from('app_settings').select('*').eq('id', 'global').maybeSingle()
@@ -650,14 +619,6 @@ export default function AdminPage() {
     await loadGroups()
   }
 
-  const handleDeleteClass = async (c: BballClassRow) => {
-    if (!confirm(`Delete "${c.title}"? This removes all signups for this class and cannot be undone.`)) return
-    setError('')
-    const { error: err } = await supabase.from('bball_classes').delete().eq('id', c.id)
-    if (err) { setError(err.message); return }
-    await loadBballClasses()
-  }
-
   const coaches = allUsers.filter(p => p.role === 'coach')
   const members = allUsers.filter(p => p.role === 'member')
   const adminCount = allUsers.filter(p => p.role === 'admin').length
@@ -679,9 +640,7 @@ export default function AdminPage() {
 
   const adminTabs: { value: AdminTab; label: string; icon: typeof Users }[] = [
     { value: 'members', label: 'Members', icon: Users },
-    { value: 'coaches', label: 'Coaches', icon: UserCog },
     { value: 'groups', label: 'Groups', icon: Building2 },
-    { value: 'classes', label: 'Classes', icon: BasketballIcon },
     { value: 'settings', label: 'Settings', icon: Settings },
   ]
 
@@ -696,7 +655,7 @@ export default function AdminPage() {
           {[
             { label: 'Classes This Month', value: classesThisMonthCount, color: 'var(--teal-secondary)', tab: 'groups' as AdminTab },
             { label: 'Active Members', value: members.length, color: 'var(--teal-secondary)', tab: 'members' as AdminTab },
-            { label: 'Coaches', value: coaches.length, color: '#60a5fa', tab: 'coaches' as AdminTab },
+            { label: 'Coaches', value: coaches.length, color: '#60a5fa', tab: 'members' as AdminTab },
             { label: 'Groups', value: groups.length, color: '#c084fc', tab: 'groups' as AdminTab },
           ].map(card => (
             <button
@@ -896,70 +855,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ── COACHES TAB ── */}
-        {activeTab === 'coaches' && (
-          <div key="tab-coaches" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {allUsers.filter(u => u.role === 'coach').length === 0 && (
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No coaches yet.</p>
-            )}
-            {allUsers.filter(u => u.role === 'coach').map(coach => (
-              <div key={coach.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-                <button onClick={() => setSelectedMemberProfile({ id: coach.id, name: coach.name })}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.875rem', flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0 }}>
-                  <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: 'var(--teal-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1.125rem', flexShrink: 0 }}>
-                    {coach.name?.charAt(0)}
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <p style={{ fontWeight: 600, fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{coach.name}</p>
-                    <div style={{ display: 'flex', gap: '0.875rem', marginTop: '0.375rem', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
-                      <span>{coachStats[coach.id]?.groups ?? 0} groups</span>
-                      <span>{coachStats[coach.id]?.athletes ?? 0} athletes</span>
-                      <span>{coachStats[coach.id]?.plansAssigned ?? 0} plans assigned</span>
-                    </div>
-                  </div>
-                </button>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
-                  <button
-                    onClick={async () => {
-                      if (!confirm(`Demote ${coach.name} to member?`)) return
-                      await supabase.from('profiles').update({ role: 'member' }).eq('id', coach.id)
-                      const { data: fresh } = await supabase.from('profiles').select('*').eq('approved', true).order('created_at', { ascending: false })
-                      setAllUsers(fresh || [])
-                    }}
-                    style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0 }}
-                  >
-                    Demote
-                  </button>
-                  <select
-                    value={coach.role}
-                    onChange={async e => {
-                      const newRole = e.target.value
-                      await supabase.from('profiles').update({ role: newRole }).eq('id', coach.id)
-                      setAllUsers(prev => prev.map(p => p.id === coach.id ? { ...p, role: newRole } : p))
-                    }}
-                    style={{ ...inputBase, padding: '0.25rem 0.5rem', fontSize: '0.75rem', cursor: 'pointer',
-                      color: coach.role === 'admin' ? '#c084fc' : coach.role === 'coach' ? '#34bac2' : 'var(--text-secondary)' }}
-                  >
-                    <option value="member">member</option>
-                    <option value="coach">coach</option>
-                    <option value="admin">admin</option>
-                  </select>
-                  <button
-                    onClick={async () => {
-                      if (!confirm(`Remove ${coach.name} from Velocity Tracker? This cannot be undone.`)) return
-                      const ok = await handleDeleteUser(coach.id)
-                      if (ok) setAllUsers(prev => prev.filter(p => p.id !== coach.id))
-                    }}
-                    style={{ width: '28px', height: '28px', borderRadius: '0.375rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', flexShrink: 0 }}
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
         {/* ── GROUPS TAB ── */}
         {activeTab === 'groups' && (
           <div key="tab-groups" className="admin-groups-grid" style={{ display: 'grid', alignItems: 'start' }}>
@@ -1118,45 +1013,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ── CLASSES TAB (bball_classes, admin-only) ── */}
-        {activeTab === 'classes' && (
-          <div key="tab-classes">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-              <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)' }}>
-                Existing Classes ({bballClasses.length})
-              </p>
-              <button onClick={() => { setEditingClass(null); setClassFormOpen(true) }} style={{
-                background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.5rem',
-                padding: '0.6rem 1rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
-              }}>
-                + New Class
-              </button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {bballClasses.length === 0 ? (
-                <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No classes created yet.</p>
-              ) : bballClasses.map(c => (
-                <div key={c.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>{c.title}</p>
-                    <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.15rem', textTransform: 'capitalize' }}>
-                      {c.is_recurring ? c.day_of_week : `One-time · ${c.specific_date}`} · {c.start_time?.slice(0, 5)}–{c.end_time?.slice(0, 5)} · {c.gender_restriction} · {c.max_slots} slots
-                    </p>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-                    <button onClick={() => { setEditingClass(c); setClassFormOpen(true) }} style={{ width: '32px', height: '32px', borderRadius: '0.375rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                      <Pencil size={14} />
-                    </button>
-                    <button onClick={() => handleDeleteClass(c)} style={{ width: '32px', height: '32px', borderRadius: '0.375rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: '#ef4444', cursor: 'pointer' }}>
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {activeTab === 'settings' && (
           <div key="tab-settings" style={{ maxWidth: '540px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             {settingsSaved && (
@@ -1293,13 +1149,6 @@ export default function AdminPage() {
         <CreateUserModal
           onClose={() => setShowCreateUserModal(false)}
           onCreated={refreshMembers}
-        />
-      )}
-      {classFormOpen && (
-        <BballClassFormModal
-          editing={editingClass}
-          onClose={() => setClassFormOpen(false)}
-          onSaved={loadBballClasses}
         />
       )}
     </div>
