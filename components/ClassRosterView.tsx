@@ -61,12 +61,13 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
   const [loading, setLoading] = useState(true)
   const [classRow, setClassRow] = useState<any>(null)
   const [rows, setRows] = useState<any[]>([])
-  const [tab, setTab] = useState<Tab>('pending')
+  const [tab, setTab] = useState<Tab>('all')
   const [search, setSearch] = useState('')
   const [paymentFilter, setPaymentFilter] = useState('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [draftPaymentStatus, setDraftPaymentStatus] = useState('unpaid')
   const [draftAmountPaid, setDraftAmountPaid] = useState('')
+  const [draftPaidOn, setDraftPaidOn] = useState('')
   const [savingRow, setSavingRow] = useState<string | null>(null)
   const [savedRowId, setSavedRowId] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -178,20 +179,26 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
     setExpandedId(row.id)
     setDraftPaymentStatus(row.payment_status || 'unpaid')
     setDraftAmountPaid(row.amount_paid != null ? String(row.amount_paid) : '')
+    setDraftPaidOn(row.paid_on || '')
     setSavedRowId(null)
   }
 
   const handleSavePayment = async (row: any) => {
     setSavingRow(row.id); setError(''); setSavedRowId(null)
-    const { error: err } = await supabase.from(cfg.signupTable).update({
+    const { data, error: err } = await supabase.from(cfg.signupTable).update({
       payment_status: draftPaymentStatus,
       amount_paid: draftAmountPaid.trim() === '' ? null : Number(draftAmountPaid),
-    }).eq('id', row.id)
+      paid_on: draftPaidOn.trim() === '' ? null : draftPaidOn,
+    }).eq('id', row.id).select()
     setSavingRow(null)
     if (err) { setError(err.message); return }
+    if (!data || data.length === 0) {
+      setError('Payment details could not be saved — the row may no longer exist or you may not have permission to edit it.')
+      return
+    }
+    setRows(prev => prev.map(r => r.id === row.id ? { ...r, ...data[0] } : r))
     setSavedRowId(row.id)
     setTimeout(() => setSavedRowId(prev => prev === row.id ? null : prev), 1500)
-    await loadRows()
   }
 
   const handleAddAttendee = async (memberId: string) => {
@@ -388,6 +395,7 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
                         {PAYMENT_STATUS_LABELS[row.payment_status] || 'Unpaid'}
                         {row.amount_paid != null ? ` · ₱${row.amount_paid}` : ''}
                         {row.created_at ? ` · Signed up ${new Date(row.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}
+                        {row.paid_on ? ` · Paid ${new Date(row.paid_on + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}
                       </p>
                     </div>
                     {expanded ? <ChevronUp size={16} color="var(--text-secondary)" /> : <ChevronDown size={16} color="var(--text-secondary)" />}
@@ -409,6 +417,14 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
                         <input
                           type="number" value={draftAmountPaid} placeholder="0.00"
                           onChange={e => setDraftAmountPaid(e.target.value)}
+                          style={inputBase}
+                        />
+                      </div>
+                      <div>
+                        <label style={labelBase}>Paid On</label>
+                        <input
+                          type="date" value={draftPaidOn}
+                          onChange={e => setDraftPaidOn(e.target.value)}
                           style={inputBase}
                         />
                       </div>

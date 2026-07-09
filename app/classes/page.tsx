@@ -28,6 +28,7 @@ export default function ClassesPage() {
   const [weekOffset, setWeekOffset] = useState(0)
   const [classes, setClasses] = useState<BballClassRow[]>([])
   const [counts, setCounts] = useState<Record<string, number>>({})
+  const [pendingCounts, setPendingCounts] = useState<Record<string, number>>({})
   const [myJoins, setMyJoins] = useState<Set<string>>(new Set())
   const [mySignups, setMySignups] = useState<Record<string, { status: string; payment_status: string }>>({})
   const [error, setError] = useState('')
@@ -46,10 +47,10 @@ export default function ClassesPage() {
   const weekEndStr = formatDateYMD(weekEnd)
 
   const loadWeekData = useCallback(async (clsList: BballClassRow[], uid: string) => {
-    if (clsList.length === 0) { setCounts({}); setMyJoins(new Set()); return }
+    if (clsList.length === 0) { setCounts({}); setPendingCounts({}); setMyJoins(new Set()); return }
     const classIds = clsList.map(c => c.id)
     const dates = Array.from(new Set(clsList.flatMap(c => bballOccurrencesInRange(c, weekStartStr, weekEndStr))))
-    if (dates.length === 0) { setCounts({}); setMyJoins(new Set()); return }
+    if (dates.length === 0) { setCounts({}); setPendingCounts({}); setMyJoins(new Set()); return }
     const { data, error: err } = await supabase
       .from('bball_class_signups')
       .select('class_id, user_id, occurrence_date, status, payment_status')
@@ -57,17 +58,20 @@ export default function ClassesPage() {
       .in('occurrence_date', dates)
     if (err) { setError(err.message); return }
     const countMap: Record<string, number> = {}
+    const pendingMap: Record<string, number> = {}
     const joined = new Set<string>()
     const mine: Record<string, { status: string; payment_status: string }> = {}
     for (const row of data || []) {
       const key = `${row.class_id}_${row.occurrence_date}`
       if (row.status === 'booked') countMap[key] = (countMap[key] || 0) + 1
+      if (row.status === 'pending') pendingMap[key] = (pendingMap[key] || 0) + 1
       if (row.user_id === uid && row.status !== 'no_show') {
         joined.add(key)
         mine[key] = { status: row.status, payment_status: row.payment_status }
       }
     }
     setCounts(countMap)
+    setPendingCounts(pendingMap)
     setMyJoins(joined)
     setMySignups(mine)
   }, [supabase, weekStartStr, weekEndStr])
@@ -200,7 +204,7 @@ export default function ClassesPage() {
           </button>
           <div style={{ textAlign: 'center' }}>
             <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>
-              {weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              {weekStart.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} – {weekEnd.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
             </p>
             {weekOffset !== 0 && (
               <button onClick={() => setWeekOffset(0)} style={{ background: 'none', border: 'none', color: 'var(--teal-secondary)', fontSize: '0.7rem', cursor: 'pointer', padding: 0, marginTop: '0.15rem' }}>
@@ -238,6 +242,7 @@ export default function ClassesPage() {
               const key = `${occ.cls.id}_${occ.date}`
               const busy = busyKey === key
               const mine = mySignups[key]
+              const pendingForOcc = pendingCounts[key] || 0
               return (
                 <div
                   key={key}
@@ -249,6 +254,15 @@ export default function ClassesPage() {
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
                         <p style={{ fontWeight: 700, fontSize: '0.95rem' }}>{occ.cls.title}</p>
+                        {isCoachOrAdmin && pendingForOcc > 0 && (
+                          <span title={`${pendingForOcc} pending approval${pendingForOcc === 1 ? '' : 's'}`} style={{
+                            minWidth: '16px', height: '16px', padding: '0 0.3rem', borderRadius: '999px',
+                            background: '#f59e0b', color: '#000', fontSize: '10px', fontWeight: 700,
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          }}>
+                            {pendingForOcc}
+                          </span>
+                        )}
                         {badge && (
                           <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.05em', background: badge.bg, color: badge.color, border: `1px solid ${badge.border}` }}>
                             {badge.label}
