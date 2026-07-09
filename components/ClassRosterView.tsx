@@ -165,8 +165,21 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
 
   const handleApprove = async (row: any) => {
     setError('')
-    const { error: err } = await supabase.from(cfg.signupTable).update({ status: cfg.defaultStatus }).eq('id', row.id)
-    if (err) { setError(err.message); return }
+    const { data, error: err } = await supabase
+      .from(cfg.signupTable)
+      .update({ status: cfg.defaultStatus })
+      .eq('id', row.id)
+      .select()
+    if (err) {
+      console.error('approve failed:', err)
+      setError(err.message)
+      return
+    }
+    if (!data || data.length === 0) {
+      console.error('approve failed: update matched 0 rows (likely blocked by RLS or the row no longer exists)', { rowId: row.id })
+      setError('Approval could not be saved — the row may no longer exist or you may not have permission to approve it.')
+      return
+    }
     await logAction(supabase, {
       category: 'classes', action_type: 'approve_signup', target_type: cfg.signupTable, target_id: row.id,
       details: { target_name: attendeeName(row), class_title: classRow.title, date },
