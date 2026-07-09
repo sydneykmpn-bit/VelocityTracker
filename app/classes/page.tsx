@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { ChevronLeft, ChevronRight, X, Plus, Pencil, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ArrowRight, X, Plus, Pencil, Trash2 } from 'lucide-react'
 import { formatTimeLabel, formatDateYMD, bballOccurrencesInRange, joinBballClass, PAYMENT_STATUS_LABELS, BballClassRow } from '@/lib/utils'
 import { logAction } from '@/lib/auditLog'
 import { BballClassDetailModal, BballClassFormModal, BballOccurrence, genderBadgeStyle } from '@/components/BballClassModal'
@@ -203,8 +203,10 @@ export default function ClassesPage() {
             <ChevronLeft size={18} />
           </button>
           <div style={{ textAlign: 'center' }}>
-            <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>
-              {weekStart.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} – {weekEnd.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+            <p style={{ fontSize: '0.875rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem' }}>
+              <span>{weekStart.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+              <ArrowRight size={14} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
+              <span>{weekEnd.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
             </p>
             {weekOffset !== 0 && (
               <button onClick={() => setWeekOffset(0)} style={{ background: 'none', border: 'none', color: 'var(--teal-secondary)', fontSize: '0.7rem', cursor: 'pointer', padding: 0, marginTop: '0.15rem' }}>

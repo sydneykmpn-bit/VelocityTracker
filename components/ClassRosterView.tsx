@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { ArrowLeft, Check, ChevronDown, ChevronUp, Search, Trash2, UserPlus, X } from 'lucide-react'
 import { formatTimeLabel, PAYMENT_STATUS_LABELS } from '@/lib/utils'
 import { logAction } from '@/lib/auditLog'
+import ConfirmModal from '@/components/ConfirmModal'
 
 type SystemKey = 'bball' | 'scheduled'
 
@@ -78,6 +79,7 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
   const [guestName, setGuestName] = useState('')
   const [addError, setAddError] = useState('')
   const [addLoading, setAddLoading] = useState(false)
+  const [confirmAction, setConfirmAction] = useState<{ type: 'remove' | 'reject' | 'noshow' | 'approve'; row: any } | null>(null)
 
   const loadRows = useCallback(async () => {
     const { data, error: err } = await supabase
@@ -151,8 +153,6 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
 
   const handleRemove = async (row: any, logType: 'remove_attendee' | 'reject_signup' = 'remove_attendee') => {
     const name = attendeeName(row)
-    const confirmMsg = logType === 'reject_signup' ? `Reject ${name}'s request?` : `Remove ${name} from this class?`
-    if (!confirm(confirmMsg)) return
     setError('')
     const { error: err } = await supabase.from(cfg.signupTable).delete().eq('id', row.id)
     if (err) { setError(err.message); return }
@@ -172,6 +172,10 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
       details: { target_name: attendeeName(row), class_title: classRow.title, date },
     })
     await loadRows()
+  }
+
+  const handleMarkNoShow = async (row: any) => {
+    await updateRow(row.id, { status: cfg.noShowStatus })
   }
 
   const toggleExpand = (row: any) => {
@@ -250,6 +254,37 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
     { key: 'waitlist', label: 'Waitlist', count: waitlistCount },
     { key: 'no_show', label: 'No Show', count: noShowCount },
   ]
+
+  const confirmModalConfig = confirmAction && {
+    remove: {
+      title: 'Remove Attendee',
+      message: `Remove ${attendeeName(confirmAction.row)} from this class?`,
+      confirmLabel: 'Remove',
+      variant: 'destructive' as const,
+      onConfirm: () => handleRemove(confirmAction.row, 'remove_attendee'),
+    },
+    reject: {
+      title: 'Reject Request',
+      message: `Reject ${attendeeName(confirmAction.row)}'s request?`,
+      confirmLabel: 'Reject',
+      variant: 'destructive' as const,
+      onConfirm: () => handleRemove(confirmAction.row, 'reject_signup'),
+    },
+    noshow: {
+      title: 'Mark No Show',
+      message: `Mark ${attendeeName(confirmAction.row)} as a no-show?`,
+      confirmLabel: 'Mark No Show',
+      variant: 'destructive' as const,
+      onConfirm: () => handleMarkNoShow(confirmAction.row),
+    },
+    approve: {
+      title: 'Approve Request',
+      message: `Approve ${attendeeName(confirmAction.row)}'s request?`,
+      confirmLabel: 'Approve',
+      variant: 'primary' as const,
+      onConfirm: () => handleApprove(confirmAction.row),
+    },
+  }[confirmAction.type]
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
@@ -440,13 +475,13 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
                         {row.status === cfg.pendingStatus ? (
                           <>
                             <button
-                              onClick={() => handleApprove(row)}
+                              onClick={() => setConfirmAction({ type: 'approve', row })}
                               style={{ flex: '1 1 auto', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.375rem', padding: '0.5rem 0.75rem', color: '#4ade80', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
                             >
                               Approve
                             </button>
                             <button
-                              onClick={() => handleRemove(row, 'reject_signup')}
+                              onClick={() => setConfirmAction({ type: 'reject', row })}
                               style={{ flex: '1 1 auto', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.375rem', padding: '0.5rem 0.75rem', color: '#f87171', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
                             >
                               Reject
@@ -456,7 +491,7 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
                           <>
                             {row.status !== cfg.noShowStatus && (
                               <button
-                                onClick={() => updateRow(row.id, { status: cfg.noShowStatus })}
+                                onClick={() => setConfirmAction({ type: 'noshow', row })}
                                 style={{ flex: '1 1 auto', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.375rem', padding: '0.5rem 0.75rem', color: '#f87171', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
                               >
                                 Mark No Show
@@ -471,7 +506,7 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
                               </button>
                             )}
                             <button
-                              onClick={() => handleRemove(row)}
+                              onClick={() => setConfirmAction({ type: 'remove', row })}
                               style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.5rem 0.75rem', color: '#f87171', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
                             >
                               <Trash2 size={13} /> Remove
@@ -487,6 +522,17 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
           </div>
         )}
       </main>
+
+      {confirmAction && confirmModalConfig && (
+        <ConfirmModal
+          title={confirmModalConfig.title}
+          message={confirmModalConfig.message}
+          confirmLabel={confirmModalConfig.confirmLabel}
+          variant={confirmModalConfig.variant}
+          onConfirm={() => { const run = confirmModalConfig.onConfirm; setConfirmAction(null); run() }}
+          onCancel={() => setConfirmAction(null)}
+        />
+      )}
     </div>
   )
 }

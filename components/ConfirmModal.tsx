@@ -1,15 +1,20 @@
 'use client'
 
 export default function ConfirmModal({
-  title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', onConfirm, onCancel,
+  title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', variant = 'primary', onConfirm, onCancel,
 }: {
   title: string
   message: string
   confirmLabel?: string
   cancelLabel?: string
+  variant?: 'primary' | 'destructive'
   onConfirm: () => void
   onCancel: () => void
 }) {
+  const confirmStyle = variant === 'destructive'
+    ? { background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }
+    : { background: 'var(--teal-primary)', border: 'none', color: 'white' }
+
   return (
     <div
       onClick={e => { if (e.target === e.currentTarget) onCancel() }}
@@ -27,7 +32,7 @@ export default function ConfirmModal({
           </button>
           <button
             onClick={onConfirm}
-            style={{ flex: 1, background: 'var(--teal-primary)', border: 'none', borderRadius: '0.5rem', padding: '0.7rem', fontWeight: 700, fontSize: '0.875rem', color: 'white', cursor: 'pointer' }}
+            style={{ flex: 1, borderRadius: '0.5rem', padding: '0.7rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', ...confirmStyle }}
           >
             {confirmLabel}
           </button>
