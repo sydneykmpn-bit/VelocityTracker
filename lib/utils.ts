@@ -111,6 +111,16 @@ export function dayNameFromDate(dateStr: string): string {
   return DAY_NAMES[parseLocalDateStr(dateStr).getDay()]
 }
 
+// Date (YYYY-MM-DD) of the given weekday (0=Sun..6=Sat) within the current calendar week,
+// used to scope athlete_program_completions to one specific week's occurrence of a program day.
+export function getCurrentWeekOccurrenceDate(dayOfWeek: number, timeZone = 'Asia/Manila'): string {
+  const today = parseLocalDateStr(getLocalDateString(timeZone))
+  const diff = dayOfWeek - today.getDay()
+  const occurrence = new Date(today)
+  occurrence.setDate(today.getDate() + diff)
+  return formatDateYMD(occurrence)
+}
+
 // Format a 24h "HH:MM" time string as "H:MM AM/PM"
 export function formatTimeLabel(t: string): string {
   if (!t) return ''

@@ -5,9 +5,9 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { ChevronDown, ChevronUp, CheckCircle2, Check, Lock, Pencil, Trash2 } from 'lucide-react'
-import { getLocalDateString, normalizeToKg } from '@/lib/utils'
+import { getLocalDateString, normalizeToKg, getCurrentWeekOccurrenceDate } from '@/lib/utils'
 import { TodayPlanCard, SkippedPlansSection, typeBadge } from '@/components/PlanCards'
-import AthleteProgramTable from '@/components/AthleteProgramTable'
+import AthleteProgramTable, { AthleteProgramDay } from '@/components/AthleteProgramTable'
 
 type Tab = 'plans' | 'prs' | 'metrics' | 'programs'
 
@@ -96,6 +96,9 @@ export default function StudentPage() {
   const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null)
   const [planSortAsc, setPlanSortAsc] = useState(true)
   const [assignedPrograms, setAssignedPrograms] = useState<any[]>([])
+  const [programCompletions, setProgramCompletions] = useState<any[]>([])
+  const [completingDayId, setCompletingDayId] = useState<string | null>(null)
+  const [programError, setProgramError] = useState('')
 
   const reloadPlans = async (uid: string) => {
     const { data: plans } = await supabase
@@ -189,6 +192,102 @@ export default function StudentPage() {
     setUndoingId(null)
   }
 
+  const loadProgramCompletions = async (programs: any[]) => {
+    const dayIds = programs.flatMap((p: any) => (p.athlete_program_days ?? []).map((d: any) => d.id))
+    if (dayIds.length === 0) { setProgramCompletions([]); return }
+    const { data, error: err } = await supabase.from('athlete_program_completions').select('*').in('program_day_id', dayIds)
+    if (err) { console.error('loadProgramCompletions failed:', err); setProgramError(err.message); return }
+    setProgramCompletions(data ?? [])
+  }
+
+  const isDayDoneThisWeek = (day: AthleteProgramDay) =>
+    programCompletions.some(c => c.program_day_id === day.id && c.occurrence_date === getCurrentWeekOccurrenceDate(day.day_of_week))
+
+  const deriveWorkoutType = (day: AthleteProgramDay): string => {
+    const types = (day.athlete_program_exercises ?? []).map(ex => ex.exercise_type).filter(Boolean)
+    const hasBball = types.includes('Basketball')
+    const hasOther = types.some(t => t && t !== 'Basketball')
+    if (hasBball && hasOther) return 'both'
+    if (hasBball) return 'basketball'
+    return 'conditioning'
+  }
+
+  const handleMarkDayDone = async (day: AthleteProgramDay) => {
+    if (!userId) return
+    setProgramError('')
+    setCompletingDayId(day.id)
+    const occurrenceDate = getCurrentWeekOccurrenceDate(day.day_of_week)
+
+    const { data: newWorkout, error: workoutErr } = await supabase.from('workouts').insert({
+      user_id: userId,
+      title: day.title,
+      type: deriveWorkoutType(day),
+      notes: `Auto-logged from assigned program.`,
+      date: occurrenceDate,
+    }).select().single()
+    if (workoutErr || !newWorkout) {
+      console.error('handleMarkDayDone: workout insert failed:', workoutErr)
+      setProgramError(workoutErr?.message ?? 'Failed to log workout for this day.')
+      setCompletingDayId(null)
+      return
+    }
+
+    const exercises = day.athlete_program_exercises ?? []
+    if (exercises.length > 0) {
+      const { error: exErr } = await supabase.from('exercises').insert(
+        exercises.map(ex => ({
+          workout_id: newWorkout.id,
+          name: ex.name, sets: ex.sets, reps: ex.reps, weight: ex.weight, notes: ex.notes,
+        }))
+      )
+      if (exErr) {
+        console.error('handleMarkDayDone: exercises insert failed:', exErr)
+        await supabase.from('workouts').delete().eq('id', newWorkout.id)
+        setProgramError(exErr.message)
+        setCompletingDayId(null)
+        return
+      }
+    }
+
+    const { data: completion, error: compErr } = await supabase.from('athlete_program_completions').insert({
+      program_day_id: day.id,
+      occurrence_date: occurrenceDate,
+      auto_logged_workout_id: newWorkout.id,
+    }).select().single()
+    if (compErr || !completion) {
+      console.error('handleMarkDayDone: completion insert failed:', compErr)
+      await supabase.from('exercises').delete().eq('workout_id', newWorkout.id)
+      await supabase.from('workouts').delete().eq('id', newWorkout.id)
+      setProgramError(compErr?.message ?? 'Failed to record completion for this day.')
+      setCompletingDayId(null)
+      return
+    }
+
+    setProgramCompletions(prev => [...prev, completion])
+    setCompletingDayId(null)
+  }
+
+  const handleUndoDayDone = async (day: AthleteProgramDay) => {
+    const occurrenceDate = getCurrentWeekOccurrenceDate(day.day_of_week)
+    const completion = programCompletions.find(c => c.program_day_id === day.id && c.occurrence_date === occurrenceDate)
+    if (!completion) return
+    setProgramError('')
+    setCompletingDayId(day.id)
+
+    if (completion.auto_logged_workout_id) {
+      const { error: exErr } = await supabase.from('exercises').delete().eq('workout_id', completion.auto_logged_workout_id)
+      if (exErr) { console.error('handleUndoDayDone: exercises delete failed:', exErr); setProgramError(exErr.message); setCompletingDayId(null); return }
+      const { error: woErr } = await supabase.from('workouts').delete().eq('id', completion.auto_logged_workout_id)
+      if (woErr) { console.error('handleUndoDayDone: workout delete failed:', woErr); setProgramError(woErr.message); setCompletingDayId(null); return }
+    }
+
+    const { error: compErr } = await supabase.from('athlete_program_completions').delete().eq('id', completion.id)
+    if (compErr) { console.error('handleUndoDayDone: completion delete failed:', compErr); setProgramError(compErr.message); setCompletingDayId(null); return }
+
+    setProgramCompletions(prev => prev.filter(c => c.id !== completion.id))
+    setCompletingDayId(null)
+  }
+
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -254,12 +353,13 @@ export default function StudentPage() {
       const { data: metrics } = await supabase.from('body_measurements').select('*').eq('user_id', user.id).order('recorded_at', { ascending: false }).limit(30)
       setBodyMetrics(metrics || [])
 
-      // Assigned program (RLS scopes athlete_programs/athlete_program_exercises to this member)
+      // Assigned program (RLS scopes athlete_programs/athlete_program_days/athlete_program_exercises to this member)
       const { data: programs } = await supabase
         .from('athlete_programs')
-        .select('*, coach:profiles!coach_id(name), athlete_program_exercises(*)')
+        .select('*, coach:profiles!coach_id(name), athlete_program_days(*, athlete_program_exercises(*))')
         .eq('member_id', user.id)
       setAssignedPrograms(programs ?? [])
+      await loadProgramCompletions(programs ?? [])
 
       setLoading(false)
     }
@@ -749,6 +849,7 @@ export default function StudentPage() {
 
         {activeTab === 'programs' && (
           <div key="tab-programs">
+            {programError && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{programError}</div>}
             {assignedPrograms.length === 0 ? (
               <div style={{ ...cardStyle, padding: '3rem', textAlign: 'center' }}>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No program assigned yet.</p>
@@ -761,7 +862,14 @@ export default function StudentPage() {
                       {program.coach?.name ? `${program.coach.name}'s Program` : 'My Program'}
                     </h2>
                     <div style={{ marginTop: '1rem' }}>
-                      <AthleteProgramTable exercises={program.athlete_program_exercises ?? []} />
+                      <AthleteProgramTable
+                        days={program.athlete_program_days ?? []}
+                        showCompletion
+                        isDayDone={isDayDoneThisWeek}
+                        onMarkDone={handleMarkDayDone}
+                        onUndoDone={handleUndoDayDone}
+                        completingDayId={completingDayId}
+                      />
                     </div>
                   </div>
                 ))}

@@ -87,7 +87,7 @@ export default function Navbar() {
     }
     load()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [pathname])
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {

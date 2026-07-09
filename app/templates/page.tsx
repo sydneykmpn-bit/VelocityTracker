@@ -44,7 +44,7 @@ export default function TemplatesPage() {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [createForm, setCreateForm] = useState({
     title: '', description: '', type: 'conditioning' as 'conditioning' | 'basketball' | 'both',
-    is_shared: false, is_visible_to_members: false,
+    is_visible_to_members: false,
   })
   const [createExercises, setCreateExercises] = useState([
     { name: '', sets: '', reps: '', weight: '', duration: '', notes: '' }
@@ -56,7 +56,7 @@ export default function TemplatesPage() {
     const { data: shared } = await supabase
       .from('workout_templates')
       .select('*, workout_template_exercises(*), profiles(id, name, role)')
-      .eq('is_shared', true)
+      .eq('is_visible_to_members', true)
       .eq('is_default', false)
       .order('updated_at', { ascending: false })
     setSharedTemplates(shared || [])
@@ -93,7 +93,6 @@ export default function TemplatesPage() {
       title: createForm.title.trim(),
       description: createForm.description || null,
       type: createForm.type,
-      is_shared: createForm.is_shared && (userRole === 'coach' || userRole === 'admin'),
       is_default: false,
       is_visible_to_members: createForm.is_visible_to_members,
       updated_at: new Date().toISOString(),
@@ -113,7 +112,7 @@ export default function TemplatesPage() {
       }
     }
     setShowCreateForm(false)
-    setCreateForm({ title: '', description: '', type: 'conditioning', is_shared: false, is_visible_to_members: false })
+    setCreateForm({ title: '', description: '', type: 'conditioning', is_visible_to_members: false })
     setCreateExercises([{ name: '', sets: '', reps: '', weight: '', duration: '', notes: '' }])
     setCreating(false)
     setActiveTab('mine')
@@ -129,7 +128,6 @@ export default function TemplatesPage() {
       title: `${template.title} (My Copy)`,
       description: template.description,
       type: template.type,
-      is_shared: false,
       is_default: false,
       is_visible_to_members: false,
     }).select().single()
@@ -165,7 +163,6 @@ export default function TemplatesPage() {
       title: template.title,
       description: template.description || '',
       type: template.type,
-      is_shared: template.is_shared || false,
       is_visible_to_members: template.is_visible_to_members || false,
     })
     setEditExercises(
@@ -190,7 +187,6 @@ export default function TemplatesPage() {
       title: editForm.title,
       description: editForm.description || null,
       type: editForm.type,
-      is_shared: editForm.is_shared,
       is_visible_to_members: editForm.is_visible_to_members,
       updated_at: new Date().toISOString(),
     }).eq('id', editingTemplate)
@@ -315,10 +311,6 @@ export default function TemplatesPage() {
               {(userRole === 'coach' || userRole === 'admin') && (
                 <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={createForm.is_shared} onChange={e => setCreateForm({ ...createForm, is_shared: e.target.checked })} style={{ width: '14px', height: '14px' }} />
-                    Share with coaches
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                     <input type="checkbox" checked={createForm.is_visible_to_members} onChange={e => setCreateForm({ ...createForm, is_visible_to_members: e.target.checked })} style={{ width: '14px', height: '14px' }} />
                     Visible to members
                   </label>
@@ -378,7 +370,7 @@ export default function TemplatesPage() {
                           <h3 style={{ fontWeight: 700, fontSize: '0.95rem' }}>{t.title}</h3>
                           <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', ...tb }}>{t.type}</span>
                           {t.is_default && <span style={{ fontSize: '0.6rem', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)', padding: '0.1rem 0.4rem', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}><Star size={10} />Default</span>}
-                          {t.is_shared && !t.is_default && <span style={{ fontSize: '0.6rem', background: 'rgba(8,119,160,0.15)', color: '#34bac2', border: '1px solid rgba(8,119,160,0.3)', padding: '0.1rem 0.4rem', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}><Handshake size={10} />Shared</span>}
+                          {t.is_visible_to_members && !t.is_default && <span style={{ fontSize: '0.6rem', background: 'rgba(8,119,160,0.15)', color: '#34bac2', border: '1px solid rgba(8,119,160,0.3)', padding: '0.1rem 0.4rem', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}><Handshake size={10} />Shared</span>}
                         </div>
                         {t.description && <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{t.description}</p>}
                         <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>{t.workout_template_exercises?.length || 0} exercises</p>
@@ -435,15 +427,6 @@ export default function TemplatesPage() {
                         )}
                         {activeTab === 'mine' && (userRole === 'coach' || userRole === 'admin') && t.created_by === userId && (
                           <>
-                            <button
-                              onClick={async () => {
-                                await supabase.from('workout_templates').update({ is_shared: !t.is_shared, updated_at: new Date().toISOString() }).eq('id', t.id)
-                                if (userId) loadTemplates(userId)
-                              }}
-                              style={{ background: 'none', border: `1px solid ${t.is_shared ? 'var(--teal-primary)' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: t.is_shared ? 'var(--teal-secondary)' : 'var(--text-secondary)', fontSize: '0.7rem', cursor: 'pointer', minHeight: 0, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
-                            >
-                              {t.is_shared && <Check size={11} />} {t.is_shared ? 'Shared w/ Coaches' : 'Share w/ Coaches'}
-                            </button>
                             <button
                               onClick={async () => {
                                 await supabase.from('workout_templates').update({ is_visible_to_members: !t.is_visible_to_members, updated_at: new Date().toISOString() }).eq('id', t.id)
@@ -514,10 +497,6 @@ export default function TemplatesPage() {
                         </div>
                         {(userRole === 'coach' || userRole === 'admin') && (
                           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                              <input type="checkbox" checked={editForm.is_shared || false} onChange={e => setEditForm((p: any) => ({ ...p, is_shared: e.target.checked }))} style={{ width: '14px', height: '14px' }} />
-                              Share with coaches
-                            </label>
                             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                               <input type="checkbox" checked={editForm.is_visible_to_members || false} onChange={e => setEditForm((p: any) => ({ ...p, is_visible_to_members: e.target.checked }))} style={{ width: '14px', height: '14px' }} />
                               Visible to members

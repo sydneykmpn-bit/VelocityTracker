@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { ChevronDown, ChevronUp, Trash2, Pencil, Plus, Calendar, Timer, Mars, Venus, Users, X, AlertTriangle, Target, CheckCircle2, Circle, XCircle, UserCog, ClipboardList, Check, Dumbbell, BicepsFlexed, Save, Pin, Eye, EyeOff } from 'lucide-react'
 import BasketballIcon from '@/components/icons/BasketballIcon'
-import AthleteProgramTable, { AthleteProgramExercise } from '@/components/AthleteProgramTable'
+import AthleteProgramTable, { AthleteProgramExercise, AthleteProgramDay } from '@/components/AthleteProgramTable'
 import { getLocalDateString, formatLocalDate, bballOccurrencesInRange, formatTimeLabel, joinBballClass, BballClassRow } from '@/lib/utils'
 import CalendarGrid, { CalendarEntry } from '@/components/CalendarGrid'
 import { BballOccurrence, genderBadgeStyle } from '@/components/BballClassModal'
@@ -462,7 +462,7 @@ export default function CoachPage() {
   // Programs (per-athlete flat exercise table)
   const [athletePrograms, setAthletePrograms] = useState<any[]>([])
   const [selectedAthleteProgram, setSelectedAthleteProgram] = useState<any | null>(null)
-  const [athleteProgramExercises, setAthleteProgramExercises] = useState<AthleteProgramExercise[]>([])
+  const [programDays, setProgramDays] = useState<AthleteProgramDay[]>([])
   const [addAthletePickerOpen, setAddAthletePickerOpen] = useState(false)
 
   const loadMyMembers = async (coachId: string) => {
@@ -530,7 +530,7 @@ export default function CoachPage() {
   const loadAthletePrograms = async (coachId: string) => {
     const { data } = await supabase
       .from('athlete_programs')
-      .select('*, member:profiles!member_id(name), athlete_program_exercises(count)')
+      .select('*, member:profiles!member_id(name), athlete_program_days(id, athlete_program_exercises(count))')
       .eq('coach_id', coachId)
       .order('created_at', { ascending: false })
     setAthletePrograms(data ?? [])
@@ -539,13 +539,13 @@ export default function CoachPage() {
   const openAthleteProgram = async (program: any) => {
     setError(''); setSuccess('')
     setSelectedAthleteProgram(program)
-    const { data } = await supabase
-      .from('athlete_program_exercises')
-      .select('*')
+    const { data, error: err } = await supabase
+      .from('athlete_program_days')
+      .select('*, athlete_program_exercises(*)')
       .eq('program_id', program.id)
       .order('day_of_week', { ascending: true })
-      .order('created_at', { ascending: true })
-    setAthleteProgramExercises(data ?? [])
+    if (err) { setError(err.message); return }
+    setProgramDays(data ?? [])
   }
 
   const handleAddAthleteProgram = async (memberId: string) => {
@@ -556,51 +556,99 @@ export default function CoachPage() {
       .select('*, member:profiles!member_id(name)')
       .single()
     if (err || !data) { setError(err?.message ?? 'Failed to add athlete'); return }
-    setAthletePrograms(prev => [{ ...data, athlete_program_exercises: [{ count: 0 }] }, ...prev])
+    setAthletePrograms(prev => [{ ...data, athlete_program_days: [] }, ...prev])
     setAddAthletePickerOpen(false)
     setSelectedAthleteProgram(data)
-    setAthleteProgramExercises([])
+    setProgramDays([])
   }
 
   const handleRemoveAthleteProgram = async (program: any) => {
-    if (!confirm(`Remove ${program.member?.name ?? 'this athlete'}'s program? This deletes all of their program exercises. This cannot be undone.`)) return
+    if (!confirm(`Remove ${program.member?.name ?? 'this athlete'}'s program? This deletes all of their program days and exercises. This cannot be undone.`)) return
     const { error: err } = await supabase.from('athlete_programs').delete().eq('id', program.id)
     if (err) { setError(err.message); return }
     setSelectedAthleteProgram(null)
-    setAthleteProgramExercises([])
+    setProgramDays([])
     if (userId) await loadAthletePrograms(userId)
   }
 
-  const handleAddExerciseRow = async () => {
+  const handleAddDay = async (dayOfWeek: number, title: string) => {
     if (!selectedAthleteProgram) return
+    setError('')
+    const { data, error: err } = await supabase
+      .from('athlete_program_days')
+      .insert({ program_id: selectedAthleteProgram.id, day_of_week: dayOfWeek, title })
+      .select('*, athlete_program_exercises(*)')
+      .single()
+    if (err || !data) { setError(err?.message ?? 'Failed to add day'); return }
+    setProgramDays(prev => [...prev, data])
+    setAthletePrograms(prev => prev.map(p => p.id === selectedAthleteProgram.id
+      ? { ...p, athlete_program_days: [...(p.athlete_program_days ?? []), { id: data.id, athlete_program_exercises: [{ count: 0 }] }] }
+      : p))
+  }
+
+  const handleUpdateDayTitle = async (dayId: string, title: string) => {
+    setError('')
+    const { error: err } = await supabase.from('athlete_program_days').update({ title }).eq('id', dayId)
+    if (err) { setError(err.message); return }
+    setProgramDays(prev => prev.map(d => d.id === dayId ? { ...d, title } : d))
+  }
+
+  const handleAddExerciseRow = async (dayId: string) => {
+    setError('')
     const { data, error: err } = await supabase
       .from('athlete_program_exercises')
-      .insert({ program_id: selectedAthleteProgram.id, day_of_week: 0, name: '' })
+      .insert({ program_day_id: dayId, name: '' })
       .select()
       .single()
     if (err || !data) { setError(err?.message ?? 'Failed to add exercise'); return }
-    setAthleteProgramExercises(prev => [...prev, data])
-    setAthletePrograms(prev => prev.map(p => p.id === selectedAthleteProgram.id
-      ? { ...p, athlete_program_exercises: [{ count: (p.athlete_program_exercises?.[0]?.count ?? 0) + 1 }] }
+    setProgramDays(prev => prev.map(d => d.id === dayId
+      ? { ...d, athlete_program_exercises: [...(d.athlete_program_exercises ?? []), data] }
+      : d))
+    setAthletePrograms(prev => prev.map(p => p.id === selectedAthleteProgram?.id
+      ? {
+          ...p,
+          athlete_program_days: (p.athlete_program_days ?? []).map((d: any) => d.id === dayId
+            ? { ...d, athlete_program_exercises: [{ count: (d.athlete_program_exercises?.[0]?.count ?? 0) + 1 }] }
+            : d),
+        }
       : p))
   }
 
-  const handleRemoveExerciseRow = async (idx: number) => {
-    const row = athleteProgramExercises[idx]
+  const handleRemoveExerciseRow = async (dayId: string, idx: number) => {
+    const day = programDays.find(d => d.id === dayId)
+    const row = day?.athlete_program_exercises?.[idx]
     if (!row?.id) return
     if (!confirm('Remove this exercise?')) return
+    setError('')
     const { error: err } = await supabase.from('athlete_program_exercises').delete().eq('id', row.id)
     if (err) { setError(err.message); return }
-    setAthleteProgramExercises(prev => prev.filter((_, i) => i !== idx))
+    setProgramDays(prev => prev.map(d => d.id === dayId
+      ? { ...d, athlete_program_exercises: (d.athlete_program_exercises ?? []).filter((_, i) => i !== idx) }
+      : d))
     setAthletePrograms(prev => prev.map(p => p.id === selectedAthleteProgram?.id
-      ? { ...p, athlete_program_exercises: [{ count: Math.max(0, (p.athlete_program_exercises?.[0]?.count ?? 1) - 1) }] }
+      ? {
+          ...p,
+          athlete_program_days: (p.athlete_program_days ?? []).map((d: any) => d.id === dayId
+            ? { ...d, athlete_program_exercises: [{ count: Math.max(0, (d.athlete_program_exercises?.[0]?.count ?? 1) - 1) }] }
+            : d),
+        }
       : p))
   }
 
-  const handleCommitExerciseField = async (idx: number, field: keyof AthleteProgramExercise, value: string) => {
-    const row = athleteProgramExercises[idx]
+  const handleChangeExerciseField = (dayId: string, idx: number, field: keyof AthleteProgramExercise, value: string) => {
+    setProgramDays(prev => prev.map(d => {
+      if (d.id !== dayId) return d
+      const exs = [...(d.athlete_program_exercises ?? [])]
+      exs[idx] = { ...exs[idx], [field]: value }
+      return { ...d, athlete_program_exercises: exs }
+    }))
+  }
+
+  const handleCommitExerciseField = async (dayId: string, idx: number, field: keyof AthleteProgramExercise, value: string) => {
+    const day = programDays.find(d => d.id === dayId)
+    const row = day?.athlete_program_exercises?.[idx]
     if (!row?.id) return
-    const numericFields = new Set(['sets', 'reps', 'weight', 'day_of_week'])
+    const numericFields = new Set(['sets', 'reps', 'weight'])
     const payload: any = {
       [field]: numericFields.has(field as string) ? (value === '' ? null : Number(value)) : (value || null),
     }
@@ -2668,7 +2716,7 @@ export default function CoachPage() {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {athletePrograms.map(p => {
-                      const exCount = p.athlete_program_exercises?.[0]?.count ?? 0
+                      const exCount = (p.athlete_program_days ?? []).reduce((sum: number, d: any) => sum + (d.athlete_program_exercises?.[0]?.count ?? 0), 0)
                       return (
                         <button
                           key={p.id}
@@ -2698,16 +2746,14 @@ export default function CoachPage() {
                 {success && <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#4ade80', fontSize: '0.875rem' }}>{success}</div>}
 
                 <AthleteProgramTable
-                  exercises={athleteProgramExercises}
+                  days={programDays}
                   editable
-                  onChange={(idx, field, val) => setAthleteProgramExercises(prev => {
-                    const next = [...prev]
-                    next[idx] = { ...next[idx], [field]: val }
-                    return next
-                  })}
-                  onCommit={(idx, field, val) => handleCommitExerciseField(idx, field, val)}
-                  onRemove={idx => handleRemoveExerciseRow(idx)}
-                  onAdd={handleAddExerciseRow}
+                  onAddDay={handleAddDay}
+                  onUpdateDayTitle={handleUpdateDayTitle}
+                  onAddExercise={handleAddExerciseRow}
+                  onChangeExercise={handleChangeExerciseField}
+                  onCommitExercise={handleCommitExerciseField}
+                  onRemoveExercise={handleRemoveExerciseRow}
                 />
               </div>
             )}
