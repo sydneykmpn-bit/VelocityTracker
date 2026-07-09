@@ -56,7 +56,8 @@ Core:
 
 Additional feature tables (ask before assuming exact columns):
 	•	body_measurements — weight/body-fat/circumference over time; feeds /analytics "body" tab AND Athlete Panel's Body Metrics tab (same table — body_metrics is an old, now-unused duplicate table, don't write to it)
-	•	programs, program_workouts, program_workout_exercises, program_assignments — multi-week structured programs (deload weeks etc.); assigning a program materializes real workout_plans rows (one per program workout), so Assigned Plans/calendars show program-derived plans automatically with no separate rendering path needed
+	•	athlete_programs (id, coach_id, member_id, created_at) + athlete_program_exercises (id, athlete_program_id, day_of_week[0=Sun..6=Sat], name, exercise_type, sets, reps, weight, notes, created_at) — one flat per-athlete exercise table per coach (no weeks/workout titles); deleting an athlete_programs row cascades its exercises. Shared UI in components/AthleteProgramTable.tsx (coach: editable, cell edits commit on blur/select-change directly to Supabase; student: read-only), both with Search/Type/Day filters. Superseded the old programs/program_workouts/program_workout_exercises/program_assignments model — those tables still exist in the DB but nothing reads/writes them anymore
+	•	programs, program_workouts, program_workout_exercises, program_assignments — legacy multi-week program tables, no longer used by any page (see athlete_programs above)
 	•	workout_templates, workout_template_exercises — reusable templates (shared/personal/default), used on /templates and via "Load from Template" in Log Workout + Assign Plan
 	•	attendance_history — distinct from class_attendees
 	•	leaderboard_reactions — Discord-style toggle reactions (emoji count only, no reactor identity shown); leaderboard_comments — own-comment delete only
@@ -70,8 +71,8 @@ Pages (keep in sync with the repo):
 	•	/leaderboard — public board (current month only, older PRs auto-archive on load via RPC) + My PRs (full history)
 	•	/analytics — PR trends, volume, body measurements (no Standards tab — removed)
 	•	/templates
-	•	/student ("Athlete Panel") — Assigned Plans, My PRs, Body Metrics, Programs (week/day/month view of assigned program structure, read-only)
-	•	/coach — My Athletes, Groups, Assign Plan, Assigned Plans, Programs, Workout Calendar, Notes — all scoped to the coach's own data only
+	•	/student ("Athlete Panel") — Assigned Plans, My PRs, Body Metrics, Programs (read-only flat exercise table per assigning coach, via athlete_programs)
+	•	/coach — My Athletes, Groups, Assign Plan, Assigned Plans, Programs (per-athlete flat exercise table, one athlete_programs row per athlete), Workout Calendar, Notes — all scoped to the coach's own data only
 	•	/admin — Members, Coaches, Groups, Classes (bball_classes CRUD), Settings — full access to everyone's data
 	•	/calendar — shared month/week-toggle calendar (components/CalendarGrid.tsx), shows plans/scheduled_classes/bball_classes for whoever's viewing; no class-creation UI here (admin creates from /admin or /classes)
 	•	/classes — browsable weekly bball_classes slots, join/leave, admin can create/edit inline
@@ -85,7 +86,7 @@ Key Rules for all code:
 
 	•	Default: "use client" + createClient from @/lib/supabase/client. Never import the server-side client into a client page component. Exception: /register (server component, pre-render redirect). API routes use @/lib/supabase/server + service-role client, always verify caller role first.
 	•	middleware.ts gates /admin and /coach by role; unapproved users → /pending-approval. Page-level auth checks still apply as defense in depth: const { data: { user } } = await supabase.auth.getUser(); if (!user) router.push("/login")
-	•	Coach-owned data (groups, group_members, programs, program_workouts, program_workout_exercises, workout_plans, workout_plan_exercises) is RLS-scoped to coach_id = auth.uid() (admin bypasses everywhere) — a coach cannot see or touch another coach's data. Any new coach-facing feature on these tables must follow this ownership pattern, not just a role check.
+	•	Coach-owned data (groups, group_members, athlete_programs, athlete_program_exercises, workout_plans, workout_plan_exercises) is RLS-scoped to coach_id = auth.uid() (admin bypasses everywhere) — a coach cannot see or touch another coach's data. Any new coach-facing feature on these tables must follow this ownership pattern, not just a role check.
 	•	Every Postgres function needing SECURITY DEFINER must be reviewed for what it actually exposes (we've found views/functions that leaked all-user data this way) — never grant it without checking.
 	•	When embedding the same joined table twice via two different foreign keys in one Supabase .select(), alias each one explicitly (e.g. member:profiles!fk_name(...), coach:profiles!fk_name(...)) — PostgREST errors ("table name specified more than once") without aliasing, and every consumer of that query's result must be updated to match the new key names.
 	•	Always capture and surface { error } on every mutation (insert/update/delete) with a visible error state — silent failures disguised as success has been the single most common bug class in this app.
@@ -103,3 +104,4 @@ When I ask for code changes:
 Recent Changes:
 
 	•	(add new one-line entries here going forward — keep each to one line describing current behavior, not the bug/history that led to it)
+	•	Programs tab (coach + student) rebuilt on athlete_programs/athlete_program_exercises: one flat, directly-editable per-athlete exercise table (Day/Name/Type/Sets/Reps/Weight/Notes) via components/AthleteProgramTable.tsx, replacing the old multi-week program builder; coach adds/removes athletes and rows inline with cell edits committing on blur/select-change, student view is read-only with the same Search/Type/Day filters.

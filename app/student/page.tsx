@@ -7,8 +7,9 @@ import { createClient } from '@/lib/supabase/client'
 import { ChevronDown, ChevronUp, CheckCircle2, Check, Lock, Pencil, Trash2 } from 'lucide-react'
 import { getLocalDateString, normalizeToKg } from '@/lib/utils'
 import { TodayPlanCard, SkippedPlansSection, typeBadge } from '@/components/PlanCards'
+import AthleteProgramTable from '@/components/AthleteProgramTable'
 
-type Tab = 'plans' | 'prs' | 'metrics'
+type Tab = 'plans' | 'prs' | 'metrics' | 'programs'
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--surface)',
@@ -94,6 +95,7 @@ export default function StudentPage() {
   const [undoingId, setUndoingId] = useState<string | null>(null)
   const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null)
   const [planSortAsc, setPlanSortAsc] = useState(true)
+  const [assignedPrograms, setAssignedPrograms] = useState<any[]>([])
 
   const reloadPlans = async (uid: string) => {
     const { data: plans } = await supabase
@@ -252,6 +254,13 @@ export default function StudentPage() {
       const { data: metrics } = await supabase.from('body_measurements').select('*').eq('user_id', user.id).order('recorded_at', { ascending: false }).limit(30)
       setBodyMetrics(metrics || [])
 
+      // Assigned program (RLS scopes athlete_programs/athlete_program_exercises to this member)
+      const { data: programs } = await supabase
+        .from('athlete_programs')
+        .select('*, coach:profiles!coach_id(name), athlete_program_exercises(*)')
+        .eq('member_id', user.id)
+      setAssignedPrograms(programs ?? [])
+
       setLoading(false)
     }
     load()
@@ -287,6 +296,7 @@ export default function StudentPage() {
     { value: 'plans', label: 'Assigned Plans' },
     { value: 'prs', label: 'My PRs' },
     { value: 'metrics', label: 'Body Metrics' },
+    { value: 'programs', label: 'Programs' },
   ]
 
   return (
@@ -732,6 +742,29 @@ export default function StudentPage() {
             {bodyMetrics.length === 0 && (
               <div style={{ ...cardStyle, padding: '3rem', textAlign: 'center' }}>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No body metrics logged yet. Log your weight above.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'programs' && (
+          <div key="tab-programs">
+            {assignedPrograms.length === 0 ? (
+              <div style={{ ...cardStyle, padding: '3rem', textAlign: 'center' }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No program assigned yet.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                {assignedPrograms.map(program => (
+                  <div key={program.id} style={{ ...cardStyle, padding: '1.25rem' }}>
+                    <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>
+                      {program.coach?.name ? `${program.coach.name}'s Program` : 'My Program'}
+                    </h2>
+                    <div style={{ marginTop: '1rem' }}>
+                      <AthleteProgramTable exercises={program.athlete_program_exercises ?? []} />
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
