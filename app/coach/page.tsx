@@ -724,8 +724,17 @@ export default function CoachPage() {
     // this range the same way app/calendar/page.tsx does, so coaches see + can join them here too.
     const { data: bballClassData } = await supabase.from('bball_classes').select('*')
     const bballList: BballClassRow[] = bballClassData || []
+    const bballClassIds = bballList.map(c => c.id)
+    const bballExceptionsByClass: Record<string, string[]> = {}
+    if (bballClassIds.length > 0) {
+      const { data: bballExceptions } = await supabase
+        .from('bball_class_exceptions')
+        .select('class_id, excluded_date')
+        .in('class_id', bballClassIds)
+      for (const row of bballExceptions || []) { (bballExceptionsByClass[row.class_id] ??= []).push(row.excluded_date) }
+    }
     const bballOccurrences = bballList.flatMap(c =>
-      bballOccurrencesInRange(c, startOfMonth, endStr).map(date => ({
+      bballOccurrencesInRange(c, startOfMonth, endStr, bballExceptionsByClass[c.id]).map(date => ({
         id: `bball-${c.id}-${date}`, classId: c.id, cls: c, date, isBballClass: true, count: 0, joined: false,
       }))
     )

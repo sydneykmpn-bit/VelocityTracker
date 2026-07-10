@@ -174,9 +174,13 @@ export interface BballClassRow {
 // Recurring classes emit one date per matching weekday in range, capped at recurrence_end_date if
 // set (matching how scheduled_classes.recurrence_end_date already works elsewhere in this app).
 // One-time classes (legacy is_recurring=false rows) emit their specific_date if it falls in range.
-export function bballOccurrencesInRange(cls: BballClassRow, rangeStart: string, rangeEnd: string): string[] {
+// excludedDates (from bball_class_exceptions) lets a single occurrence be cancelled without
+// deleting the underlying recurring row or affecting any other occurrence of the same series.
+export function bballOccurrencesInRange(cls: BballClassRow, rangeStart: string, rangeEnd: string, excludedDates?: string[]): string[] {
+  const excluded = excludedDates && excludedDates.length > 0 ? new Set(excludedDates) : null
   if (!cls.is_recurring) {
-    return cls.specific_date && cls.specific_date >= rangeStart && cls.specific_date <= rangeEnd ? [cls.specific_date] : []
+    if (!cls.specific_date || cls.specific_date < rangeStart || cls.specific_date > rangeEnd) return []
+    return excluded?.has(cls.specific_date) ? [] : [cls.specific_date]
   }
   const dayIdx = DAY_NAMES.indexOf(cls.day_of_week as any)
   if (dayIdx < 0) return []
@@ -186,7 +190,10 @@ export function bballOccurrencesInRange(cls: BballClassRow, rangeStart: string, 
   const cur = parseLocalDateStr(rangeStart)
   const end = parseLocalDateStr(effectiveRangeEnd)
   while (cur <= end) {
-    if (cur.getDay() === dayIdx) dates.push(formatDateYMD(cur))
+    if (cur.getDay() === dayIdx) {
+      const d = formatDateYMD(cur)
+      if (!excluded?.has(d)) dates.push(d)
+    }
     cur.setDate(cur.getDate() + 1)
   }
   return dates

@@ -37,6 +37,8 @@ export default function ClassesPage() {
   const [selectedOcc, setSelectedOcc] = useState<BballOccurrence | null>(null)
   const [pendingJoinOcc, setPendingJoinOcc] = useState<BballOccurrence | null>(null)
   const [deleteConfirmClass, setDeleteConfirmClass] = useState<BballClassRow | null>(null)
+  const [occurrenceDeleteTarget, setOccurrenceDeleteTarget] = useState<{ cls: BballClassRow; date: string } | null>(null)
+  const [exceptionsByClass, setExceptionsByClass] = useState<Record<string, string[]>>({})
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [formModalOpen, setFormModalOpen] = useState(false)
   const [editingClass, setEditingClass] = useState<BballClassRow | null>(null)
@@ -47,10 +49,10 @@ export default function ClassesPage() {
   const weekStartStr = formatDateYMD(weekStart)
   const weekEndStr = formatDateYMD(weekEnd)
 
-  const loadWeekData = useCallback(async (clsList: BballClassRow[], uid: string) => {
+  const loadWeekData = useCallback(async (clsList: BballClassRow[], uid: string, exceptionsMap: Record<string, string[]>) => {
     if (clsList.length === 0) { setCounts({}); setPendingCounts({}); setMyJoins(new Set()); return }
     const classIds = clsList.map(c => c.id)
-    const dates = Array.from(new Set(clsList.flatMap(c => bballOccurrencesInRange(c, weekStartStr, weekEndStr))))
+    const dates = Array.from(new Set(clsList.flatMap(c => bballOccurrencesInRange(c, weekStartStr, weekEndStr, exceptionsMap[c.id]))))
     if (dates.length === 0) { setCounts({}); setPendingCounts({}); setMyJoins(new Set()); return }
     const { data, error: err } = await supabase
       .from('bball_class_signups')
@@ -81,7 +83,21 @@ export default function ClassesPage() {
     const { data: cls, error: err } = await supabase.from('bball_classes').select('*').order('day_of_week').order('start_time')
     if (err) { setError(err.message); return }
     setClasses(cls || [])
-    await loadWeekData(cls || [], uid)
+
+    const classIds = (cls || []).map(c => c.id)
+    const map: Record<string, string[]> = {}
+    if (classIds.length > 0) {
+      const { data: exceptions, error: excErr } = await supabase
+        .from('bball_class_exceptions')
+        .select('class_id, excluded_date')
+        .in('class_id', classIds)
+      if (excErr) { setError(excErr.message) } else {
+        for (const row of exceptions || []) { (map[row.class_id] ??= []).push(row.excluded_date) }
+      }
+    }
+    setExceptionsByClass(map)
+
+    await loadWeekData(cls || [], uid, map)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadWeekData])
 
@@ -102,11 +118,11 @@ export default function ClassesPage() {
   }, [])
 
   useEffect(() => {
-    if (!loading) loadWeekData(classes, userId)
+    if (!loading) loadWeekData(classes, userId, exceptionsByClass)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset])
 
-  const refreshCounts = () => loadWeekData(classes, userId)
+  const refreshCounts = () => loadWeekData(classes, userId, exceptionsByClass)
   const refreshClasses = () => loadClasses(userId)
 
   const genderMatches = (restriction: string) => {
@@ -154,6 +170,18 @@ export default function ClassesPage() {
     setBusyKey(null)
   }
 
+  // Entry point for every delete trigger in this file. Recurring classes get the occurrence-level
+  // choice first ("Cancel Only This Date" vs "Delete Entire Series"); one-time classes only have a
+  // single occurrence anyway, so there's nothing an exception would add — go straight to the
+  // existing row-delete confirmation.
+  const openDeleteFlow = (cls: BballClassRow, date: string) => {
+    if (cls.is_recurring) {
+      setOccurrenceDeleteTarget({ cls, date })
+    } else {
+      setDeleteConfirmClass(cls)
+    }
+  }
+
   const handleDeleteClass = async (cls: BballClassRow) => {
     setError('')
     const { error: err } = await supabase.from('bball_classes').delete().eq('id', cls.id)
@@ -177,6 +205,25 @@ export default function ClassesPage() {
     await refreshClasses()
   }
 
+  // Cancels a single occurrence of a recurring class without touching the underlying bball_classes
+  // row — bballOccurrencesInRange will stop emitting this date once the exception exists. Existing
+  // signups for that exact occurrence are removed since the occurrence itself will no longer be
+  // reachable anywhere (roster page is keyed off dates bballOccurrencesInRange produces).
+  const handleCancelOccurrence = async (cls: BballClassRow, date: string) => {
+    setError('')
+    const { error: signupErr } = await supabase.from('bball_class_signups')
+      .delete().eq('class_id', cls.id).eq('occurrence_date', date)
+    if (signupErr) { setError(signupErr.message); return }
+    const { error: excErr } = await supabase.from('bball_class_exceptions')
+      .insert({ class_id: cls.id, excluded_date: date })
+    if (excErr) { setError(excErr.message); return }
+    await logAction(supabase, {
+      category: 'classes', action_type: 'delete_class', target_type: 'bball_classes', target_id: cls.id,
+      details: { target_name: cls.title, occurrence_date: date },
+    })
+    await refreshClasses()
+  }
+
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--background)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -186,7 +233,7 @@ export default function ClassesPage() {
   }
 
   const occurrences: BballOccurrence[] = classes.flatMap(c =>
-    bballOccurrencesInRange(c, weekStartStr, weekEndStr).map(date => {
+    bballOccurrencesInRange(c, weekStartStr, weekEndStr, exceptionsByClass[c.id]).map(date => {
       const key = `${c.id}_${date}`
       return { cls: c, date, count: counts[key] || 0, joined: myJoins.has(key) }
     })
@@ -318,7 +365,7 @@ export default function ClassesPage() {
                             <Pencil size={13} />
                           </button>
                           <button
-                            onClick={e => { e.stopPropagation(); setDeleteConfirmClass(occ.cls) }}
+                            onClick={e => { e.stopPropagation(); openDeleteFlow(occ.cls, occ.date) }}
                             title="Delete class"
                             style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#ef4444', minHeight: 0 }}
                           >
@@ -358,7 +405,7 @@ export default function ClassesPage() {
           onClose={() => setSelectedOcc(null)}
           onJoinLeave={refreshCounts}
           onEdit={cls => { setSelectedOcc(null); setEditingClass(cls); setFormModalOpen(true) }}
-          onDelete={cls => { setSelectedOcc(null); setDeleteConfirmClass(cls) }}
+          onDelete={cls => { const date = selectedOcc!.date; setSelectedOcc(null); openDeleteFlow(cls, date) }}
         />
       )}
       {formModalOpen && isAdmin && (
@@ -399,6 +446,18 @@ export default function ClassesPage() {
           />
         )
       })()}
+      {occurrenceDeleteTarget && (
+        <ConfirmModal
+          title="Cancel Class"
+          message={`"${occurrenceDeleteTarget.cls.title}" on ${new Date(occurrenceDeleteTarget.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} — cancel just this date, or the whole series?`}
+          confirmLabel="Cancel Only This Date"
+          variant="destructive"
+          onConfirm={() => { const { cls, date } = occurrenceDeleteTarget; setOccurrenceDeleteTarget(null); handleCancelOccurrence(cls, date) }}
+          onCancel={() => setOccurrenceDeleteTarget(null)}
+          secondaryLabel="Delete Entire Series"
+          onSecondary={() => { const { cls } = occurrenceDeleteTarget; setOccurrenceDeleteTarget(null); setDeleteConfirmClass(cls) }}
+        />
+      )}
     </div>
   )
 }
