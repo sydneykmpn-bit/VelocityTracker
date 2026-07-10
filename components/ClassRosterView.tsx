@@ -126,17 +126,21 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
     )
   }
 
-  const pendingCount = rows.filter(r => r.status === cfg.pendingStatus).length
-  const bookedCount = rows.filter(r => cfg.bookedStatuses.includes(r.status)).length
+  const isPaidRow = (r: any) => r.payment_status === 'paid_online' || r.payment_status === 'paid_cash'
+  // "Unpaid" (tab key 'pending') covers both signups still awaiting approval AND booked signups that
+  // haven't paid yet — the Booked pill/tab is reserved for rows that are both booked AND paid, so a
+  // booked-but-unpaid attendee shows under Unpaid instead of silently counting as "Booked".
+  const unpaidCount = rows.filter(r => r.status === cfg.pendingStatus || (cfg.bookedStatuses.includes(r.status) && !isPaidRow(r))).length
+  const bookedCount = rows.filter(r => cfg.bookedStatuses.includes(r.status) && isPaidRow(r)).length
   const waitlistCount = rows.filter(r => r.status === cfg.waitlistStatus).length
   const noShowCount = rows.filter(r => r.status === cfg.noShowStatus).length
 
   const bucketFor = (t: Tab) => t === 'all'
     ? rows
     : t === 'pending'
-    ? rows.filter(r => r.status === cfg.pendingStatus)
+    ? rows.filter(r => r.status === cfg.pendingStatus || (cfg.bookedStatuses.includes(r.status) && !isPaidRow(r)))
     : t === 'booked'
-    ? rows.filter(r => cfg.bookedStatuses.includes(r.status))
+    ? rows.filter(r => cfg.bookedStatuses.includes(r.status) && isPaidRow(r))
     : t === 'waitlist'
     ? rows.filter(r => r.status === cfg.waitlistStatus)
     : rows.filter(r => r.status === cfg.noShowStatus)
@@ -264,7 +268,7 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
 
   const tabs: { key: Tab; label: string; count: number }[] = [
     { key: 'all', label: 'All', count: rows.length },
-    { key: 'pending', label: 'Unpaid', count: pendingCount },
+    { key: 'pending', label: 'Unpaid', count: unpaidCount },
     { key: 'booked', label: 'Booked', count: bookedCount },
     { key: 'waitlist', label: 'Waitlist', count: waitlistCount },
     { key: 'no_show', label: 'No Show', count: noShowCount },
@@ -434,7 +438,7 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
             {visibleRows.map(row => {
               const expanded = expandedId === row.id
-              const isPaid = row.payment_status === 'paid_online' || row.payment_status === 'paid_cash'
+              const isPaid = isPaidRow(row)
               const memberId = row[cfg.memberCol]
               return (
                 <div key={row.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', overflow: 'hidden' }}>

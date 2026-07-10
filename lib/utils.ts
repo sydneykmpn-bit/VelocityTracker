@@ -200,7 +200,7 @@ export function bballOccurrencesInRange(cls: BballClassRow, rangeStart: string, 
 }
 
 export const PAYMENT_STATUS_LABELS: Record<string, string> = {
-  unpaid: 'Unpaid', paid_online: 'Paid Online', paid_cash: 'Paid Cash',
+  unpaid: 'Unpaid', paid_online: 'Paid - Online', paid_cash: 'Paid - Cash',
 }
 
 // Insert a bball_class_signups row and report back whether the DB trigger (check_bball_class_capacity)

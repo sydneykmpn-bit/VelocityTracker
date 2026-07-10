@@ -419,15 +419,13 @@ export default function ClassesPage() {
       {pendingJoinOcc && (
         <ConfirmModal
           title="Limited Slots"
-          message={`Slots are limited. To keep the class fair for everyone, we prioritize confirmed participants who are sure they can join.
+          message={`Slots are limited, so we give priority to participants who are sure they can join.
 
-Submitting this form does not guarantee your slot yet. Your booking will still need to be approved by a coach or admin.
+Your slot is not guaranteed until approved by a coach or admin.
 
-Class rate:
-₱550 — advance online payment
-₱600 — walk-in / day rate
+Pay online in advance for ₱550, or pay the walk-in/day rate of ₱600.
 
-Do you want to continue?`}
+Continue booking?`}
           confirmLabel="Join Anyway"
           onConfirm={() => { const occ = pendingJoinOcc; setPendingJoinOcc(null); doJoin(occ) }}
           onCancel={() => setPendingJoinOcc(null)}
