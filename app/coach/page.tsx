@@ -349,7 +349,7 @@ export default function CoachPage() {
   const supabase = createClient()
   const [userId, setUserId] = useState<string | null>(null)
   const [gender, setGender] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<Tab>('programs')
+  const [activeTab, setActiveTab] = useState<Tab>('members')
   const [loading, setLoading] = useState(true)
 
   const noteTextRef = useRef<HTMLTextAreaElement | null>(null)

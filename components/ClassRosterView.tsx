@@ -82,6 +82,7 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
   const [addLoading, setAddLoading] = useState(false)
   const [confirmAction, setConfirmAction] = useState<{ type: 'remove' | 'reject' | 'noshow' | 'approve'; row: any } | null>(null)
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<{ id: string; name: string } | null>(null)
+  const [actorName, setActorName] = useState('')
 
   const loadRows = useCallback(async () => {
     const { data, error: err } = await supabase
@@ -97,8 +98,9 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-      const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+      const { data: prof } = await supabase.from('profiles').select('role, name').eq('id', user.id).single()
       if (prof?.role !== 'admin' && prof?.role !== 'coach') { router.push('/dashboard'); return }
+      setActorName(prof.name || '')
 
       const { data: cls } = await supabase.from(cfg.classTable).select('*').eq('id', id).single()
       if (!cls) { router.push(cfg.backHref); return }
@@ -208,10 +210,12 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
 
   const handleSavePayment = async (row: any) => {
     setSavingRow(row.id); setError(''); setSavedRowId(null)
+    const isPaidStatus = draftPaymentStatus === 'paid_online' || draftPaymentStatus === 'paid_cash'
     const { data, error: err } = await supabase.from(cfg.signupTable).update({
       payment_status: draftPaymentStatus,
       amount_paid: draftAmountPaid.trim() === '' ? null : Number(draftAmountPaid),
       paid_on: draftPaidOn.trim() === '' ? null : draftPaidOn,
+      paid_by_name: isPaidStatus ? actorName : null,
     }).eq('id', row.id).select()
     setSavingRow(null)
     if (err) { setError(err.message); return }
@@ -461,7 +465,7 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
                         {PAYMENT_STATUS_LABELS[row.payment_status] || 'Unpaid'}
                         {row.amount_paid != null ? ` · ₱${row.amount_paid}` : ''}
                         {row.created_at ? ` · Signed up ${new Date(row.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}
-                        {row.paid_on ? ` · Paid ${new Date(row.paid_on + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}
+                        {row.paid_on ? ` · Paid ${new Date(row.paid_on + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${row.paid_by_name ? ` by ${row.paid_by_name}` : ''}` : (row.paid_by_name ? ` · Paid by ${row.paid_by_name}` : '')}
                       </p>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexShrink: 0 }}>
