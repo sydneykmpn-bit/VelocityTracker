@@ -8,7 +8,7 @@ import { WorkoutCardSkeleton, StatCardSkeleton, Skeleton } from '@/components/Sk
 import ClassDetailModal from '@/components/ClassDetailModal'
 import { getLocalDateString, formatLocalDate, formatDuration, isProgramDoneThisWeek } from '@/lib/utils'
 import { TodayPlanCard, SkippedPlansSection, typeBadge } from '@/components/PlanCards'
-import { AlertTriangle, Users, Settings, ClipboardList, CheckCircle2, SkipForward, Clock, MapPin, Calendar } from 'lucide-react'
+import { AlertTriangle, Users, Settings, ClipboardList, CheckCircle2, SkipForward, Clock, MapPin, Calendar, UserCheck } from 'lucide-react'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -26,6 +26,8 @@ export default function DashboardPage() {
   const [athletesPendingPrograms, setAthletesPendingPrograms] = useState(0)
   const [upcomingCoachClasses, setUpcomingCoachClasses] = useState<any[]>([])
   const [pendingApprovals, setPendingApprovals] = useState(0)
+  const [activeMembersCount, setActiveMembersCount] = useState(0)
+  const [classesTodayCount, setClassesTodayCount] = useState(0)
   const [hasPendingProgram, setHasPendingProgram] = useState(false)
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
@@ -152,8 +154,14 @@ export default function DashboardPage() {
 
     // Admin-specific data
     if (prof?.role === 'admin') {
-      const { count: pending } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('approved', false)
+      const [{ count: pending }, { count: activeMembers }, { count: classesToday }] = await Promise.all([
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('approved', false),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('approved', true).eq('role', 'member'),
+        supabase.from('scheduled_classes').select('id', { count: 'exact', head: true }).eq('scheduled_date', today),
+      ])
       setPendingApprovals(pending || 0)
+      setActiveMembersCount(activeMembers || 0)
+      setClassesTodayCount(classesToday || 0)
     }
   }
 
@@ -329,6 +337,36 @@ export default function DashboardPage() {
           </Link>
         )}
 
+        {/* ── ADMIN: Quick stats + Admin Panel link ── */}
+        {userRole === 'admin' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+              <UserCheck size={24} style={{ color: 'var(--teal-secondary)' }} />
+              <div>
+                <p className="font-display" style={{ fontSize: '1.5rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{activeMembersCount}</p>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Active Members</p>
+              </div>
+            </div>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+              <Calendar size={24} style={{ color: 'var(--teal-secondary)' }} />
+              <div>
+                <p className="font-display" style={{ fontSize: '1.5rem', color: 'var(--teal-secondary)', lineHeight: 1 }}>{classesTodayCount}</p>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Classes Today</p>
+              </div>
+            </div>
+            <Link href="/admin" style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderLeft: '3px solid var(--teal-primary)', borderRadius: '0.75rem', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', textDecoration: 'none', minHeight: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <Settings size={20} style={{ color: 'var(--teal-secondary)' }} />
+                <div>
+                  <p style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-primary)' }}>Go to Admin Panel</p>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Members, classes, groups & more</p>
+                </div>
+              </div>
+              <span style={{ color: 'var(--teal-secondary)', fontSize: '1.25rem' }}>→</span>
+            </Link>
+          </div>
+        )}
+
         {/* ── COACH: Athletes scheduled today / pending programs ── */}
         {userRole === 'coach' && (athletesScheduledToday || athletesPendingPrograms > 0) && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
@@ -371,11 +409,6 @@ export default function DashboardPage() {
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '0.35rem' }}>{shortDate}</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }} className="header-actions">
-            {userRole === 'admin' && (
-              <Link href="/admin" className="btn-ghost md-show-flex" style={{ display: 'none', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
-                <Settings size={14} /> Admin Panel
-              </Link>
-            )}
             {userRole === 'coach' && (
               <Link href="/coach" className="btn-ghost md-show-flex" style={{ display: 'none', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
                 Coach Panel

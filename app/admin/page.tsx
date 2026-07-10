@@ -4,12 +4,76 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Trash2, ChevronDown, ChevronUp, Pencil, KeyRound, Timer, X, AlertTriangle, Target, CheckCircle2, Mars, Venus, Users, Building2, Settings, Check, History } from 'lucide-react'
-import { getLocalDateString } from '@/lib/utils'
+import { getLocalDateString, bballOccurrencesInRange, generateRecurringDates, formatDate } from '@/lib/utils'
 import { logAction } from '@/lib/auditLog'
 import ConfirmModal from '@/components/ConfirmModal'
 
 type AdminTab = 'members' | 'groups' | 'activity' | 'settings'
 type Role = 'member' | 'coach' | 'admin'
+
+const ACTIVITY_LOG_PAGE_SIZE = 10
+
+// Friendly labels for activity_log.target_type — see every logAction(...) call site (app/admin/page.tsx,
+// app/api/admin/delete-user & reset-password routes, app/classes/page.tsx, components/BballClassModal.tsx,
+// components/ClassRosterView.tsx) for the actual set of values ever written. Falls back to a title-cased
+// version of the raw value for anything not listed here (e.g. a future target_type).
+const TARGET_TYPE_LABELS: Record<string, string> = {
+  profiles: 'Member Profile',
+  bball_classes: 'Basketball Class',
+  bball_class_signups: 'Basketball Signup',
+  class_attendees: 'Class Attendee',
+}
+function targetTypeLabel(targetType?: string): string {
+  if (!targetType) return ''
+  return TARGET_TYPE_LABELS[targetType] || targetType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
+const DAY_NAMES_LOWER = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+// create_class logs details.days as either a list of recurring weekday names (e.g. ['tuesday']) or a
+// single-element list holding one specific_date (e.g. ['2026-07-14']) for a one-time class.
+function formatDaysOrDates(values: string[]): string {
+  if (!values || values.length === 0) return ''
+  if (DAY_NAMES_LOWER.includes(String(values[0]).toLowerCase())) {
+    return values.map(d => `${d.charAt(0).toUpperCase()}${d.slice(1)}s`).join(', ')
+  }
+  return values.map(d => formatDate(d)).join(', ')
+}
+
+// Turns a raw activity_log row's action_type + details jsonb into one readable sentence instead of a
+// "key: value" dump — the details shape varies per action_type (see logAction call sites above), so
+// this is a switch rather than a generic formatter.
+function formatActivityDetails(a: any): string {
+  const d = a.details || {}
+  const name = d.target_name
+  switch (a.action_type) {
+    case 'role_change':
+      return `${name || 'Member'} role changed from ${d.old_value} to ${d.new_value}`
+    case 'delete_user':
+      return `Deleted ${name || 'member'}${d.role ? ` (${d.role})` : ''}`
+    case 'reset_password':
+      return `Reset password for ${name || 'member'}`
+    case 'create_class':
+      return `Created ${name || 'class'}${d.days ? ` · ${formatDaysOrDates(d.days)}` : ''}`
+    case 'edit_class':
+      return `Edited ${name || 'class'}`
+    case 'delete_class':
+      if (d.series) return `Deleted entire series — ${name || 'class'}`
+      if (d.occurrence_date) return `Cancelled ${name || 'class'} on ${formatDate(d.occurrence_date)}`
+      return `Deleted ${name || 'class'}`
+    case 'add_attendee':
+      return `Added ${d.guest ? 'guest ' : ''}${name || 'attendee'} to ${d.class_title || 'class'}${d.date ? ` on ${formatDate(d.date)}` : ''}`
+    case 'approve_signup':
+      return `Approved ${name || 'attendee'}'s signup for ${d.class_title || 'class'}${d.date ? ` on ${formatDate(d.date)}` : ''}`
+    case 'remove_attendee':
+      return `Removed ${name || 'attendee'} from ${d.class_title || 'class'}${d.date ? ` on ${formatDate(d.date)}` : ''}`
+    case 'reject_signup':
+      return `Rejected ${name || 'attendee'}'s request for ${d.class_title || 'class'}${d.date ? ` on ${formatDate(d.date)}` : ''}`
+    default: {
+      const entries = Object.entries(d).filter(([k]) => k !== 'target_name')
+      return entries.length > 0 ? entries.map(([k, v]) => `${k}: ${v}`).join(', ') : ''
+    }
+  }
+}
 
 const inputBase: React.CSSProperties = {
   background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem',
@@ -406,7 +470,7 @@ export default function AdminPage() {
 
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [confirmAction, setConfirmAction] = useState<{ type: 'deleteGroup' | 'rejectUser' | 'removeUser' | 'deleteAllPRs'; group?: any; user?: any } | null>(null)
+  const [confirmAction, setConfirmAction] = useState<{ type: 'deleteGroup' | 'rejectUser' | 'removeUser' | 'deleteAllPRs' | 'clearActivityLog'; group?: any; user?: any } | null>(null)
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<{id: string; name: string} | null>(null)
   const [showCreateUserModal, setShowCreateUserModal] = useState(false)
   const [resetPasswordUserId, setResetPasswordUserId] = useState<string | null>(null)
@@ -416,6 +480,8 @@ export default function AdminPage() {
   const [activityLog, setActivityLog] = useState<any[]>([])
   const [activityLogLoading, setActivityLogLoading] = useState(false)
   const [activityLogFilter, setActivityLogFilter] = useState<'all' | 'classes' | 'other'>('all')
+  const [activityLogPage, setActivityLogPage] = useState(1)
+  const [activityLogClearing, setActivityLogClearing] = useState(false)
 
   const loadActivityLog = async () => {
     setActivityLogLoading(true)
@@ -432,6 +498,32 @@ export default function AdminPage() {
     if (activeTab === 'activity' && activityLog.length === 0 && !activityLogLoading) loadActivityLog()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
+
+  useEffect(() => {
+    setActivityLogPage(1)
+  }, [activityLogFilter])
+
+  // Clears only the rows matching the currently active filter (all/classes/other) — same scoped-delete
+  // convention as handleDeleteAllPublicPRs below, so an admin filtered to "Classes" only wipes that
+  // category rather than every logged action.
+  const handleClearActivityLog = async () => {
+    setActivityLogClearing(true)
+    setError('')
+    const query = supabase.from('audit_log').delete()
+    const { data, error: err } = activityLogFilter === 'all'
+      ? await query.neq('id', '00000000-0000-0000-0000-000000000000').select('id')
+      : await query.eq('category', activityLogFilter).select('id')
+    setActivityLogClearing(false)
+    if (err) { setError(err.message); return }
+    if (!data || data.length === 0) {
+      setError('Nothing was deleted — you may not have permission to clear the activity log (check the audit_log DELETE policy).')
+      return
+    }
+    setActivityLog(prev => activityLogFilter === 'all' ? [] : prev.filter(a => a.category !== activityLogFilter))
+    setActivityLogPage(1)
+    setSuccess('Activity log cleared.')
+    setTimeout(() => setSuccess(''), 3000)
+  }
 
   const refreshMembers = async () => {
     const [pendingResult, allResult] = await Promise.all([
@@ -478,16 +570,33 @@ export default function AdminPage() {
         supabase.from('personal_records').select('*, profiles(name, gender)').order('value', { ascending: false }).then(({ data }) => setAllPRs(data ?? [])),
       ])
 
-      // Classes this month
+      // Classes this month — count actual occurrences (not base rows) across both class
+      // systems, so a recurring class whose own row/date is outside this month but still
+      // recurs into it gets counted, and bball_classes occurrences are included too.
       const now = new Date()
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
       const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
-      const { count: classesCount } = await supabase
-        .from('scheduled_classes')
-        .select('id', { count: 'exact', head: true })
-        .gte('scheduled_date', startOfMonth)
-        .lte('scheduled_date', endOfMonth)
-      setClassesThisMonthCount(classesCount || 0)
+
+      const [{ data: bballClasses }, { data: bballExceptions }, { data: scheduledClasses }] = await Promise.all([
+        supabase.from('bball_classes').select('*'),
+        supabase.from('bball_class_exceptions').select('class_id, excluded_date'),
+        supabase.from('scheduled_classes').select('id, scheduled_date, is_recurring, recurrence_rule, recurrence_days'),
+      ])
+      const exceptionsByClass: Record<string, string[]> = {}
+      for (const exc of bballExceptions || []) {
+        (exceptionsByClass[exc.class_id] ??= []).push(exc.excluded_date)
+      }
+      const bballOccurrencesCount = (bballClasses || []).reduce((sum: number, c: any) =>
+        sum + bballOccurrencesInRange(c, startOfMonth, endOfMonth, exceptionsByClass[c.id]).length, 0)
+      const scheduledOccurrencesCount = (scheduledClasses || []).reduce((sum: number, c: any) => {
+        let count = c.scheduled_date >= startOfMonth && c.scheduled_date <= endOfMonth ? 1 : 0
+        if (c.is_recurring) {
+          count += generateRecurringDates(c.scheduled_date, endOfMonth, c.recurrence_rule, c.recurrence_days || [])
+            .filter((d: string) => d >= startOfMonth).length
+        }
+        return sum + count
+      }, 0)
+      setClassesThisMonthCount(bballOccurrencesCount + scheduledOccurrencesCount)
 
       // Settings
       const { data: appSettings } = await supabase.from('app_settings').select('*').eq('id', 'global').maybeSingle()
@@ -1053,39 +1162,56 @@ export default function AdminPage() {
         )}
 
         {/* ── ACTIVITY LOG TAB ── */}
-        {activeTab === 'activity' && (
-          <div key="tab-activity">
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
-              {(['all', 'classes', 'other'] as const).map(f => (
-                <button key={f} onClick={() => setActivityLogFilter(f)} style={{
-                  background: activityLogFilter === f ? 'rgba(8,119,160,0.2)' : 'none',
-                  border: `1px solid ${activityLogFilter === f ? 'var(--teal-primary)' : 'var(--border)'}`,
-                  borderRadius: '999px', padding: '0.35rem 0.875rem', fontSize: '0.75rem',
-                  color: activityLogFilter === f ? 'var(--teal-secondary)' : 'var(--text-secondary)',
-                  cursor: 'pointer', fontWeight: activityLogFilter === f ? 700 : 400, textTransform: 'capitalize',
-                }}>
-                  {f === 'all' ? 'All' : f}
-                </button>
-              ))}
-            </div>
+        {activeTab === 'activity' && (() => {
+          const filtered = activityLog.filter(a => activityLogFilter === 'all' || a.category === activityLogFilter)
+          const totalPages = Math.max(1, Math.ceil(filtered.length / ACTIVITY_LOG_PAGE_SIZE))
+          const page = Math.min(activityLogPage, totalPages)
+          const pageRows = filtered.slice((page - 1) * ACTIVITY_LOG_PAGE_SIZE, page * ACTIVITY_LOG_PAGE_SIZE)
+          return (
+            <div key="tab-activity">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  {(['all', 'classes', 'other'] as const).map(f => (
+                    <button key={f} onClick={() => setActivityLogFilter(f)} style={{
+                      background: activityLogFilter === f ? 'rgba(8,119,160,0.2)' : 'none',
+                      border: `1px solid ${activityLogFilter === f ? 'var(--teal-primary)' : 'var(--border)'}`,
+                      borderRadius: '999px', padding: '0.35rem 0.875rem', fontSize: '0.75rem',
+                      color: activityLogFilter === f ? 'var(--teal-secondary)' : 'var(--text-secondary)',
+                      cursor: 'pointer', fontWeight: activityLogFilter === f ? 700 : 400, textTransform: 'capitalize',
+                    }}>
+                      {f === 'all' ? 'All' : f}
+                    </button>
+                  ))}
+                </div>
+                {filtered.length > 0 && (
+                  <button
+                    onClick={() => setConfirmAction({ type: 'clearActivityLog' })}
+                    disabled={activityLogClearing}
+                    style={{
+                      background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.5rem',
+                      padding: '0.35rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, color: '#f87171',
+                      cursor: activityLogClearing ? 'not-allowed' : 'pointer', opacity: activityLogClearing ? 0.6 : 1,
+                      display: 'flex', alignItems: 'center', gap: '0.35rem',
+                    }}
+                  >
+                    <Trash2 size={13} /> Clear History
+                  </button>
+                )}
+              </div>
 
-            {activityLogLoading ? (
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Loading…</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {activityLog
-                  .filter(a => activityLogFilter === 'all' || a.category === activityLogFilter)
-                  .map(a => (
+              {activityLogLoading ? (
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Loading…</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {pageRows.map(a => (
                     <div key={a.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '0.875rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                       <div style={{ minWidth: 0 }}>
                         <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>
                           {a.profiles?.name || 'Unknown'} <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>— {a.action_type.replace(/_/g, ' ')}</span>
+                          {a.target_type && <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}> · {targetTypeLabel(a.target_type)}</span>}
                         </p>
                         <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
-                          {a.target_type && <span>{a.target_type}{a.details?.target_name ? ` · ${a.details.target_name}` : ''}</span>}
-                          {a.details && Object.keys(a.details).length > 0 && (
-                            <span> {Object.entries(a.details).filter(([k]) => k !== 'target_name').map(([k, v]) => `${k}: ${v}`).join(', ')}</span>
-                          )}
+                          {formatActivityDetails(a)}
                         </p>
                       </div>
                       <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', flexShrink: 0 }}>
@@ -1093,13 +1219,33 @@ export default function AdminPage() {
                       </p>
                     </div>
                   ))}
-                {activityLog.filter(a => activityLogFilter === 'all' || a.category === activityLogFilter).length === 0 && (
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No activity recorded yet.</p>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+                  {filtered.length === 0 && (
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No activity recorded yet.</p>
+                  )}
+                  {filtered.length > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '0.75rem' }}>
+                      <button
+                        onClick={() => setActivityLogPage(p => Math.max(1, p - 1))}
+                        disabled={page <= 1}
+                        style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.8rem', color: page <= 1 ? 'var(--text-secondary)' : 'var(--text-primary)', cursor: page <= 1 ? 'not-allowed' : 'pointer', opacity: page <= 1 ? 0.5 : 1 }}
+                      >
+                        Previous
+                      </button>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Page {page} of {totalPages}</span>
+                      <button
+                        onClick={() => setActivityLogPage(p => Math.min(totalPages, p + 1))}
+                        disabled={page >= totalPages}
+                        style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.8rem', color: page >= totalPages ? 'var(--text-secondary)' : 'var(--text-primary)', cursor: page >= totalPages ? 'not-allowed' : 'pointer', opacity: page >= totalPages ? 0.5 : 1 }}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {activeTab === 'settings' && (
           <div key="tab-settings" style={{ maxWidth: '540px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -1261,6 +1407,15 @@ export default function AdminPage() {
             confirmLabel: 'Delete All',
             variant: 'destructive' as const,
             onConfirm: handleDeleteAllPublicPRs,
+          },
+          clearActivityLog: {
+            title: 'Clear History',
+            message: activityLogFilter === 'all'
+              ? 'Delete the entire activity log? This cannot be undone.'
+              : `Delete all "${activityLogFilter}" activity log entries? This cannot be undone.`,
+            confirmLabel: 'Clear History',
+            variant: 'destructive' as const,
+            onConfirm: handleClearActivityLog,
           },
         }[confirmAction.type]
         return (

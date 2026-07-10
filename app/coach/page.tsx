@@ -358,16 +358,6 @@ export default function CoachPage() {
     setActiveTab(tab)
   }
 
-  const jumpToNoteEdit = (note: any) => {
-    switchTab('notes')
-    setEditingNote(note.id)
-    setEditText(note.note)
-  }
-
-  const jumpToAddNote = () => {
-    switchTab('notes')
-    setTimeout(() => noteTextRef.current?.focus(), 50)
-  }
   const [error, setError] = useState('')
   const [confirmAction, setConfirmAction] = useState<{ type: 'removeAthleteProgram' | 'removeExerciseRow' | 'deleteGroup' | 'removeAthlete' | 'deleteAssignedPlan' | 'deleteNote' | 'deleteProgramDay'; payload?: any } | null>(null)
   const [success, setSuccess] = useState('')
@@ -1332,16 +1322,6 @@ export default function CoachPage() {
     rescheduled: { label: 'Rescheduled', color: '#60a5fa', icon: Calendar },
   }
 
-  const pendingPlanCount = assignedPlans.filter(p => p.status === 'pending' || p.status === 'rescheduled').length
-  const completedPlanCount = assignedPlans.filter(p => p.status === 'completed').length
-  const skippedPlanCount = assignedPlans.filter(p => p.status === 'skipped').length
-  const inactiveMembers = myMembers.filter(m => {
-    if (!m.lastWorkout) return true
-    const daysSince = (Date.now() - new Date(m.lastWorkout).getTime()) / 86400000
-    return daysSince > 7
-  })
-  const recentNotes = notes.slice(0, 3)
-
   const tabs: { value: Tab; label: string }[] = [
     { value: 'members', label: 'My Athletes' },
     { value: 'programs', label: 'Programs' },
@@ -1370,14 +1350,11 @@ export default function CoachPage() {
           {[
             { label: 'Athletes', value: myMembers.length, color: 'var(--teal-secondary)' },
             { label: 'Groups', value: myGroups.length, color: '#60a5fa' },
-            { label: 'Needs Review', value: pendingPlanCount, color: '#f59e0b' },
-            { label: 'Inactive 7d+', value: inactiveMembers.length, color: inactiveMembers.length > 0 ? '#f87171' : '#4ade80' },
           ].map(card => (
             <button
               key={card.label}
               onClick={() => {
                 if (card.label === 'Groups') switchTab('groups')
-                else if (card.label === 'Needs Review') switchTab('assigned')
                 else switchTab('members')
               }}
               style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.1rem', textAlign: 'left', cursor: 'pointer' }}
@@ -1386,48 +1363,6 @@ export default function CoachPage() {
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', marginTop: '0.35rem' }}>{card.label}</p>
             </button>
           ))}
-        </div>
-
-        <div className="coach-overview" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(260px, 0.75fr)', gap: '1rem', marginBottom: '1.5rem' }}>
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
-            <p style={{ color: 'var(--teal-secondary)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.75rem' }}>Attention Queue</p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem' }}>
-              <div>
-                <p style={{ fontWeight: 700 }}>{inactiveMembers.length} athlete{inactiveMembers.length === 1 ? '' : 's'} need check-in</p>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.5, marginTop: '0.25rem' }}>No workout in the last seven days or no workout logged yet.</p>
-              </div>
-              <div>
-                <p style={{ fontWeight: 700 }}>{skippedPlanCount} skipped plans</p>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.5, marginTop: '0.25rem' }}>{completedPlanCount} completed plans in your current assignment list.</p>
-              </div>
-            </div>
-          </div>
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', margin: 0 }}>Recent Notes</p>
-              <button
-                onClick={jumpToAddNote}
-                style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.25rem 0.6rem', fontSize: '0.7rem', fontWeight: 700, color: 'var(--teal-secondary)', cursor: 'pointer', minHeight: 0 }}
-              >
-                + Add note
-              </button>
-            </div>
-            {recentNotes.length === 0 ? (
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>No coach notes yet.</p>
-            ) : recentNotes.map(note => (
-              <div
-                key={note.id}
-                onClick={() => jumpToNoteEdit(note)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpToNoteEdit(note) } }}
-                style={{ borderBottom: '1px solid var(--border)', paddingBottom: '0.6rem', marginBottom: '0.6rem', cursor: 'pointer' }}
-              >
-                <p style={{ fontSize: '0.8rem', fontWeight: 700 }}>{note.member?.name ?? 'General note'}</p>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', lineHeight: 1.45, marginTop: '0.2rem' }}>{note.note}</p>
-              </div>
-            ))}
-          </div>
         </div>
 
         {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{error}</div>}
@@ -2949,9 +2884,6 @@ export default function CoachPage() {
         )
       })()}
       <style>{`
-        @media (max-width: 760px) {
-          .coach-overview { grid-template-columns: 1fr !important; }
-        }
         @media (max-width: 640px) {
           .coach-member-header { flex-direction: column !important; align-items: flex-start !important; gap: 0.75rem !important; }
           .coach-member-name-wrap { width: 100%; }

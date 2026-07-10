@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { ChevronDown, ChevronUp, CheckCircle2, Check, Lock, Pencil, Trash2 } from 'lucide-react'
-import { getLocalDateString, normalizeToKg, getCurrentWeekOccurrenceDate, convertWeightForDisplay } from '@/lib/utils'
+import { getLocalDateString, normalizeToKg, getCurrentWeekOccurrenceDate, convertWeightForDisplay, isProgramDoneThisWeek } from '@/lib/utils'
 import { TodayPlanCard, SkippedPlansSection, typeBadge } from '@/components/PlanCards'
 import AthleteProgramTable, { AthleteProgramDay } from '@/components/AthleteProgramTable'
 import ConfirmModal from '@/components/ConfirmModal'
@@ -396,9 +396,21 @@ function StudentPageInner() {
       ? String(a.scheduled_date).localeCompare(String(b.scheduled_date))
       : String(b.scheduled_date).localeCompare(String(a.scheduled_date))
   )
-  const pendingProgramDays = assignedPrograms
-    .flatMap(p => p.athlete_program_days ?? [])
-    .filter(d => !isDayDoneThisWeek(d))
+  const allProgramDays = assignedPrograms.flatMap(p => p.athlete_program_days ?? [])
+  const pendingProgramDays = allProgramDays.filter(d => !isDayDoneThisWeek(d))
+  const doneProgramDaysThisWeek = allProgramDays.length - pendingProgramDays.length
+  const completedProgramsThisWeek = assignedPrograms
+    .filter(p => isProgramDoneThisWeek(p.athlete_program_days ?? [], programCompletions))
+    .map(p => {
+      const dayIds = (p.athlete_program_days ?? []).map((d: AthleteProgramDay) => d.id)
+      const dates = programCompletions.filter(c => dayIds.includes(c.program_day_id)).map(c => c.occurrence_date)
+      const completionDate = dates.length > 0 ? dates.sort().slice(-1)[0] : null
+      return { program: p, completionDate }
+    })
+  const earliestMetricDate = bodyMetrics.length > 0 ? bodyMetrics[bodyMetrics.length - 1].recorded_at : null
+  const prsSinceTracking = earliestMetricDate
+    ? prs.filter(pr => new Date(pr.recorded_at || pr.date) >= new Date(earliestMetricDate)).length
+    : 0
   const firstName = profile?.name?.split(' ')[0] ?? 'Athlete'
 
   if (loading) {
@@ -457,13 +469,18 @@ function StudentPageInner() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
           {[
-            { label: 'Pending', value: pendingPlans.length + pendingProgramDays.length, color: '#f59e0b' },
-            { label: 'Completed', value: completedPlans.length + programCompletions.length, color: '#4ade80' },
+            { label: 'Programs Pending', value: pendingProgramDays.length, color: '#f59e0b', tab: 'programs' as Tab },
+            { label: 'Programs Done', value: doneProgramDaysThisWeek, color: '#4ade80', tab: 'programs' as Tab },
+            { label: 'Assigned Plans Pending', value: pendingPlans.length, color: '#f59e0b', tab: 'plans' as Tab },
           ].map(s => (
-            <div key={s.label} style={{ ...cardStyle, padding: '1.1rem', textAlign: 'center' }}>
+            <button
+              key={s.label}
+              onClick={() => setActiveTab(s.tab)}
+              style={{ ...cardStyle, padding: '1.1rem', textAlign: 'center', cursor: 'pointer' }}
+            >
               <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '2.25rem', color: s.color, lineHeight: 1 }}>{s.value}</p>
               <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>{s.label}</p>
-            </div>
+            </button>
           ))}
         </div>
 
@@ -754,6 +771,23 @@ function StudentPageInner() {
 
         {activeTab === 'metrics' && (
           <div key="tab-metrics">
+            {/* Cross-link to PRs */}
+            <button
+              onClick={() => setActiveTab('prs')}
+              style={{ ...cardStyle, width: '100%', padding: '0.875rem 1.25rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', cursor: 'pointer', textAlign: 'left' }}
+            >
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                {bodyMetrics.length > 0 ? (
+                  <>
+                    <span style={{ color: 'var(--teal-secondary)', fontWeight: 700 }}>{prsSinceTracking} PR{prsSinceTracking === 1 ? '' : 's'}</span> hit since you started tracking your weight
+                  </>
+                ) : (
+                  'Your body weight and PRs are part of the same progress — check out My PRs'
+                )}
+              </p>
+              <span style={{ color: 'var(--teal-secondary)', fontSize: '0.8rem', fontWeight: 700, whiteSpace: 'nowrap' }}>View My PRs →</span>
+            </button>
+
             {/* Log weight form */}
             <div style={{ ...cardStyle, padding: '1.25rem', marginBottom: '1.5rem' }}>
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>LOG BODY WEIGHT</h2>
@@ -878,6 +912,26 @@ function StudentPageInner() {
         {activeTab === 'programs' && (
           <div key="tab-programs">
             {programError && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{programError}</div>}
+
+            {completedProgramsThisWeek.length > 0 && (
+              <div style={{ ...cardStyle, padding: '1.25rem', marginBottom: '1.25rem' }}>
+                <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#4ade80', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <CheckCircle2 size={13} /> Completed This Week
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {completedProgramsThisWeek.map(({ program, completionDate }) => (
+                    <div key={program.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', padding: '0.6rem 0.75rem', background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '0.5rem' }}>
+                      <p style={{ fontWeight: 700, fontSize: '0.875rem' }}>
+                        {program.coach?.name ? `${program.coach.name}'s Program` : 'My Program'}
+                      </p>
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                        {completionDate ? `Completed ${formatDate(completionDate)}` : 'Completed'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {assignedPrograms.length === 0 ? (
               <div style={{ ...cardStyle, padding: '3rem', textAlign: 'center' }}>

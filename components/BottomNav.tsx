@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { LayoutDashboard, ShieldCheck, Users, Dumbbell, CalendarDays, GraduationCap, Trophy } from 'lucide-react'
 import BasketballIcon from '@/components/icons/BasketballIcon'
+import { getLocalDateString, bballOccurrencesInRange, generateRecurringDates } from '@/lib/utils'
 
 const SECOND_TAB: Record<string, { href: string; label: string; icon: typeof Users }> = {
   admin: { href: '/admin', label: 'Admin', icon: ShieldCheck },
@@ -18,7 +19,7 @@ export default function BottomNav() {
   const supabase = createClient()
   const [role, setRole] = useState('member')
   const [isAthlete, setIsAthlete] = useState(false)
-  const [classesPendingCount, setClassesPendingCount] = useState(0)
+  const [classesTodayCount, setClassesTodayCount] = useState(0)
 
   useEffect(() => {
     const cachedRole = sessionStorage.getItem('vel_role')
@@ -37,13 +38,27 @@ export default function BottomNav() {
       setRole(profile.role)
       sessionStorage.setItem('vel_role', profile.role)
 
-      if (profile.role === 'admin' || profile.role === 'coach') {
-        const [{ count: bballPending }, { count: scheduledPending }] = await Promise.all([
-          supabase.from('bball_class_signups').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-          supabase.from('class_attendees').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-        ])
-        setClassesPendingCount((bballPending || 0) + (scheduledPending || 0))
+      const today = getLocalDateString()
+      const [{ data: bballClasses }, { data: bballExceptions }, { data: scheduledClasses }] = await Promise.all([
+        supabase.from('bball_classes').select('*'),
+        supabase.from('bball_class_exceptions').select('class_id, excluded_date'),
+        supabase.from('scheduled_classes').select('id, scheduled_date, is_recurring, recurrence_rule, recurrence_days'),
+      ])
+      const exceptionsByClass: Record<string, string[]> = {}
+      for (const exc of bballExceptions || []) {
+        (exceptionsByClass[exc.class_id] ??= []).push(exc.excluded_date)
       }
+      const bballTodayCount = (bballClasses || []).filter((c: any) =>
+        bballOccurrencesInRange(c, today, today, exceptionsByClass[c.id]).length > 0
+      ).length
+      const scheduledTodayCount = (scheduledClasses || []).filter((c: any) => {
+        if (c.scheduled_date === today) return true
+        if (c.is_recurring) {
+          return generateRecurringDates(c.scheduled_date, today, c.recurrence_rule, c.recurrence_days || []).includes(today)
+        }
+        return false
+      }).length
+      setClassesTodayCount(bballTodayCount + scheduledTodayCount)
 
       if (profile.role === 'member' || profile.role === 'admin' || profile.role === 'coach') {
         const [membershipResult, workoutPlansResult, programAssignmentsResult, coachAthletesResult] = await Promise.all([
@@ -89,7 +104,7 @@ export default function BottomNav() {
       <Link href="/classes" className={isActive('/classes') ? 'bottom-nav-item active' : 'bottom-nav-item'} style={{ position: 'relative' }}>
         <BasketballIcon size={22} />
         <span>Classes</span>
-        {(role === 'admin' || role === 'coach') && classesPendingCount > 0 && (
+        {classesTodayCount > 0 && (
           <span style={{
             position: 'absolute', top: '4px', right: '18px',
             width: '16px', height: '16px', borderRadius: '50%',
@@ -97,7 +112,7 @@ export default function BottomNav() {
             fontSize: '10px', fontWeight: 700,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            {classesPendingCount}
+            {classesTodayCount}
           </span>
         )}
       </Link>

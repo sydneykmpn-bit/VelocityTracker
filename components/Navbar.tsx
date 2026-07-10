@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Menu, X, ChevronDown, Home, User, LogOut } from 'lucide-react'
 import VLogo from '@/components/VLogo'
+import { getLocalDateString, bballOccurrencesInRange, generateRecurringDates } from '@/lib/utils'
 
 export default function Navbar() {
   const supabase = createClient()
@@ -17,7 +18,7 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [avatarOpen, setAvatarOpen] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
-  const [classesPendingCount, setClassesPendingCount] = useState(0)
+  const [classesTodayCount, setClassesTodayCount] = useState(0)
   const avatarRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -57,26 +58,40 @@ export default function Navbar() {
       )
 
       let pending = 0
-      let classesPending = 0
       if (profile.role === 'admin') {
         const { count } = await supabase
           .from('profiles').select('id', { count: 'exact', head: true }).eq('approved', false)
         pending = count || 0
       }
-      if (profile.role === 'admin' || profile.role === 'coach') {
-        const [{ count: bballPending }, { count: scheduledPending }] = await Promise.all([
-          supabase.from('bball_class_signups').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-          supabase.from('class_attendees').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-        ])
-        classesPending = (bballPending || 0) + (scheduledPending || 0)
+
+      const today = getLocalDateString()
+      const [{ data: bballClasses }, { data: bballExceptions }, { data: scheduledClasses }] = await Promise.all([
+        supabase.from('bball_classes').select('*'),
+        supabase.from('bball_class_exceptions').select('class_id, excluded_date'),
+        supabase.from('scheduled_classes').select('id, scheduled_date, is_recurring, recurrence_rule, recurrence_days'),
+      ])
+      const exceptionsByClass: Record<string, string[]> = {}
+      for (const exc of bballExceptions || []) {
+        (exceptionsByClass[exc.class_id] ??= []).push(exc.excluded_date)
       }
+      const bballTodayCount = (bballClasses || []).filter((c: any) =>
+        bballOccurrencesInRange(c, today, today, exceptionsByClass[c.id]).length > 0
+      ).length
+      const scheduledTodayCount = (scheduledClasses || []).filter((c: any) => {
+        if (c.scheduled_date === today) return true
+        if (c.is_recurring) {
+          return generateRecurringDates(c.scheduled_date, today, c.recurrence_rule, c.recurrence_days || []).includes(today)
+        }
+        return false
+      }).length
+      const classesToday = bballTodayCount + scheduledTodayCount
 
       // Set ALL state at once — prevents double render / flicker
       setUserRole(profile.role)
       setUserName(profile.name || '')
       setIsAthlete(athleteStatus)
       setPendingCount(pending)
-      setClassesPendingCount(classesPending)
+      setClassesTodayCount(classesToday)
 
       // Cache so next page navigation loads instantly without re-fetching
       sessionStorage.setItem('vel_role', profile.role ?? 'member')
@@ -114,7 +129,7 @@ export default function Navbar() {
     if (userRole === 'admin') return [
       { href: '/workouts', label: 'My Workouts' },
       { href: '/admin', label: 'Admin Panel', badge: pendingCount > 0 ? pendingCount : 0 },
-      { href: '/classes', label: 'Classes', badge: classesPendingCount > 0 ? classesPendingCount : 0 },
+      { href: '/classes', label: 'Classes', badge: classesTodayCount > 0 ? classesTodayCount : 0 },
       { href: '/calendar', label: 'Calendar' },
       { href: '/leaderboard', label: 'Leaderboard' },
       { href: '/analytics', label: 'Analytics' },
@@ -123,7 +138,7 @@ export default function Navbar() {
     if (userRole === 'coach') return [
       { href: '/workouts', label: 'My Workouts' },
       { href: '/coach', label: 'Coach Panel' },
-      { href: '/classes', label: 'Classes', badge: classesPendingCount > 0 ? classesPendingCount : 0 },
+      { href: '/classes', label: 'Classes', badge: classesTodayCount > 0 ? classesTodayCount : 0 },
       { href: '/calendar', label: 'Calendar' },
       { href: '/leaderboard', label: 'Leaderboard' },
       { href: '/analytics', label: 'Analytics' },
@@ -131,7 +146,7 @@ export default function Navbar() {
     ]
     const base: NavLink[] = [
       { href: '/workouts', label: 'My Workouts' },
-      { href: '/classes', label: 'Classes' },
+      { href: '/classes', label: 'Classes', badge: classesTodayCount > 0 ? classesTodayCount : 0 },
       { href: '/calendar', label: 'Calendar' },
       { href: '/leaderboard', label: 'Leaderboard' },
       { href: '/analytics', label: 'Analytics' },

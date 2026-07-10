@@ -240,14 +240,21 @@ function ExerciseTable({ exercises, editable, dayId, modeOverride, onToggleMode,
                           style={inputCell} placeholder="—" min="0" step="1" />
                       ) : (ex.reps ?? '—')}
                     </td>
-                    <td style={{ ...cellStyle, minWidth: '80px' }}>
+                    <td style={{ ...cellStyle, minWidth: '110px' }}>
                       {editable ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                           <input type="number" value={ex.weight ?? ''}
                             onChange={e => onChange?.(idx, 'weight', e.target.value)}
                             onBlur={e => onCommit?.(idx, 'weight', e.target.value)}
                             style={inputCell} placeholder="—" min="0" step="0.1" />
-                          {ex.weight != null && ex.weight !== '' && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', flexShrink: 0 }}>{ex.weight_unit || 'kg'}</span>}
+                          <select
+                            value={ex.weight_unit || 'kg'}
+                            onChange={e => { onChange?.(idx, 'weight_unit', e.target.value); onCommit?.(idx, 'weight_unit', e.target.value) }}
+                            style={{ ...inputCell, width: 'auto', flexShrink: 0, fontSize: '0.7rem', cursor: 'pointer' }}
+                          >
+                            <option value="kg">kg</option>
+                            <option value="lbs">lbs</option>
+                          </select>
                         </div>
                       ) : (ex.weight != null && ex.weight !== '' ? `${ex.weight} ${ex.weight_unit || 'kg'}` : '—')}
                     </td>
@@ -298,7 +305,7 @@ function ExerciseTable({ exercises, editable, dayId, modeOverride, onToggleMode,
                                   style={inputCell} />
                               ) : (set?.reps ?? '—')}
                             </td>
-                            <td style={{ ...cellStyle, minWidth: '110px' }}>
+                            <td style={{ ...cellStyle, minWidth: isFirst && editable ? '150px' : '110px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                                 {editable ? (
                                   <input type="number" value={set?.weight ?? ''} placeholder="—" min="0" step="0.1"
@@ -306,7 +313,22 @@ function ExerciseTable({ exercises, editable, dayId, modeOverride, onToggleMode,
                                     onBlur={() => handleSetFieldBlur(idx, ex)}
                                     style={inputCell} />
                                 ) : (set?.weight != null && set?.weight !== '' ? `${set.weight} ${ex.weight_unit || 'kg'}` : '—')}
-                                {editable && set?.weight != null && set?.weight !== '' && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', flexShrink: 0 }}>{ex.weight_unit || 'kg'}</span>}
+                                {editable && isFirst && (
+                                  // weight_unit is exercise-level, not per-set, so the selector only
+                                  // appears once (on the first set row) — later rows just show the
+                                  // resulting unit as plain text.
+                                  <select
+                                    value={ex.weight_unit || 'kg'}
+                                    onChange={e => { onChange?.(idx, 'weight_unit', e.target.value); onCommit?.(idx, 'weight_unit', e.target.value) }}
+                                    style={{ ...inputCell, width: 'auto', flexShrink: 0, fontSize: '0.7rem', cursor: 'pointer' }}
+                                  >
+                                    <option value="kg">kg</option>
+                                    <option value="lbs">lbs</option>
+                                  </select>
+                                )}
+                                {editable && !isFirst && set?.weight != null && set?.weight !== '' && (
+                                  <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', flexShrink: 0 }}>{ex.weight_unit || 'kg'}</span>
+                                )}
                                 {editable && (
                                   <button type="button" onClick={() => handleRemoveSetRow(idx, ex, si)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0, flexShrink: 0 }}>
                                     <X size={12} />

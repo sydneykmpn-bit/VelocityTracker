@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Trash2, Pencil, Check, X, Scale, Droplet } from 'lucide-react'
 import {
-  normalizeToKg, sortRecords, LOWER_IS_BETTER, convertWeightForDisplay,
+  normalizeToKg, sortRecords, LOWER_IS_BETTER, convertWeightForDisplay, getLocalDateString,
 } from '@/lib/utils'
 
 type Tab = 'prtrends' | 'body'
@@ -83,6 +83,9 @@ export default function AnalyticsPage() {
   const [editPRForm, setEditPRForm] = useState({ value: '', unit: 'kg', is_public: false })
   const [prSaving, setPrSaving] = useState(false)
   const [prDeleting, setPrDeleting] = useState<string | null>(null)
+  const [prForm, setPrForm] = useState({ exercise: '', value: '', unit: 'kg', date: getLocalDateString(), is_public: false })
+  const [prFormSaving, setPrFormSaving] = useState(false)
+  const [prFormError, setPrFormError] = useState('')
 
   // Body
   const [bodyMeasurements, setBodyMeasurements] = useState<any[]>([])
@@ -113,7 +116,9 @@ export default function AnalyticsPage() {
       if (!user) { router.push('/login'); return }
       setUserId(user.id)
       const { data: profile } = await supabase.from('profiles').select('preferred_weight_unit').eq('id', user.id).single()
-      setPreferredWeightUnit((profile?.preferred_weight_unit as 'kg' | 'lbs') || 'kg')
+      const preferredUnit = (profile?.preferred_weight_unit as 'kg' | 'lbs') || 'kg'
+      setPreferredWeightUnit(preferredUnit)
+      setPrForm(f => ({ ...f, unit: preferredUnit }))
       await loadAll(user.id)
       setLoading(false)
     }
@@ -178,6 +183,28 @@ export default function AnalyticsPage() {
     setPrDeleting(null)
     loadData()
   }
+  const handleAddPR = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!userId) return
+    if (!prForm.exercise.trim()) { setPrFormError('Please enter an exercise name.'); return }
+    if (!prForm.value) { setPrFormError('Please enter a value.'); return }
+    setPrFormSaving(true); setPrFormError('')
+    const { error: err } = await supabase.from('personal_records').insert({
+      user_id: userId,
+      exercise_name: prForm.exercise.trim(),
+      value: Number(prForm.value),
+      unit: prForm.unit,
+      date: prForm.date,
+      recorded_at: new Date(prForm.date).toISOString(),
+      is_public: prForm.is_public,
+      month_year: getLocalDateString().slice(0, 7),
+    })
+    if (err) { setPrFormError(err.message); setPrFormSaving(false); return }
+    setSelectedExercise(prForm.exercise.trim())
+    setPrForm({ exercise: '', value: '', unit: preferredWeightUnit, date: getLocalDateString(), is_public: false })
+    setPrFormSaving(false)
+    loadData()
+  }
 
   // ── Body derived data ──
   const bodyChartPoints = bodyMeasurements.filter(m => m.weight_kg != null).map(m => ({ x: m.recorded_at, y: m.weight_kg }))
@@ -232,9 +259,52 @@ export default function AnalyticsPage() {
         {/* ── PR TRENDS ── */}
         {activeTab === 'prtrends' && (
           <div key="tab-prtrends">
+            <form onSubmit={handleAddPR} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.5rem' }}>
+              <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>LOG PR</h2>
+              {prFormError && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{prFormError}</div>}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.875rem' }}>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={labelBase}>Exercise *</label>
+                  <input
+                    type="text" value={prForm.exercise} list="pr-exercise-suggestions"
+                    onChange={e => setPrForm({ ...prForm, exercise: e.target.value })}
+                    style={{ ...inputBase, width: '100%' }} placeholder="e.g. Back Squat"
+                  />
+                  <datalist id="pr-exercise-suggestions">
+                    {exerciseNames.map(n => <option key={n} value={n} />)}
+                  </datalist>
+                </div>
+                <div>
+                  <label style={labelBase}>Value *</label>
+                  <input type="number" value={prForm.value} onChange={e => setPrForm({ ...prForm, value: e.target.value })} style={{ ...inputBase, width: '100%' }} placeholder="100" min="0" step="0.01" />
+                </div>
+                <div>
+                  <label style={labelBase}>Unit</label>
+                  <select value={prForm.unit} onChange={e => setPrForm({ ...prForm, unit: e.target.value })} style={{ ...inputBase, width: '100%', cursor: 'pointer' }}>
+                    {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelBase}>Date</label>
+                  <input type="date" value={prForm.date} onChange={e => setPrForm({ ...prForm, date: e.target.value })} style={{ ...inputBase, width: '100%' }} />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.625rem' }}>
+                  <Toggle on={prForm.is_public} onToggle={() => setPrForm({ ...prForm, is_public: !prForm.is_public })} />
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{prForm.is_public ? 'Public' : 'Private'}</span>
+                </div>
+              </div>
+              <button type="submit" disabled={prFormSaving} style={{
+                marginTop: '1rem', background: prFormSaving ? '#0d1a1e' : 'var(--teal-primary)', color: 'white',
+                border: 'none', borderRadius: '0.5rem', padding: '0.75rem', fontWeight: 700, fontSize: '0.875rem',
+                cursor: prFormSaving ? 'not-allowed' : 'pointer', width: '100%',
+              }}>
+                {prFormSaving ? 'Saving…' : 'Log PR'}
+              </button>
+            </form>
+
             {exerciseNames.length === 0 ? (
               <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-                No PRs logged yet. Submit one on the <Link href="/leaderboard" style={{ color: 'var(--teal-secondary)' }}>Leaderboard</Link> page.
+                No PRs logged yet — log your first one above, or on the <Link href="/leaderboard" style={{ color: 'var(--teal-secondary)' }}>Leaderboard</Link> page.
               </div>
             ) : (
               <>
