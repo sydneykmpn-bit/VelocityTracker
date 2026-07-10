@@ -236,6 +236,57 @@ export function BballClassFormModal({
       specific_date: form.isRecurring ? null : form.specific_date,
       recurrence_end_date: form.isRecurring ? (form.recurrence_end_date || null) : null,
     }
+
+    // Overlap check — same day/date with an overlapping time range is blocked outright, regardless
+    // of gender_restriction. Two "Men Only"/"Women Only" classes at the same time look conflict-free
+    // at a glance, but 'other'-gender members can join ANY class regardless of its restriction (see
+    // genderMatches() wherever classes are joined) — so they're never truly non-overlapping
+    // populations, and a stacking rule would just create a double-booking hole for 'other' members.
+    const toMinutes = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
+    const timesOverlap = (aStart: string, aEnd: string, bStart: string, bEnd: string) =>
+      toMinutes(aStart) < toMinutes(bEnd) && toMinutes(bStart) < toMinutes(aEnd)
+
+    if (form.isRecurring) {
+      const { data: existing, error: fetchErr } = await supabase
+        .from('bball_classes')
+        .select('id, title, day_of_week, start_time, end_time')
+        .eq('is_recurring', true)
+        .in('day_of_week', form.days)
+      if (fetchErr) { setError(fetchErr.message); setSaving(false); return }
+      const conflicts = form.days
+        .map(day => {
+          const c = (existing || []).find(row =>
+            row.day_of_week === day &&
+            (!isEdit || row.id !== editing!.id) &&
+            timesOverlap(form.start_time, form.end_time, row.start_time.slice(0, 5), row.end_time.slice(0, 5))
+          )
+          return c ? { day, title: c.title, start: c.start_time.slice(0, 5), end: c.end_time.slice(0, 5) } : null
+        })
+        .filter((c): c is { day: string; title: string; start: string; end: string } => c !== null)
+      if (conflicts.length > 0) {
+        const list = conflicts.map(c => `${DAY_LABELS[c.day]} (${c.start}–${c.end})`).join(', ')
+        setError(`A class already exists on ${list}. Choose a different time or edit the existing class.`)
+        setSaving(false)
+        return
+      }
+    } else {
+      const { data: existing, error: fetchErr } = await supabase
+        .from('bball_classes')
+        .select('id, title, start_time, end_time')
+        .eq('is_recurring', false)
+        .eq('specific_date', form.specific_date)
+      if (fetchErr) { setError(fetchErr.message); setSaving(false); return }
+      const conflict = (existing || []).find(row =>
+        (!isEdit || row.id !== editing!.id) &&
+        timesOverlap(form.start_time, form.end_time, row.start_time.slice(0, 5), row.end_time.slice(0, 5))
+      )
+      if (conflict) {
+        setError(`A class already exists on this day between ${conflict.start_time.slice(0, 5)}–${conflict.end_time.slice(0, 5)}. Choose a different time or edit the existing class.`)
+        setSaving(false)
+        return
+      }
+    }
+
     if (isEdit) {
       const dayOfWeek = form.isRecurring ? form.days[0] : dayNameFromDate(form.specific_date)
       const { error: err } = await supabase.from('bball_classes').update({ ...base, day_of_week: dayOfWeek }).eq('id', editing!.id)

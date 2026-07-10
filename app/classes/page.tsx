@@ -341,7 +341,8 @@ export default function ClassesPage() {
                         </p>
                       )}
                       <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                        {new Date(occ.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })} · {formatTimeLabel(occ.cls.start_time)} – {formatTimeLabel(occ.cls.end_time)}
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{new Date(occ.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' })}</span>
+                        {', '}{new Date(occ.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · {formatTimeLabel(occ.cls.start_time)} – {formatTimeLabel(occ.cls.end_time)}
                       </p>
                       <p style={{ fontSize: '0.75rem', color: full ? '#f87171' : 'var(--text-secondary)', marginTop: '0.25rem' }}>
                         {isCoachOrAdmin

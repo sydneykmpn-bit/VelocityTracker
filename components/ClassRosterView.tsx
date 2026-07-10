@@ -310,7 +310,8 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
           {classRow.title}
         </h1>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-          {new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} · {timeLabel}
+          <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' })}</span>
+          {', '}{new Date(date + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} · {timeLabel}
           {cfg.hasLocation && classRow.location ? ` · ${classRow.location}` : ''}
         </p>
 
