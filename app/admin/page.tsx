@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Trash2, ChevronDown, ChevronUp, Pencil, KeyRound, Timer, X, AlertTriangle, Target, CheckCircle2, Mars, Venus, Users, Building2, Settings, Check, History } from 'lucide-react'
 import { getLocalDateString } from '@/lib/utils'
 import { logAction } from '@/lib/auditLog'
+import ConfirmModal from '@/components/ConfirmModal'
 
 type AdminTab = 'members' | 'groups' | 'activity' | 'settings'
 type Role = 'member' | 'coach' | 'admin'
@@ -405,6 +406,7 @@ export default function AdminPage() {
 
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [confirmAction, setConfirmAction] = useState<{ type: 'deleteGroup' | 'rejectUser' | 'removeUser' | 'deleteAllPRs'; group?: any; user?: any } | null>(null)
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<{id: string; name: string} | null>(null)
   const [showCreateUserModal, setShowCreateUserModal] = useState(false)
   const [resetPasswordUserId, setResetPasswordUserId] = useState<string | null>(null)
@@ -517,6 +519,16 @@ export default function AdminPage() {
     return true
   }
 
+  const handleRejectUser = async (u: any) => {
+    const ok = await handleDeleteUser(u.id)
+    if (ok) setPendingUsers(prev => prev.filter(p => p.id !== u.id))
+  }
+
+  const handleRemoveUser = async (u: any) => {
+    const ok = await handleDeleteUser(u.id)
+    if (ok) setAllUsers(prev => prev.filter(p => p.id !== u.id))
+  }
+
   const handleResetPassword = async (userId: string) => {
     if (resetPasswordValue.length < 6) {
       setError('Password must be at least 6 characters.')
@@ -621,7 +633,6 @@ export default function AdminPage() {
   }
 
   const handleDeleteGroup = async (g: any) => {
-    if (!confirm(`Delete "${g.name}"? This removes all its members from the group and cannot be undone.`)) return
     setError('')
     await supabase.from('group_members').delete().eq('group_id', g.id)
     const { error: err } = await supabase.from('groups').delete().eq('id', g.id)
@@ -638,6 +649,16 @@ export default function AdminPage() {
     if (expandedGroup === g.id) setExpandedGroup(null)
     if (editingGroupId === g.id) handleCancelEditGroup()
     await loadGroups()
+  }
+
+  const handleDeleteAllPublicPRs = async () => {
+    setError('')
+    const { error: err } = await supabase.from('personal_records').delete().eq('is_public', true)
+    if (err) { setError(err.message); return }
+    const { data } = await supabase.from('personal_records').select('*, profiles(name, gender)').order('value', { ascending: false })
+    setAllPRs(data ?? [])
+    setSuccess('All public PRs deleted.')
+    setTimeout(() => setSuccess(''), 3000)
   }
 
   const coaches = allUsers.filter(p => p.role === 'coach')
@@ -772,11 +793,7 @@ export default function AdminPage() {
                           <Check size={12} /> Approve
                         </button>
                         <button
-                          onClick={async () => {
-                            if (!confirm(`Reject and remove ${u.name}?`)) return
-                            const ok = await handleDeleteUser(u.id)
-                            if (ok) setPendingUsers(prev => prev.filter(p => p.id !== u.id))
-                          }}
+                          onClick={() => setConfirmAction({ type: 'rejectUser', user: u })}
                           style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.5rem', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', color: '#ef4444', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
                         >
                           <X size={12} /> Reject
@@ -841,11 +858,7 @@ export default function AdminPage() {
                           <KeyRound size={14} />
                         </button>
                         <button
-                          onClick={async () => {
-                            if (!confirm(`Remove ${u.name} from Velocity Tracker? This cannot be undone.`)) return
-                            const ok = await handleDeleteUser(u.id)
-                            if (ok) setAllUsers(prev => prev.filter(p => p.id !== u.id))
-                          }}
+                          onClick={() => setConfirmAction({ type: 'removeUser', user: u })}
                           style={{ width: '28px', height: '28px', borderRadius: '0.375rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', flexShrink: 0 }}
                         >
                           <X size={14} />
@@ -913,7 +926,7 @@ export default function AdminPage() {
                             <button onClick={() => handleStartEditGroup(g)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', minHeight: 0 }} aria-label="Edit group">
                               <Pencil size={16} />
                             </button>
-                            <button onClick={() => handleDeleteGroup(g)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', display: 'flex', minHeight: 0 }} aria-label="Delete group">
+                            <button onClick={() => setConfirmAction({ type: 'deleteGroup', group: g })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', display: 'flex', minHeight: 0 }} aria-label="Delete group">
                               <Trash2 size={16} />
                             </button>
                             <button onClick={() => toggleGroup(g.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', minHeight: 0 }}>
@@ -1196,14 +1209,7 @@ export default function AdminPage() {
               <p style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.375rem' }}>Delete All Public PRs</p>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.875rem' }}>Removes all public leaderboard records. This cannot be undone.</p>
               <button
-                onClick={async () => {
-                  if (!confirm('Are you sure? This will delete ALL public PR records from the leaderboard. This cannot be undone.')) return
-                  await supabase.from('personal_records').delete().eq('is_public', true)
-                  const { data } = await supabase.from('personal_records').select('*, profiles(name, gender)').order('value', { ascending: false })
-                  setAllPRs(data ?? [])
-                  setSuccess('All public PRs deleted.')
-                  setTimeout(() => setSuccess(''), 3000)
-                }}
+                onClick={() => setConfirmAction({ type: 'deleteAllPRs' })}
                 style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.5rem', padding: '0.625rem 1.25rem', fontSize: '0.875rem', fontWeight: 700, color: '#ef4444', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
               >
                 <AlertTriangle size={14} /> Delete All Public PRs
@@ -1226,6 +1232,48 @@ export default function AdminPage() {
           onCreated={refreshMembers}
         />
       )}
+      {confirmAction && (() => {
+        const config = {
+          deleteGroup: {
+            title: 'Delete Group',
+            message: `Delete "${confirmAction.group?.name}"? This removes all its members from the group and cannot be undone.`,
+            confirmLabel: 'Delete',
+            variant: 'destructive' as const,
+            onConfirm: () => handleDeleteGroup(confirmAction.group),
+          },
+          rejectUser: {
+            title: 'Reject User',
+            message: `Reject and remove ${confirmAction.user?.name}?`,
+            confirmLabel: 'Reject',
+            variant: 'destructive' as const,
+            onConfirm: () => handleRejectUser(confirmAction.user),
+          },
+          removeUser: {
+            title: 'Remove User',
+            message: `Remove ${confirmAction.user?.name} from Velocity Tracker? This cannot be undone.`,
+            confirmLabel: 'Remove',
+            variant: 'destructive' as const,
+            onConfirm: () => handleRemoveUser(confirmAction.user),
+          },
+          deleteAllPRs: {
+            title: 'Delete All Public PRs',
+            message: 'Are you sure? This will delete ALL public PR records from the leaderboard. This cannot be undone.',
+            confirmLabel: 'Delete All',
+            variant: 'destructive' as const,
+            onConfirm: handleDeleteAllPublicPRs,
+          },
+        }[confirmAction.type]
+        return (
+          <ConfirmModal
+            title={config.title}
+            message={config.message}
+            confirmLabel={config.confirmLabel}
+            variant={config.variant}
+            onConfirm={() => { const run = config.onConfirm; setConfirmAction(null); run() }}
+            onCancel={() => setConfirmAction(null)}
+          />
+        )
+      })()}
     </div>
   )
 }

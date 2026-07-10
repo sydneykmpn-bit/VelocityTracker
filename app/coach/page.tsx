@@ -10,6 +10,7 @@ import AthleteProgramTable, { AthleteProgramExercise, AthleteProgramDay } from '
 import { getLocalDateString, formatLocalDate, bballOccurrencesInRange, formatTimeLabel, joinBballClass, BballClassRow } from '@/lib/utils'
 import CalendarGrid, { CalendarEntry } from '@/components/CalendarGrid'
 import { BballOccurrence, genderBadgeStyle } from '@/components/BballClassModal'
+import ConfirmModal from '@/components/ConfirmModal'
 
 type Tab = 'members' | 'groups' | 'assign' | 'assigned' | 'calendar' | 'notes' | 'programs'
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -367,6 +368,7 @@ export default function CoachPage() {
     setTimeout(() => noteTextRef.current?.focus(), 50)
   }
   const [error, setError] = useState('')
+  const [confirmAction, setConfirmAction] = useState<{ type: 'removeAthleteProgram' | 'removeExerciseRow' | 'deleteGroup' | 'removeAthlete' | 'deleteAssignedPlan' | 'deleteNote'; payload?: any } | null>(null)
   const [success, setSuccess] = useState('')
 
   // My Members
@@ -563,7 +565,6 @@ export default function CoachPage() {
   }
 
   const handleRemoveAthleteProgram = async (program: any) => {
-    if (!confirm(`Remove ${program.member?.name ?? 'this athlete'}'s program? This deletes all of their program days and exercises. This cannot be undone.`)) return
     const { error: err } = await supabase.from('athlete_programs').delete().eq('id', program.id)
     if (err) { setError(err.message); return }
     setSelectedAthleteProgram(null)
@@ -614,11 +615,16 @@ export default function CoachPage() {
       : p))
   }
 
-  const handleRemoveExerciseRow = async (dayId: string, idx: number) => {
+  const handleRemoveExerciseRow = (dayId: string, idx: number) => {
+    const day = programDays.find(d => d.id === dayId)
+    if (!day?.athlete_program_exercises?.[idx]?.id) return
+    setConfirmAction({ type: 'removeExerciseRow', payload: { dayId, idx } })
+  }
+
+  const doRemoveExerciseRow = async (dayId: string, idx: number) => {
     const day = programDays.find(d => d.id === dayId)
     const row = day?.athlete_program_exercises?.[idx]
     if (!row?.id) return
-    if (!confirm('Remove this exercise?')) return
     setError('')
     const { error: err } = await supabase.from('athlete_program_exercises').delete().eq('id', row.id)
     if (err) { setError(err.message); return }
@@ -872,7 +878,6 @@ export default function CoachPage() {
 
   const handleDeleteGroup = async (groupId: string, groupName: string) => {
     if (!userId) return
-    if (!confirm(`Delete "${groupName}"? This removes all its members. This cannot be undone.`)) return
     setError('')
 
     const { error: gmError } = await supabase.from('group_members').delete().eq('group_id', groupId)
@@ -898,8 +903,6 @@ export default function CoachPage() {
 
   const handleRemoveAthlete = async (athleteId: string, athleteName: string) => {
     if (!userId) return
-    if (!confirm(`Remove ${athleteName} as your athlete? This deletes their upcoming plans/programs and your notes about them. Completed workout history is kept. This cannot be undone.`)) return
-
     setError(''); setSuccess('')
 
     // a) Remove from this coach's groups only
@@ -1043,7 +1046,7 @@ export default function CoachPage() {
   }
 
   const handleDeletePlan = async (planId: string) => {
-    if (!confirm('Remove this assigned plan? This cannot be undone.')) return
+    setError('')
 
     const { error: exError } = await supabase
       .from('workout_plan_exercises')
@@ -1051,7 +1054,7 @@ export default function CoachPage() {
       .eq('plan_id', planId)
 
     if (exError) {
-      alert('Failed to delete plan exercises: ' + exError.message)
+      setError('Failed to delete plan exercises: ' + exError.message)
       return
     }
 
@@ -1061,7 +1064,7 @@ export default function CoachPage() {
       .eq('id', planId)
 
     if (planError) {
-      alert('Failed to delete plan: ' + planError.message)
+      setError('Failed to delete plan: ' + planError.message)
       return
     }
 
@@ -1301,8 +1304,8 @@ export default function CoachPage() {
   const recentNotes = notes.slice(0, 3)
 
   const tabs: { value: Tab; label: string }[] = [
-    { value: 'programs', label: 'Programs' },
     { value: 'members', label: 'My Athletes' },
+    { value: 'programs', label: 'Programs' },
     { value: 'groups', label: 'Groups' },
     { value: 'assign', label: 'Assign Plan' },
     { value: 'assigned', label: 'Assigned Plans' },
@@ -1573,7 +1576,7 @@ export default function CoachPage() {
                               <Calendar size={11} /> Calendar
                             </button>
                             <button
-                              onClick={e => { e.stopPropagation(); handleRemoveAthlete(m.id, m.name) }}
+                              onClick={e => { e.stopPropagation(); setConfirmAction({ type: 'removeAthlete', payload: { athleteId: m.id, athleteName: m.name } }) }}
                               className="coach-action-btn"
                               style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.3rem 0.5rem', color: '#f87171', fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 0 }}
                             >
@@ -1643,7 +1646,7 @@ export default function CoachPage() {
                             {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)' }} />}
                           </button>
                           <button
-                            onClick={() => handleDeleteGroup(g.id, g.name)}
+                            onClick={() => setConfirmAction({ type: 'deleteGroup', payload: { groupId: g.id, groupName: g.name } })}
                             title="Delete group"
                             style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.4rem', color: '#f87171', cursor: 'pointer', display: 'flex', alignItems: 'center', minHeight: 0, flexShrink: 0 }}
                           >
@@ -2016,6 +2019,7 @@ export default function CoachPage() {
         {/* ── ASSIGNED PLANS TAB ── */}
         {activeTab === 'assigned' && (
           <div key="tab-assigned">
+            {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginTop: '1.5rem', color: '#f87171', fontSize: '0.875rem' }}>{error}</div>}
             {/* Filter assigned plans by member */}
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
               <input
@@ -2190,7 +2194,7 @@ export default function CoachPage() {
                                     <button onClick={() => { if (isEditingThis) { setEditingPlan(null); return }; openPlanEdit(p) }} style={{ flex: '1 1 auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: isEditingThis ? 'rgba(8,119,160,0.15)' : 'none', border: `1px solid ${isEditingThis ? 'var(--teal-primary)' : 'var(--border)'}`, borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: isEditingThis ? 'var(--teal-secondary)' : 'var(--text-secondary)', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
                                       <Pencil size={12} /> {isEditingThis ? 'Editing…' : 'Edit'}
                                     </button>
-                                    <button onClick={() => handleDeletePlan(p.id)} style={{ flex: '1 1 auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: '#f87171', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
+                                    <button onClick={() => setConfirmAction({ type: 'deleteAssignedPlan', payload: { planId: p.id } })} style={{ flex: '1 1 auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.3rem 0.625rem', color: '#f87171', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>
                                       <Trash2 size={12} /> Remove
                                     </button>
                                   </div>
@@ -2507,7 +2511,7 @@ export default function CoachPage() {
                                       <Pencil size={12} /> Edit
                                     </button>
                                     <button
-                                      onClick={e => { e.stopPropagation(); handleDeletePlan(w.id).then(() => loadCalendarWorkouts()) }}
+                                      onClick={e => { e.stopPropagation(); setConfirmAction({ type: 'deleteAssignedPlan', payload: { planId: w.id, fromCalendar: true } }) }}
                                       style={{ flex: '1 1 auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', color: '#f87171', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
                                     >
                                       <Trash2 size={12} /> Remove
@@ -2642,7 +2646,7 @@ export default function CoachPage() {
                         </button>
                         {/* Delete */}
                         <button
-                          onClick={() => confirm('Delete this note?') && handleDeleteNote(note.id)}
+                          onClick={() => setConfirmAction({ type: 'deleteNote', payload: { noteId: note.id } })}
                           style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.25rem 0.5rem', fontSize: '0.7rem', cursor: 'pointer', color: '#f87171', minHeight: 0 }}
                         >
                           <Trash2 size={12} />
@@ -2729,7 +2733,17 @@ export default function CoachPage() {
                           style={{ padding: '1.1rem 1.25rem', textAlign: 'left', width: '100%', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}
                         >
                           <p style={{ fontWeight: 700, fontSize: '1rem' }}>{p.member?.name ?? 'Unknown athlete'}</p>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{exCount} exercise{exCount === 1 ? '' : 's'}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{
+                              fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '999px',
+                              background: p.status === 'completed' ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)',
+                              color: p.status === 'completed' ? '#4ade80' : '#f59e0b',
+                              border: `1px solid ${p.status === 'completed' ? 'rgba(34,197,94,0.3)' : 'rgba(245,158,11,0.3)'}`,
+                            }}>
+                              {p.status === 'completed' ? 'Done' : 'Pending'}
+                            </span>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{exCount} exercise{exCount === 1 ? '' : 's'}</span>
+                          </div>
                         </button>
                       )
                     })}
@@ -2739,9 +2753,19 @@ export default function CoachPage() {
             ) : (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-                  <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>{selectedAthleteProgram.member?.name ?? 'ATHLETE'}&apos;S PROGRAM</h2>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                    <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>{selectedAthleteProgram.member?.name ?? 'ATHLETE'}&apos;S PROGRAM</h2>
+                    <span style={{
+                      fontSize: '0.65rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '999px',
+                      background: selectedAthleteProgram.status === 'completed' ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)',
+                      color: selectedAthleteProgram.status === 'completed' ? '#4ade80' : '#f59e0b',
+                      border: `1px solid ${selectedAthleteProgram.status === 'completed' ? 'rgba(34,197,94,0.3)' : 'rgba(245,158,11,0.3)'}`,
+                    }}>
+                      {selectedAthleteProgram.status === 'completed' ? 'Done' : 'Pending'}
+                    </span>
+                  </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button onClick={() => handleRemoveAthleteProgram(selectedAthleteProgram)} style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>Remove Athlete</button>
+                    <button onClick={() => setConfirmAction({ type: 'removeAthleteProgram', payload: selectedAthleteProgram })} style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>Remove Athlete</button>
                     <button onClick={() => setSelectedAthleteProgram(null)} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text-secondary)', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>← Back to list</button>
                   </div>
                 </div>
@@ -2773,6 +2797,65 @@ export default function CoachPage() {
           onClose={() => setSelectedMemberProfile(null)}
         />
       )}
+      {confirmAction && (() => {
+        const config = {
+          removeAthleteProgram: {
+            title: 'Remove Athlete Program',
+            message: `Remove ${confirmAction.payload?.member?.name ?? 'this athlete'}'s program? This deletes all of their program days and exercises. This cannot be undone.`,
+            confirmLabel: 'Remove',
+            variant: 'destructive' as const,
+            onConfirm: () => handleRemoveAthleteProgram(confirmAction.payload),
+          },
+          removeExerciseRow: {
+            title: 'Remove Exercise',
+            message: 'Remove this exercise?',
+            confirmLabel: 'Remove',
+            variant: 'destructive' as const,
+            onConfirm: () => doRemoveExerciseRow(confirmAction.payload.dayId, confirmAction.payload.idx),
+          },
+          deleteGroup: {
+            title: 'Delete Group',
+            message: `Delete "${confirmAction.payload?.groupName}"? This removes all its members. This cannot be undone.`,
+            confirmLabel: 'Delete',
+            variant: 'destructive' as const,
+            onConfirm: () => handleDeleteGroup(confirmAction.payload.groupId, confirmAction.payload.groupName),
+          },
+          removeAthlete: {
+            title: 'Remove Athlete',
+            message: `Remove ${confirmAction.payload?.athleteName} as your athlete? This deletes their upcoming plans/programs and your notes about them. Completed workout history is kept. This cannot be undone.`,
+            confirmLabel: 'Remove',
+            variant: 'destructive' as const,
+            onConfirm: () => handleRemoveAthlete(confirmAction.payload.athleteId, confirmAction.payload.athleteName),
+          },
+          deleteAssignedPlan: {
+            title: 'Remove Assigned Plan',
+            message: 'Remove this assigned plan? This cannot be undone.',
+            confirmLabel: 'Remove',
+            variant: 'destructive' as const,
+            onConfirm: () => {
+              const { planId, fromCalendar } = confirmAction.payload
+              handleDeletePlan(planId).then(() => { if (fromCalendar) loadCalendarWorkouts() })
+            },
+          },
+          deleteNote: {
+            title: 'Delete Note',
+            message: 'Delete this note?',
+            confirmLabel: 'Delete',
+            variant: 'destructive' as const,
+            onConfirm: () => handleDeleteNote(confirmAction.payload.noteId),
+          },
+        }[confirmAction.type]
+        return (
+          <ConfirmModal
+            title={config.title}
+            message={config.message}
+            confirmLabel={config.confirmLabel}
+            variant={config.variant}
+            onConfirm={() => { const run = config.onConfirm; setConfirmAction(null); run() }}
+            onCancel={() => setConfirmAction(null)}
+          />
+        )
+      })()}
       <style>{`
         @media (max-width: 760px) {
           .coach-overview { grid-template-columns: 1fr !important; }

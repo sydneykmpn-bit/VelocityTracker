@@ -53,6 +53,7 @@ export default function ClassDetailModal({
   const [planActionError, setPlanActionError] = useState('')
   const [myGender, setMyGender] = useState<string | null>(null)
   const [showJoinConfirm, setShowJoinConfirm] = useState(false)
+  const [confirmAction, setConfirmAction] = useState<{ type: 'removeAttendee' | 'deleteClass' | 'deleteSeries'; attendee?: any } | null>(null)
 
   const classId = cls.is_dynamic ? cls.parent_class_id : cls.id
 
@@ -255,8 +256,6 @@ export default function ClassDetailModal({
   }
 
   const handleRemoveAttendee = async (attendee: any) => {
-    if (!confirm(`Remove ${attendee.profiles?.name || attendee.guest_name} from this class?`)) return
-
     setAttendeeActionError('')
     const { error } = await supabase.from('class_attendees').delete().eq('id', attendee.id)
 
@@ -271,13 +270,11 @@ export default function ClassDetailModal({
   }
 
   const handleDeleteClass = async () => {
-    if (!confirm('Delete this class? This will remove this specific class only.')) return
     await supabase.from('scheduled_classes').delete().eq('id', cls.id)
     onClose(); onUpdate()
   }
 
   const handleDeleteSeries = async () => {
-    if (!confirm('Delete ALL classes in this recurring series? This cannot be undone.')) return
     await supabase.from('scheduled_classes').delete().eq('parent_class_id', classId)
     await supabase.from('scheduled_classes').delete().eq('id', classId)
     onClose(); onUpdate()
@@ -784,7 +781,7 @@ export default function ClassDetailModal({
                       )}
                       {(userRole === 'coach' || userRole === 'admin') && (
                         <button
-                          onClick={() => handleRemoveAttendee(a)}
+                          onClick={() => setConfirmAction({ type: 'removeAttendee', attendee: a })}
                           aria-label="Remove attendee"
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', display: 'flex', minHeight: 0 }}
                         >
@@ -802,9 +799,9 @@ export default function ClassDetailModal({
         {/* Delete options (admin/coach only) */}
         {(userRole === 'admin' || userRole === 'coach') && !cls.isPlan && (
           <div style={{ padding: '0 1.5rem 1.25rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <button onClick={handleDeleteClass} style={{ flex: 1, background: 'transparent', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.5rem', color: '#f87171', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}><Trash2 size={13} /> Delete This Class</button>
+            <button onClick={() => setConfirmAction({ type: 'deleteClass' })} style={{ flex: 1, background: 'transparent', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.5rem', color: '#f87171', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}><Trash2 size={13} /> Delete This Class</button>
             {cls.is_recurring && (
-              <button onClick={handleDeleteSeries} style={{ flex: 1, background: 'transparent', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.5rem', color: '#f87171', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}><Trash2 size={13} /> Delete Entire Series</button>
+              <button onClick={() => setConfirmAction({ type: 'deleteSeries' })} style={{ flex: 1, background: 'transparent', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.375rem', padding: '0.5rem', color: '#f87171', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}><Trash2 size={13} /> Delete Entire Series</button>
             )}
           </div>
         )}
@@ -819,6 +816,42 @@ export default function ClassDetailModal({
           onCancel={() => setShowJoinConfirm(false)}
         />
       )}
+
+      {confirmAction && (() => {
+        const config = {
+          removeAttendee: {
+            title: 'Remove Attendee',
+            message: `Remove ${confirmAction.attendee?.profiles?.name || confirmAction.attendee?.guest_name} from this class?`,
+            confirmLabel: 'Remove',
+            variant: 'destructive' as const,
+            onConfirm: () => handleRemoveAttendee(confirmAction.attendee),
+          },
+          deleteClass: {
+            title: 'Delete Class',
+            message: 'Delete this class? This will remove this specific class only.',
+            confirmLabel: 'Delete',
+            variant: 'destructive' as const,
+            onConfirm: handleDeleteClass,
+          },
+          deleteSeries: {
+            title: 'Delete Recurring Series',
+            message: 'Delete ALL classes in this recurring series? This cannot be undone.',
+            confirmLabel: 'Delete Series',
+            variant: 'destructive' as const,
+            onConfirm: handleDeleteSeries,
+          },
+        }[confirmAction.type]
+        return (
+          <ConfirmModal
+            title={config.title}
+            message={config.message}
+            confirmLabel={config.confirmLabel}
+            variant={config.variant}
+            onConfirm={() => { const run = config.onConfirm; setConfirmAction(null); run() }}
+            onCancel={() => setConfirmAction(null)}
+          />
+        )
+      })()}
     </div>
   )
 }

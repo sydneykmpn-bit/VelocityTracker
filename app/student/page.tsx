@@ -8,6 +8,7 @@ import { ChevronDown, ChevronUp, CheckCircle2, Check, Lock, Pencil, Trash2 } fro
 import { getLocalDateString, normalizeToKg, getCurrentWeekOccurrenceDate } from '@/lib/utils'
 import { TodayPlanCard, SkippedPlansSection, typeBadge } from '@/components/PlanCards'
 import AthleteProgramTable, { AthleteProgramDay } from '@/components/AthleteProgramTable'
+import ConfirmModal from '@/components/ConfirmModal'
 
 type Tab = 'plans' | 'prs' | 'metrics' | 'programs'
 
@@ -99,6 +100,9 @@ export default function StudentPage() {
   const [programCompletions, setProgramCompletions] = useState<any[]>([])
   const [completingDayId, setCompletingDayId] = useState<string | null>(null)
   const [programError, setProgramError] = useState('')
+  const [programStatusFilter, setProgramStatusFilter] = useState<'pending' | 'completed'>('pending')
+  const [programStatusSavingId, setProgramStatusSavingId] = useState<string | null>(null)
+  const [deletePRConfirmId, setDeletePRConfirmId] = useState<string | null>(null)
 
   const reloadPlans = async (uid: string) => {
     const { data: plans } = await supabase
@@ -286,6 +290,50 @@ export default function StudentPage() {
 
     setProgramCompletions(prev => prev.filter(c => c.id !== completion.id))
     setCompletingDayId(null)
+  }
+
+  const handleMarkProgramDone = async (program: any) => {
+    setProgramError('')
+    setProgramStatusSavingId(program.id)
+    const { data, error: err } = await supabase
+      .from('athlete_programs')
+      .update({ status: 'completed', completed_at: new Date().toISOString() })
+      .eq('id', program.id)
+      .select()
+      .single()
+    setProgramStatusSavingId(null)
+    if (err || !data) {
+      console.error('handleMarkProgramDone failed:', err)
+      setProgramError(err?.message ?? 'Failed to mark this program as done.')
+      return
+    }
+    setAssignedPrograms(prev => prev.map(p => p.id === program.id ? { ...p, ...data } : p))
+  }
+
+  const handleMarkProgramPending = async (program: any) => {
+    setProgramError('')
+    setProgramStatusSavingId(program.id)
+    const { data, error: err } = await supabase
+      .from('athlete_programs')
+      .update({ status: 'pending', completed_at: null })
+      .eq('id', program.id)
+      .select()
+      .single()
+    setProgramStatusSavingId(null)
+    if (err || !data) {
+      console.error('handleMarkProgramPending failed:', err)
+      setProgramError(err?.message ?? 'Failed to mark this program as pending.')
+      return
+    }
+    setAssignedPrograms(prev => prev.map(p => p.id === program.id ? { ...p, ...data } : p))
+  }
+
+  const handleDeletePR = async (prId: string) => {
+    setPRLoading(true)
+    await supabase.from('personal_records').delete().eq('id', prId)
+    const { data } = await supabase.from('personal_records').select('*').eq('user_id', profile?.id).order('value', { ascending: false })
+    setPRs(data || [])
+    setPRLoading(false)
   }
 
   useEffect(() => {
@@ -697,14 +745,7 @@ export default function StudentPage() {
                                 </button>
                                 {/* Delete button */}
                                 <button
-                                  onClick={async () => {
-                                    if (!confirm('Delete this PR entry?')) return
-                                    setPRLoading(true)
-                                    await supabase.from('personal_records').delete().eq('id', pr.id)
-                                    const { data } = await supabase.from('personal_records').select('*').eq('user_id', profile?.id).order('value', { ascending: false })
-                                    setPRs(data || [])
-                                    setPRLoading(false)
-                                  }}
+                                  onClick={() => setDeletePRConfirmId(pr.id)}
                                   style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.25rem 0.5rem', color: 'var(--text-secondary)', fontSize: '0.7rem', cursor: 'pointer', minHeight: 0 }}
                                   onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#ef4444'; (e.currentTarget as HTMLButtonElement).style.color = '#ef4444' }}
                                   onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)' }}
@@ -847,36 +888,80 @@ export default function StudentPage() {
           </div>
         )}
 
-        {activeTab === 'programs' && (
-          <div key="tab-programs">
-            {programError && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{programError}</div>}
-            {assignedPrograms.length === 0 ? (
-              <div style={{ ...cardStyle, padding: '3rem', textAlign: 'center' }}>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No program assigned yet.</p>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                {assignedPrograms.map(program => (
-                  <div key={program.id} style={{ ...cardStyle, padding: '1.25rem' }}>
-                    <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>
-                      {program.coach?.name ? `${program.coach.name}'s Program` : 'My Program'}
-                    </h2>
-                    <div style={{ marginTop: '1rem' }}>
-                      <AthleteProgramTable
-                        days={program.athlete_program_days ?? []}
-                        showCompletion
-                        isDayDone={isDayDoneThisWeek}
-                        onMarkDone={handleMarkDayDone}
-                        onUndoDone={handleUndoDayDone}
-                        completingDayId={completingDayId}
-                      />
-                    </div>
-                  </div>
+        {activeTab === 'programs' && (() => {
+          const filteredPrograms = assignedPrograms.filter(p => (p.status ?? 'pending') === programStatusFilter)
+          return (
+            <div key="tab-programs">
+              {programError && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{programError}</div>}
+
+              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+                {(['pending', 'completed'] as const).map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setProgramStatusFilter(s)}
+                    style={{
+                      background: programStatusFilter === s ? 'rgba(8,119,160,0.15)' : 'none',
+                      border: `1px solid ${programStatusFilter === s ? 'var(--teal-primary)' : 'var(--border)'}`,
+                      borderRadius: '0.5rem', padding: '0.6rem 1rem', minHeight: '44px',
+                      color: programStatusFilter === s ? 'var(--teal-secondary)' : 'var(--text-secondary)',
+                      fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer',
+                    }}
+                  >
+                    {s === 'pending' ? 'Pending' : 'Done'} ({assignedPrograms.filter(p => (p.status ?? 'pending') === s).length})
+                  </button>
                 ))}
               </div>
-            )}
-          </div>
-        )}
+
+              {filteredPrograms.length === 0 ? (
+                <div style={{ ...cardStyle, padding: '3rem', textAlign: 'center' }}>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                    {assignedPrograms.length === 0 ? 'No program assigned yet.' : (programStatusFilter === 'pending' ? 'No pending programs.' : 'No programs marked done yet.')}
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  {filteredPrograms.map(program => {
+                    const isDone = program.status === 'completed'
+                    const savingStatus = programStatusSavingId === program.id
+                    return (
+                      <div key={program.id} style={{ ...cardStyle, padding: '1.25rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', flexWrap: 'wrap' }}>
+                          <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>
+                            {program.coach?.name ? `${program.coach.name}'s Program` : 'My Program'}
+                          </h2>
+                          <button
+                            onClick={() => isDone ? handleMarkProgramPending(program) : handleMarkProgramDone(program)}
+                            disabled={savingStatus}
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: '0.35rem', minHeight: '44px',
+                              background: isDone ? 'none' : 'var(--teal-primary)',
+                              border: isDone ? '1px solid var(--border)' : 'none',
+                              color: isDone ? 'var(--text-secondary)' : 'white',
+                              borderRadius: '0.5rem', padding: '0.5rem 0.875rem', fontSize: '0.8rem', fontWeight: 700,
+                              cursor: savingStatus ? 'default' : 'pointer', opacity: savingStatus ? 0.6 : 1,
+                            }}
+                          >
+                            {savingStatus ? 'Saving…' : (isDone ? <><Check size={14} /> Mark Pending</> : 'Mark Program Done')}
+                          </button>
+                        </div>
+                        <div style={{ marginTop: '1rem' }}>
+                          <AthleteProgramTable
+                            days={program.athlete_program_days ?? []}
+                            showCompletion
+                            isDayDone={isDayDoneThisWeek}
+                            onMarkDone={handleMarkDayDone}
+                            onUndoDone={handleUndoDayDone}
+                            completingDayId={completingDayId}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
       </main>
 
@@ -892,6 +977,16 @@ export default function StudentPage() {
           .plan-collapse-btn { display: none !important; }
         }
       `}</style>
+      {deletePRConfirmId && (
+        <ConfirmModal
+          title="Delete PR"
+          message="Delete this PR entry?"
+          confirmLabel="Delete"
+          variant="destructive"
+          onConfirm={() => { const id = deletePRConfirmId; setDeletePRConfirmId(null); handleDeletePR(id) }}
+          onCancel={() => setDeletePRConfirmId(null)}
+        />
+      )}
     </div>
   )
 }

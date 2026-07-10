@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Trash2, Handshake, Folder, Dumbbell, Volleyball, BicepsFlexed, ClipboardList, Star, Pencil, Check, X } from 'lucide-react'
+import ConfirmModal from '@/components/ConfirmModal'
 
 const inputBase: React.CSSProperties = {
   width: '100%', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem',
@@ -39,6 +40,7 @@ export default function TemplatesPage() {
   const [editExercises, setEditExercises] = useState<any[]>([])
   const [success, setSuccess] = useState('')
   const [error, setError] = useState('')
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
 
   // Create template
   const [showCreateForm, setShowCreateForm] = useState(false)
@@ -151,7 +153,6 @@ export default function TemplatesPage() {
 
   const handleDeleteTemplate = async (templateId: string) => {
     if (!userId) return
-    if (!confirm('Delete this template? This cannot be undone.')) return
     await supabase.from('workout_template_exercises').delete().eq('template_id', templateId)
     await supabase.from('workout_templates').delete().eq('id', templateId)
     await loadTemplates(userId)
@@ -417,7 +418,7 @@ export default function TemplatesPage() {
                             </button>
                             {!t.is_default && (
                               <button
-                                onClick={() => handleDeleteTemplate(t.id)}
+                                onClick={() => setDeleteConfirmId(t.id)}
                                 style={{ background: 'none', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.375rem', padding: '0.3rem 0.5rem', color: '#f87171', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}
                               >
                                 <Trash2 size={12} />
@@ -542,6 +543,16 @@ export default function TemplatesPage() {
           </div>
         )}
       </main>
+      {deleteConfirmId && (
+        <ConfirmModal
+          title="Delete Template"
+          message="Delete this template? This cannot be undone."
+          confirmLabel="Delete"
+          variant="destructive"
+          onConfirm={() => { const id = deleteConfirmId; setDeleteConfirmId(null); handleDeleteTemplate(id) }}
+          onCancel={() => setDeleteConfirmId(null)}
+        />
+      )}
     </div>
   )
 }

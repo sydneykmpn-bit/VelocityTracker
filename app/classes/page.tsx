@@ -36,6 +36,7 @@ export default function ClassesPage() {
   const [joinInfoMsg, setJoinInfoMsg] = useState('')
   const [selectedOcc, setSelectedOcc] = useState<BballOccurrence | null>(null)
   const [pendingJoinOcc, setPendingJoinOcc] = useState<BballOccurrence | null>(null)
+  const [deleteConfirmClass, setDeleteConfirmClass] = useState<BballClassRow | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [formModalOpen, setFormModalOpen] = useState(false)
   const [editingClass, setEditingClass] = useState<BballClassRow | null>(null)
@@ -154,7 +155,6 @@ export default function ClassesPage() {
   }
 
   const handleDeleteClass = async (cls: BballClassRow) => {
-    if (!confirm(`Delete "${cls.title}"? This removes all signups for this class and cannot be undone.`)) return
     setError('')
     const { error: err } = await supabase.from('bball_classes').delete().eq('id', cls.id)
     if (err) { setError(err.message); return }
@@ -306,7 +306,7 @@ export default function ClassesPage() {
                             <Pencil size={13} />
                           </button>
                           <button
-                            onClick={e => { e.stopPropagation(); handleDeleteClass(occ.cls) }}
+                            onClick={e => { e.stopPropagation(); setDeleteConfirmClass(occ.cls) }}
                             title="Delete class"
                             style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#ef4444', minHeight: 0 }}
                           >
@@ -346,7 +346,7 @@ export default function ClassesPage() {
           onClose={() => setSelectedOcc(null)}
           onJoinLeave={refreshCounts}
           onEdit={cls => { setSelectedOcc(null); setEditingClass(cls); setFormModalOpen(true) }}
-          onDelete={cls => { setSelectedOcc(null); handleDeleteClass(cls) }}
+          onDelete={cls => { setSelectedOcc(null); setDeleteConfirmClass(cls) }}
         />
       )}
       {formModalOpen && isAdmin && (
@@ -363,6 +363,16 @@ export default function ClassesPage() {
           confirmLabel="Join Anyway"
           onConfirm={() => { const occ = pendingJoinOcc; setPendingJoinOcc(null); doJoin(occ) }}
           onCancel={() => setPendingJoinOcc(null)}
+        />
+      )}
+      {deleteConfirmClass && (
+        <ConfirmModal
+          title="Delete Class"
+          message={`Delete "${deleteConfirmClass.title}"? This removes all signups for this class and cannot be undone.`}
+          confirmLabel="Delete"
+          variant="destructive"
+          onConfirm={() => { const cls = deleteConfirmClass; setDeleteConfirmClass(null); handleDeleteClass(cls) }}
+          onCancel={() => setDeleteConfirmClass(null)}
         />
       )}
     </div>

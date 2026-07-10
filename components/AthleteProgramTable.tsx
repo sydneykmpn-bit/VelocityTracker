@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { Trash2, Plus, Pencil, ChevronDown, ChevronUp, Check, X, Undo2 } from 'lucide-react'
 
-export const EXERCISE_TYPE_OPTIONS = ['Conditioning', 'Strength', 'Basketball', 'Cardio', 'Mobility']
 export const DAY_LABELS_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 export const DAY_TITLE_PRESETS = ['Upper', 'Legs', 'Shoulders', 'Sprint/Power']
 
@@ -44,6 +43,9 @@ const inputCell: React.CSSProperties = {
 const filterInput: React.CSSProperties = {
   background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.375rem',
   padding: '0.55rem 0.75rem', color: '#F2F2F2', fontSize: '0.85rem', outline: 'none', width: '100%',
+}
+const setLabel: React.CSSProperties = {
+  fontSize: '0.6rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.15rem',
 }
 
 function modeFor(dayId: string, idx: number, ex: AthleteProgramExercise, modeOverride: Record<string, ExerciseMode>): ExerciseMode {
@@ -171,7 +173,7 @@ function ExerciseTable({ exercises, editable, dayId, modeOverride, onToggleMode,
             {exercises.length === 0 ? (
               <tr>
                 <td colSpan={colCount} style={{ ...cellStyle, textAlign: 'center', color: 'var(--text-secondary)', padding: '1.5rem' }}>
-                  No exercises match.
+                  No exercises yet.
                 </td>
               </tr>
             ) : exercises.map(({ ex, idx }, i) => {
@@ -189,25 +191,29 @@ function ExerciseTable({ exercises, editable, dayId, modeOverride, onToggleMode,
                   </td>
 
                   {editable && mode === 'detailed' ? (
-                    <td style={{ ...cellStyle, minWidth: '230px' }} colSpan={3}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                    <td style={{ ...cellStyle, minWidth: '260px' }} colSpan={3}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                         {details.length === 0 && (
                           <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>No sets yet.</p>
                         )}
                         {details.map((s, si) => (
-                          <div key={si} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', minWidth: '38px', flexShrink: 0 }}>Set {si + 1}</span>
-                            <input type="number" value={s.reps ?? ''} placeholder="Reps" min="0" step="1"
-                              onChange={e => handleSetFieldChange(idx, ex, si, 'reps', e.target.value)}
-                              onBlur={() => handleSetFieldBlur(idx, ex)}
-                              style={{ ...inputCell, width: '52px', flex: 'none' }} />
-                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', flexShrink: 0 }}>reps @</span>
-                            <input type="number" value={s.weight ?? ''} placeholder="kg" min="0" step="0.1"
-                              onChange={e => handleSetFieldChange(idx, ex, si, 'weight', e.target.value)}
-                              onBlur={() => handleSetFieldBlur(idx, ex)}
-                              style={{ ...inputCell, width: '52px', flex: 'none' }} />
-                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', flexShrink: 0 }}>kg</span>
-                            <button type="button" onClick={() => handleRemoveSetRow(idx, ex, si)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0, marginLeft: 'auto' }}>
+                          <div key={si} style={{ display: 'flex', alignItems: 'flex-end', gap: '0.4rem' }}>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', minWidth: '38px', flexShrink: 0, paddingBottom: '0.2rem' }}>Set {si + 1}</span>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <label style={setLabel}>Reps</label>
+                              <input type="number" value={s.reps ?? ''} placeholder="—" min="0" step="1"
+                                onChange={e => handleSetFieldChange(idx, ex, si, 'reps', e.target.value)}
+                                onBlur={() => handleSetFieldBlur(idx, ex)}
+                                style={{ ...inputCell, width: '56px', flex: 'none' }} />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <label style={setLabel}>Weight (kg)</label>
+                              <input type="number" value={s.weight ?? ''} placeholder="—" min="0" step="0.1"
+                                onChange={e => handleSetFieldChange(idx, ex, si, 'weight', e.target.value)}
+                                onBlur={() => handleSetFieldBlur(idx, ex)}
+                                style={{ ...inputCell, width: '56px', flex: 'none' }} />
+                            </div>
+                            <button type="button" onClick={() => handleRemoveSetRow(idx, ex, si)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0, marginLeft: 'auto', paddingBottom: '0.35rem' }}>
                               <X size={12} />
                             </button>
                           </div>
@@ -322,8 +328,6 @@ export default function AthleteProgramTable({
   onAddDay, onUpdateDayTitle, onAddExercise, onChangeExercise, onCommitExercise, onRemoveExercise,
   showCompletion = false, isDayDone, onMarkDone, onUndoDone, completingDayId = null,
 }: Props) {
-  const [search, setSearch] = useState('')
-  const [typeFilter, setTypeFilter] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null)
   const [addDayOpen, setAddDayOpen] = useState(false)
@@ -361,8 +365,6 @@ export default function AthleteProgramTable({
     }
   }
 
-  const filtersActive = search.trim() !== '' || typeFilter !== ''
-
   const sortedDays = [...days].sort((a, b) => a.day_of_week - b.day_of_week)
   const takenDays = new Set(days.map(d => d.day_of_week))
   const availableDaysToAdd = DAY_LABELS_FULL.map((label, i) => ({ label, value: i })).filter(d => !takenDays.has(d.value))
@@ -380,31 +382,10 @@ export default function AthleteProgramTable({
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-        <input
-          type="text" value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Search exercises…"
-          style={{ ...filterInput, flex: '1 1 200px' }}
-        />
-        <select
-          value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
-          style={{ ...filterInput, width: 'auto', minWidth: '140px', cursor: 'pointer' }}
-        >
-          <option value="">All Types</option>
-          {EXERCISE_TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
-      </div>
-
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
         {sortedDays.map(day => {
           const allExercises = day.athlete_program_exercises ?? []
-          const filtered = allExercises
-            .map((ex, idx) => ({ ex, idx }))
-            .filter(({ ex }) =>
-              (!search.trim() || ex.name.toLowerCase().includes(search.trim().toLowerCase())) &&
-              (!typeFilter || ex.exercise_type === typeFilter)
-            )
-          if (filtersActive && allExercises.length > 0 && filtered.length === 0) return null
+          const indexed = allExercises.map((ex, idx) => ({ ex, idx }))
 
           const isExpanded = expanded.has(day.id)
           const isEditingTitle = editingTitleId === day.id
@@ -466,7 +447,7 @@ export default function AthleteProgramTable({
               {isExpanded && (
                 <div style={{ padding: '0.875rem', background: '#0a1518' }}>
                   <ExerciseTable
-                    exercises={filtered}
+                    exercises={indexed}
                     editable={editable}
                     dayId={day.id}
                     modeOverride={modeOverride}
