@@ -269,7 +269,7 @@ export default function EditWorkoutPage() {
   }
 
   const typeOptions: { value: WorkoutType; icon: typeof Dumbbell; label: string }[] = [
-    { value: 'conditioning', icon: Dumbbell, label: 'Conditioning' },
+    { value: 'conditioning', icon: Dumbbell, label: 'Gym' },
     { value: 'basketball', icon: BasketballIcon, label: 'Basketball' },
     { value: 'both', icon: BicepsFlexed, label: 'Both' },
   ]

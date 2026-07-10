@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { WorkoutCardSkeleton, StatCardSkeleton, Skeleton } from '@/components/Skeleton'
 import ClassDetailModal from '@/components/ClassDetailModal'
-import { getLocalDateString, formatLocalDate, formatDuration } from '@/lib/utils'
+import { getLocalDateString, formatLocalDate, formatDuration, isProgramDoneThisWeek } from '@/lib/utils'
 import { TodayPlanCard, SkippedPlansSection, typeBadge } from '@/components/PlanCards'
 import { AlertTriangle, Users, Settings, ClipboardList, CheckCircle2, SkipForward, Clock, MapPin, Calendar } from 'lucide-react'
 
@@ -84,14 +84,22 @@ export default function DashboardPage() {
       .order('created_at', { ascending: false }).limit(1).maybeSingle()
     setCoachNote(noteData)
 
-    // Pending (not-yet-done) assigned program, for the "You have programs for the week" banner
+    // Pending (not-yet-done) assigned program, for the "You have programs for the week" banner.
+    // "Done" is derived from this week's per-day athlete_program_completions — same check the
+    // Programs tab's Pending/Done split uses — not a separately-set status field, so this can't drift.
     if (prof?.role === 'member') {
-      const { count: pendingProgramCount } = await supabase
+      const { data: programs } = await supabase
         .from('athlete_programs')
-        .select('id', { count: 'exact', head: true })
+        .select('athlete_program_days(id, day_of_week)')
         .eq('member_id', uid)
-        .eq('status', 'pending')
-      setHasPendingProgram((pendingProgramCount ?? 0) > 0)
+      const dayIds = (programs ?? []).flatMap((p: any) => (p.athlete_program_days ?? []).map((d: any) => d.id))
+      let completions: any[] = []
+      if (dayIds.length > 0) {
+        const { data: completionsData } = await supabase.from('athlete_program_completions').select('program_day_id, occurrence_date').in('program_day_id', dayIds)
+        completions = completionsData ?? []
+      }
+      const anyPending = (programs ?? []).some((p: any) => !isProgramDoneThisWeek(p.athlete_program_days ?? [], completions))
+      setHasPendingProgram(anyPending)
     }
 
     // Coach-specific data

@@ -369,7 +369,7 @@ export default function CoachPage() {
     setTimeout(() => noteTextRef.current?.focus(), 50)
   }
   const [error, setError] = useState('')
-  const [confirmAction, setConfirmAction] = useState<{ type: 'removeAthleteProgram' | 'removeExerciseRow' | 'deleteGroup' | 'removeAthlete' | 'deleteAssignedPlan' | 'deleteNote'; payload?: any } | null>(null)
+  const [confirmAction, setConfirmAction] = useState<{ type: 'removeAthleteProgram' | 'removeExerciseRow' | 'deleteGroup' | 'removeAthlete' | 'deleteAssignedPlan' | 'deleteNote' | 'deleteProgramDay'; payload?: any } | null>(null)
   const [success, setSuccess] = useState('')
 
   // My Members
@@ -467,6 +467,9 @@ export default function CoachPage() {
   const [selectedAthleteProgram, setSelectedAthleteProgram] = useState<any | null>(null)
   const [programDays, setProgramDays] = useState<AthleteProgramDay[]>([])
   const [addAthletePickerOpen, setAddAthletePickerOpen] = useState(false)
+  const [programListSearch, setProgramListSearch] = useState('')
+  const [programListGroupFilter, setProgramListGroupFilter] = useState('all')
+  const [programListPage, setProgramListPage] = useState(1)
 
   const loadMyMembers = async (coachId: string) => {
     // coach_students is the authoritative source of "is this my current athlete" — every place a
@@ -533,7 +536,7 @@ export default function CoachPage() {
   const loadAthletePrograms = async (coachId: string) => {
     const { data } = await supabase
       .from('athlete_programs')
-      .select('*, member:profiles!member_id(name), athlete_program_days(id, athlete_program_exercises(count))')
+      .select('*, member:profiles!member_id(name), athlete_program_days(id, day_of_week, athlete_program_exercises(count))')
       .eq('coach_id', coachId)
       .order('created_at', { ascending: false })
     setAthletePrograms(data ?? [])
@@ -573,18 +576,18 @@ export default function CoachPage() {
     if (userId) await loadAthletePrograms(userId)
   }
 
-  const handleAddDay = async (dayOfWeek: number, title: string) => {
+  const handleAddDay = async (dayOfWeek: number, week: number, title: string) => {
     if (!selectedAthleteProgram) return
     setError('')
     const { data, error: err } = await supabase
       .from('athlete_program_days')
-      .insert({ program_id: selectedAthleteProgram.id, day_of_week: dayOfWeek, title })
+      .insert({ program_id: selectedAthleteProgram.id, day_of_week: dayOfWeek, week, title })
       .select('*, athlete_program_exercises(*)')
       .single()
     if (err || !data) { setError(err?.message ?? 'Failed to add day'); return }
     setProgramDays(prev => [...prev, data])
     setAthletePrograms(prev => prev.map(p => p.id === selectedAthleteProgram.id
-      ? { ...p, athlete_program_days: [...(p.athlete_program_days ?? []), { id: data.id, athlete_program_exercises: [{ count: 0 }] }] }
+      ? { ...p, athlete_program_days: [...(p.athlete_program_days ?? []), { id: data.id, day_of_week: data.day_of_week, athlete_program_exercises: [{ count: 0 }] }] }
       : p))
   }
 
@@ -593,6 +596,16 @@ export default function CoachPage() {
     const { error: err } = await supabase.from('athlete_program_days').update({ title }).eq('id', dayId)
     if (err) { setError(err.message); return }
     setProgramDays(prev => prev.map(d => d.id === dayId ? { ...d, title } : d))
+  }
+
+  const handleDeleteDay = async (dayId: string) => {
+    setError('')
+    const { error: err } = await supabase.from('athlete_program_days').delete().eq('id', dayId)
+    if (err) { setError(err.message); return }
+    setProgramDays(prev => prev.filter(d => d.id !== dayId))
+    setAthletePrograms(prev => prev.map(p => p.id === selectedAthleteProgram?.id
+      ? { ...p, athlete_program_days: (p.athlete_program_days ?? []).filter((d: any) => d.id !== dayId) }
+      : p))
   }
 
   const handleAddExerciseRow = async (dayId: string) => {
@@ -824,6 +837,15 @@ export default function CoachPage() {
     if (noteMemberFilter !== 'all' && !groupMembers[noteMemberFilter]) loadGroupMembers(noteMemberFilter)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteMemberFilter])
+
+  useEffect(() => {
+    if (programListGroupFilter !== 'all' && !groupMembers[programListGroupFilter]) loadGroupMembers(programListGroupFilter)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [programListGroupFilter])
+
+  useEffect(() => {
+    setProgramListPage(1)
+  }, [programListSearch, programListGroupFilter])
 
   const toggleMember = async (memberId: string) => {
     if (expandedMember === memberId) { setExpandedMember(null); return }
@@ -2718,52 +2740,97 @@ export default function CoachPage() {
                   )
                 })()}
 
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <input
+                    type="text" placeholder="Search athletes…" value={programListSearch}
+                    onChange={e => setProgramListSearch(e.target.value)}
+                    style={{ flex: 1, minWidth: '160px', minHeight: '44px', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none' }}
+                  />
+                  <select
+                    value={programListGroupFilter}
+                    onChange={e => setProgramListGroupFilter(e.target.value)}
+                    style={{ minHeight: '44px', background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.5rem', padding: '0.6rem 0.875rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', cursor: 'pointer' }}
+                  >
+                    <option value="all">All Groups</option>
+                    {myGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  </select>
+                </div>
+
                 {athletePrograms.length === 0 ? (
                   <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '3rem', textAlign: 'center' }}>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No athlete programs yet. Add an athlete to build their program.</p>
                   </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {athletePrograms.map(p => {
-                      const exCount = (p.athlete_program_days ?? []).reduce((sum: number, d: any) => sum + (d.athlete_program_exercises?.[0]?.count ?? 0), 0)
-                      return (
-                        <button
-                          key={p.id}
-                          onClick={() => openAthleteProgram(p)}
-                          className="card-vel"
-                          style={{ padding: '1.1rem 1.25rem', textAlign: 'left', width: '100%', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}
-                        >
-                          <p style={{ fontWeight: 700, fontSize: '1rem' }}>{p.member?.name ?? 'Unknown athlete'}</p>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <span style={{
-                              fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '999px',
-                              background: p.status === 'completed' ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)',
-                              color: p.status === 'completed' ? '#4ade80' : '#f59e0b',
-                              border: `1px solid ${p.status === 'completed' ? 'rgba(34,197,94,0.3)' : 'rgba(245,158,11,0.3)'}`,
-                            }}>
-                              {p.status === 'completed' ? 'Done' : 'Pending'}
-                            </span>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{exCount} exercise{exCount === 1 ? '' : 's'}</span>
-                          </div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
+                ) : (() => {
+                  const PAGE_SIZE = 5
+                  let filteredPrograms = !programListSearch.trim()
+                    ? athletePrograms
+                    : athletePrograms.filter((p: any) => p.member?.name?.toLowerCase().includes(programListSearch.trim().toLowerCase()))
+                  if (programListGroupFilter !== 'all') {
+                    const groupMemberIds = new Set((groupMembers[programListGroupFilter] ?? []).map((gm: any) => gm.member_id))
+                    filteredPrograms = filteredPrograms.filter((p: any) => groupMemberIds.has(p.member_id))
+                  }
+
+                  if (filteredPrograms.length === 0) {
+                    return (
+                      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '3rem', textAlign: 'center' }}>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No athletes match your filters.</p>
+                      </div>
+                    )
+                  }
+
+                  const totalPages = Math.ceil(filteredPrograms.length / PAGE_SIZE)
+                  const page = Math.min(programListPage, totalPages)
+                  const pageItems = filteredPrograms.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
+                  return (
+                    <>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        {pageItems.map(p => {
+                          const exCount = (p.athlete_program_days ?? []).reduce((sum: number, d: any) => sum + (d.athlete_program_exercises?.[0]?.count ?? 0), 0)
+                          return (
+                            <button
+                              key={p.id}
+                              onClick={() => openAthleteProgram(p)}
+                              className="card-vel"
+                              style={{ padding: '1.1rem 1.25rem', textAlign: 'left', width: '100%', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}
+                            >
+                              <p style={{ fontWeight: 700, fontSize: '1rem' }}>{p.member?.name ?? 'Unknown athlete'}</p>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{exCount} exercise{exCount === 1 ? '' : 's'}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+
+                      {totalPages > 1 && (
+                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.75rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+                          {page > 1 && (
+                            <button
+                              onClick={() => setProgramListPage(page - 1)}
+                              style={{ minHeight: '44px', background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.6rem 1.1rem', color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}
+                            >
+                              ← Previous
+                            </button>
+                          )}
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Page {page} of {totalPages}</span>
+                          {page < totalPages && (
+                            <button
+                              onClick={() => setProgramListPage(page + 1)}
+                              style={{ minHeight: '44px', background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.6rem 1.1rem', color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}
+                            >
+                              Next →
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
               </>
             ) : (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
                     <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>{selectedAthleteProgram.member?.name ?? 'ATHLETE'}&apos;S PROGRAM</h2>
-                    <span style={{
-                      fontSize: '0.65rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '999px',
-                      background: selectedAthleteProgram.status === 'completed' ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)',
-                      color: selectedAthleteProgram.status === 'completed' ? '#4ade80' : '#f59e0b',
-                      border: `1px solid ${selectedAthleteProgram.status === 'completed' ? 'rgba(34,197,94,0.3)' : 'rgba(245,158,11,0.3)'}`,
-                    }}>
-                      {selectedAthleteProgram.status === 'completed' ? 'Done' : 'Pending'}
-                    </span>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button onClick={() => setConfirmAction({ type: 'removeAthleteProgram', payload: selectedAthleteProgram })} style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171', borderRadius: '0.375rem', padding: '0.4rem 0.75rem', fontSize: '0.75rem', cursor: 'pointer', minHeight: 0 }}>Remove Athlete</button>
@@ -2779,6 +2846,7 @@ export default function CoachPage() {
                   editable
                   onAddDay={handleAddDay}
                   onUpdateDayTitle={handleUpdateDayTitle}
+                  onDeleteDay={dayId => setConfirmAction({ type: 'deleteProgramDay', payload: { dayId } })}
                   onAddExercise={handleAddExerciseRow}
                   onChangeExercise={handleChangeExerciseField}
                   onCommitExercise={handleCommitExerciseField}
@@ -2844,6 +2912,13 @@ export default function CoachPage() {
             confirmLabel: 'Delete',
             variant: 'destructive' as const,
             onConfirm: () => handleDeleteNote(confirmAction.payload.noteId),
+          },
+          deleteProgramDay: {
+            title: 'Delete Day',
+            message: 'Delete this day? This removes all of its exercises. This cannot be undone.',
+            confirmLabel: 'Delete',
+            variant: 'destructive' as const,
+            onConfirm: () => handleDeleteDay(confirmAction.payload.dayId),
           },
         }[confirmAction.type]
         return (

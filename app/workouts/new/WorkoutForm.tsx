@@ -466,7 +466,7 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
   }
 
   const typeOptions: { value: WorkoutType; icon: typeof Dumbbell; label: string; sub: string }[] = [
-    { value: 'conditioning', icon: Dumbbell, label: 'Conditioning', sub: 'Strength & cardio' },
+    { value: 'conditioning', icon: Dumbbell, label: 'Gym', sub: 'Strength & cardio' },
     { value: 'basketball', icon: BasketballIcon, label: 'Basketball', sub: 'Drills & skill work' },
     { value: 'both', icon: BicepsFlexed, label: 'Both', sub: 'Combined session' },
   ]
@@ -828,7 +828,7 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
                               : 'var(--text-secondary)',
                           }}
                         >
-                          {sec === 'basketball' ? <><BasketballIcon size={11} /> Basketball</> : <><Dumbbell size={11} /> Conditioning</>}
+                          {sec === 'basketball' ? <><BasketballIcon size={11} /> Basketball</> : <><Dumbbell size={11} /> Gym</>}
                         </button>
                       ))}
                     </div>

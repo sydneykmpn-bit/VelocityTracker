@@ -26,6 +26,7 @@ export interface AthleteProgramExercise {
 export interface AthleteProgramDay {
   id: string
   day_of_week: number
+  week?: number | null
   title: string
   athlete_program_exercises?: AthleteProgramExercise[]
 }
@@ -340,8 +341,9 @@ interface Props {
   editable?: boolean
 
   // coach-only
-  onAddDay?: (dayOfWeek: number, title: string) => void
+  onAddDay?: (dayOfWeek: number, week: number, title: string) => void
   onUpdateDayTitle?: (dayId: string, title: string) => void
+  onDeleteDay?: (dayId: string) => void
   onAddExercise?: (dayId: string) => void
   onChangeExercise?: (dayId: string, idx: number, field: keyof AthleteProgramExercise, value: string) => void
   onCommitExercise?: (dayId: string, idx: number, field: keyof AthleteProgramExercise, value: string) => void
@@ -357,21 +359,35 @@ interface Props {
 
 export default function AthleteProgramTable({
   days, editable = false,
-  onAddDay, onUpdateDayTitle, onAddExercise, onChangeExercise, onCommitExercise, onRemoveExercise,
+  onAddDay, onUpdateDayTitle, onDeleteDay, onAddExercise, onChangeExercise, onCommitExercise, onRemoveExercise,
   showCompletion = false, isDayDone, onMarkDone, onUndoDone, completingDayId = null,
 }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null)
   const [addDayOpen, setAddDayOpen] = useState(false)
-  const [newDayOfWeek, setNewDayOfWeek] = useState<number | null>(null)
+  const [newDayWeek, setNewDayWeek] = useState(1)
   const [newDayTitle, setNewDayTitle] = useState(DAY_TITLE_PRESETS[0])
   const [newDayTitleCustom, setNewDayTitleCustom] = useState('')
   const [modeOverride, setModeOverride] = useState<Record<string, ExerciseMode>>({})
+  const [expandedWeeks, setExpandedWeeks] = useState<Set<number>>(new Set())
+  const [selectedWeek, setSelectedWeek] = useState<number | null>(null)
+
+  // Rows created before the "week" column existed (or not yet refreshed from a pre-migration
+  // insert) default to Week 1, so nothing in the DB needs a backfill for this to display correctly.
+  const weekOf = (d: AthleteProgramDay) => d.week ?? 1
 
   const toggleExpanded = (id: string) => {
     setExpanded(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const toggleWeekExpanded = (w: number) => {
+    setExpandedWeeks(prev => {
+      const next = new Set(prev)
+      if (next.has(w)) next.delete(w); else next.add(w)
       return next
     })
   }
@@ -397,124 +413,198 @@ export default function AthleteProgramTable({
     }
   }
 
-  const sortedDays = [...days].sort((a, b) => a.day_of_week - b.day_of_week)
-  const takenDays = new Set(days.map(d => d.day_of_week))
-  const availableDaysToAdd = DAY_LABELS_FULL.map((label, i) => ({ label, value: i })).filter(d => !takenDays.has(d.value))
+  const allWeeks = Array.from(new Set(days.map(weekOf))).sort((a, b) => a - b)
+  // Keep whatever week the Add Day form currently has selected in the option list even if it's a
+  // brand new week number with no days in it yet (so the <select> always has a matching option).
+  const weekOptions = Array.from(new Set([...allWeeks, newDayWeek])).sort((a, b) => a - b)
+  const takenDaysForNewWeek = new Set(days.filter(d => weekOf(d) === newDayWeek).map(d => d.day_of_week))
+  const isNewDayWeekFull = takenDaysForNewWeek.size >= 7
 
   const submitAddDay = () => {
-    if (newDayOfWeek === null) return
+    const nextDayOfWeek = DAY_LABELS_FULL.findIndex((_, i) => !takenDaysForNewWeek.has(i))
+    if (nextDayOfWeek === -1) return
     const title = newDayTitle === 'Custom' ? newDayTitleCustom.trim() : newDayTitle
     if (!title) return
-    onAddDay?.(newDayOfWeek, title)
+    onAddDay?.(nextDayOfWeek, newDayWeek, title)
     setAddDayOpen(false)
-    setNewDayOfWeek(null)
     setNewDayTitle(DAY_TITLE_PRESETS[0])
     setNewDayTitleCustom('')
   }
 
-  return (
-    <div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-        {sortedDays.map(day => {
-          const allExercises = day.athlete_program_exercises ?? []
-          const indexed = allExercises.map((ex, idx) => ({ ex, idx }))
+  const renderDayCard = (day: AthleteProgramDay) => {
+    const allExercises = day.athlete_program_exercises ?? []
+    const indexed = allExercises.map((ex, idx) => ({ ex, idx }))
 
-          const isExpanded = expanded.has(day.id)
-          const isEditingTitle = editingTitleId === day.id
-          const done = showCompletion && isDayDone?.(day)
-          const completing = completingDayId === day.id
+    const isExpanded = expanded.has(day.id)
+    const isEditingTitle = editingTitleId === day.id
+    const done = showCompletion && isDayDone?.(day)
+    const completing = completingDayId === day.id
 
-          return (
-            <div key={day.id} style={{ border: '1px solid var(--border)', borderRadius: '0.5rem', overflow: 'hidden' }}>
-              <div
-                onClick={() => toggleExpanded(day.id)}
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem',
-                  padding: '0.75rem 1rem', background: 'var(--surface)', cursor: 'pointer', flexWrap: 'wrap',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-                  {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)' }} />}
-                  {isEditingTitle ? (
-                    <DayTitlePicker
-                      initial={day.title}
-                      onSave={title => { onUpdateDayTitle?.(day.id, title); setEditingTitleId(null) }}
-                      onCancel={() => setEditingTitleId(null)}
-                    />
-                  ) : (
-                    <p style={{ fontWeight: 700, fontSize: '0.9rem' }}>
-                      {day.title}
-                    </p>
-                  )}
-                  {editable && !isEditingTitle && (
-                    <button type="button" onClick={e => { e.stopPropagation(); setEditingTitleId(day.id) }} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0 }}>
-                      <Pencil size={13} />
-                    </button>
-                  )}
-                  {done && (
-                    <span style={{ fontSize: '0.65rem', background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.3)', padding: '0.15rem 0.5rem', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontWeight: 700 }}>
-                      <Check size={11} /> Done
-                    </span>
-                  )}
-                </div>
-                {showCompletion && (
-                  <button
-                    type="button"
-                    disabled={completing}
-                    onClick={e => { e.stopPropagation(); done ? onUndoDone?.(day) : onMarkDone?.(day) }}
-                    style={{
-                      background: done ? 'none' : 'var(--teal-primary)',
-                      border: done ? '1px solid var(--border)' : 'none',
-                      color: done ? 'var(--text-secondary)' : 'white',
-                      borderRadius: '0.375rem', padding: '0.4rem 0.75rem', fontSize: '0.75rem', fontWeight: 700,
-                      cursor: completing ? 'default' : 'pointer', opacity: completing ? 0.6 : 1,
-                      display: 'inline-flex', alignItems: 'center', gap: '0.3rem', minHeight: 0,
-                    }}
-                  >
-                    {done ? <><Undo2 size={12} /> Undo</> : (completing ? 'Saving…' : <><Check size={12} /> Mark Done</>)}
-                  </button>
-                )}
-              </div>
+    return (
+      <div key={day.id} style={{ border: '1px solid var(--border)', borderRadius: '0.5rem', overflow: 'hidden' }}>
+        <div
+          onClick={() => toggleExpanded(day.id)}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem',
+            padding: '0.75rem 1rem', background: 'var(--surface)', cursor: 'pointer', flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+            {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)' }} />}
+            {isEditingTitle ? (
+              <DayTitlePicker
+                initial={day.title}
+                onSave={title => { onUpdateDayTitle?.(day.id, title); setEditingTitleId(null) }}
+                onCancel={() => setEditingTitleId(null)}
+              />
+            ) : (
+              <p style={{ fontWeight: 700, fontSize: '0.9rem' }}>
+                {day.title}
+              </p>
+            )}
+            {editable && !isEditingTitle && (
+              <button type="button" onClick={e => { e.stopPropagation(); setEditingTitleId(day.id) }} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0 }}>
+                <Pencil size={13} />
+              </button>
+            )}
+            {editable && !isEditingTitle && (
+              <button type="button" onClick={e => { e.stopPropagation(); onDeleteDay?.(day.id) }} title="Delete day" style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0 }}>
+                <Trash2 size={13} />
+              </button>
+            )}
+            {done && (
+              <span style={{ fontSize: '0.65rem', background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.3)', padding: '0.15rem 0.5rem', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontWeight: 700 }}>
+                <Check size={11} /> Done
+              </span>
+            )}
+          </div>
+          {showCompletion && (
+            <button
+              type="button"
+              disabled={completing}
+              onClick={e => { e.stopPropagation(); done ? onUndoDone?.(day) : onMarkDone?.(day) }}
+              style={{
+                background: done ? 'none' : 'var(--teal-primary)',
+                border: done ? '1px solid var(--border)' : 'none',
+                color: done ? 'var(--text-secondary)' : 'white',
+                borderRadius: '0.375rem', padding: '0.4rem 0.75rem', fontSize: '0.75rem', fontWeight: 700,
+                cursor: completing ? 'default' : 'pointer', opacity: completing ? 0.6 : 1,
+                display: 'inline-flex', alignItems: 'center', gap: '0.3rem', minHeight: 0,
+              }}
+            >
+              {done ? <><Undo2 size={12} /> Undo</> : (completing ? 'Saving…' : <><Check size={12} /> Mark Done</>)}
+            </button>
+          )}
+        </div>
 
-              {isExpanded && (
-                <div style={{ padding: '0.875rem', background: '#0a1518' }}>
-                  <ExerciseTable
-                    exercises={indexed}
-                    editable={editable}
-                    dayId={day.id}
-                    modeOverride={modeOverride}
-                    onToggleMode={editable ? idx => toggleExerciseMode(day, idx) : undefined}
-                    onChange={editable ? (idx, field, val) => onChangeExercise?.(day.id, idx, field, val) : undefined}
-                    onCommit={editable ? (idx, field, val) => onCommitExercise?.(day.id, idx, field, val) : undefined}
-                    onRemove={editable ? idx => onRemoveExercise?.(day.id, idx) : undefined}
-                    onAdd={editable ? () => onAddExercise?.(day.id) : undefined}
-                  />
-                </div>
-              )}
-            </div>
-          )
-        })}
-
-        {sortedDays.length === 0 && (
-          <div style={{ border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '2rem', textAlign: 'center' }}>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>No days in this program yet.</p>
+        {isExpanded && (
+          <div style={{ padding: '0.875rem', background: '#0a1518' }}>
+            <ExerciseTable
+              exercises={indexed}
+              editable={editable}
+              dayId={day.id}
+              modeOverride={modeOverride}
+              onToggleMode={editable ? idx => toggleExerciseMode(day, idx) : undefined}
+              onChange={editable ? (idx, field, val) => onChangeExercise?.(day.id, idx, field, val) : undefined}
+              onCommit={editable ? (idx, field, val) => onCommitExercise?.(day.id, idx, field, val) : undefined}
+              onRemove={editable ? idx => onRemoveExercise?.(day.id, idx) : undefined}
+              onAdd={editable ? () => onAddExercise?.(day.id) : undefined}
+            />
           </div>
         )}
       </div>
+    )
+  }
+
+  return (
+    <div>
+      {days.length === 0 ? (
+        <div style={{ border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '2rem', textAlign: 'center' }}>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>No days in this program yet.</p>
+        </div>
+      ) : editable ? (
+        // Coach: stacked collapsible Week sections, each containing that week's day cards.
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {allWeeks.map(w => {
+            const weekDays = days.filter(d => weekOf(d) === w).sort((a, b) => a.day_of_week - b.day_of_week)
+            const isWeekExpanded = expandedWeeks.has(w)
+            return (
+              <div key={w} style={{ border: '1px solid var(--teal-primary)', borderRadius: '0.5rem', overflow: 'hidden' }}>
+                <div
+                  onClick={() => toggleWeekExpanded(w)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem',
+                    background: 'var(--surface)', cursor: 'pointer', flexWrap: 'wrap',
+                  }}
+                >
+                  {isWeekExpanded ? <ChevronUp size={16} style={{ color: 'var(--teal-secondary)' }} /> : <ChevronDown size={16} style={{ color: 'var(--teal-secondary)' }} />}
+                  <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.1rem', letterSpacing: '0.03em', color: 'var(--teal-secondary)' }}>WEEK {w}</p>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>({weekDays.length} day{weekDays.length === 1 ? '' : 's'})</span>
+                </div>
+                {isWeekExpanded && (
+                  <div style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                    {weekDays.map(renderDayCard)}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      ) : (() => {
+        // Student: switch between weeks via tabs, showing only the selected week's day cards.
+        const effectiveWeek = selectedWeek !== null && allWeeks.includes(selectedWeek) ? selectedWeek : allWeeks[0]
+        const weekDays = days.filter(d => weekOf(d) === effectiveWeek).sort((a, b) => a.day_of_week - b.day_of_week)
+        return (
+          <div>
+            {allWeeks.length > 1 && (
+              <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                {allWeeks.map(w => (
+                  <button
+                    key={w}
+                    type="button"
+                    onClick={() => setSelectedWeek(w)}
+                    style={{
+                      padding: '0.5rem 0.9rem', minHeight: '44px', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
+                      background: effectiveWeek === w ? 'var(--teal-primary)' : 'var(--surface-raised)',
+                      color: effectiveWeek === w ? 'white' : 'var(--text-secondary)',
+                      border: `1px solid ${effectiveWeek === w ? 'var(--teal-primary)' : 'var(--border)'}`,
+                    }}
+                  >
+                    Week {w}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+              {weekDays.map(renderDayCard)}
+            </div>
+          </div>
+        )
+      })()}
 
       {editable && (
         <div style={{ marginTop: '0.875rem' }}>
           {!addDayOpen ? (
-            <button type="button" onClick={() => { setNewDayOfWeek(availableDaysToAdd[0]?.value ?? null); setAddDayOpen(true) }} disabled={availableDaysToAdd.length === 0} style={{
+            <button type="button" onClick={() => { setNewDayWeek(allWeeks.length ? Math.max(...allWeeks) : 1); setAddDayOpen(true) }} style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', width: '100%',
               background: 'transparent', border: '1px dashed #1a2e34', borderRadius: '0.5rem', padding: '0.6rem',
-              color: availableDaysToAdd.length === 0 ? 'var(--border)' : 'var(--text-secondary)',
-              cursor: availableDaysToAdd.length === 0 ? 'not-allowed' : 'pointer', fontSize: '0.8rem',
+              color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem',
             }}>
-              <Plus size={14} /> {availableDaysToAdd.length === 0 ? 'All days added' : 'Add Day'}
+              <Plus size={14} /> Add Day
             </button>
           ) : (
             <div style={{ background: 'var(--surface)', border: '1px solid var(--teal-primary)', borderRadius: '0.5rem', padding: '0.875rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <select
+                value={newDayWeek}
+                onChange={e => {
+                  const v = e.target.value
+                  setNewDayWeek(v === '__new__' ? (allWeeks.length ? Math.max(...allWeeks) : 0) + 1 : Number(v))
+                }}
+                style={{ ...filterInput, width: 'auto', cursor: 'pointer' }}
+              >
+                {weekOptions.map(w => <option key={w} value={w}>Week {w}</option>)}
+                <option value="__new__">+ Add Week</option>
+              </select>
               <select value={newDayTitle} onChange={e => setNewDayTitle(e.target.value)} style={{ ...filterInput, width: 'auto', cursor: 'pointer' }}>
                 {DAY_TITLE_PRESETS.map(p => <option key={p} value={p}>{p}</option>)}
                 <option value="Custom">Custom…</option>
@@ -522,12 +612,15 @@ export default function AthleteProgramTable({
               {newDayTitle === 'Custom' && (
                 <input type="text" value={newDayTitleCustom} onChange={e => setNewDayTitleCustom(e.target.value)} placeholder="Custom title" style={{ ...filterInput, width: 'auto' }} />
               )}
-              <button type="button" onClick={submitAddDay} disabled={newDayOfWeek === null} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.55rem 0.875rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', minHeight: 0 }}>
+              <button type="button" onClick={submitAddDay} disabled={isNewDayWeekFull} style={{ background: 'var(--teal-primary)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.55rem 0.875rem', fontWeight: 700, fontSize: '0.8rem', cursor: isNewDayWeekFull ? 'not-allowed' : 'pointer', minHeight: 0, opacity: isNewDayWeekFull ? 0.5 : 1 }}>
                 Add
               </button>
               <button type="button" onClick={() => setAddDayOpen(false)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.55rem 0.75rem', color: 'var(--text-secondary)', fontSize: '0.8rem', cursor: 'pointer', minHeight: 0 }}>
                 Cancel
               </button>
+              {isNewDayWeekFull && (
+                <p style={{ width: '100%', fontSize: '0.7rem', color: '#f59e0b' }}>Week {newDayWeek} already has all 7 days — pick another week or add a new one.</p>
+              )}
             </div>
           )}
         </div>

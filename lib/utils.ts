@@ -121,6 +121,21 @@ export function getCurrentWeekOccurrenceDate(dayOfWeek: number, timeZone = 'Asia
   return formatDateYMD(occurrence)
 }
 
+// A program is "done" for the current week only once every one of its days has a matching
+// athlete_program_completions row for that day's occurrence date this week. This is the single
+// source of truth for the Pending/Done split on both the student and coach Programs views — there
+// is no separate manually-set "done" field, so the tabs/badges can never drift from what the
+// per-day Mark Done buttons actually show.
+export function isProgramDoneThisWeek(
+  days: { id: string; day_of_week: number }[],
+  completions: { program_day_id: string; occurrence_date: string }[]
+): boolean {
+  if (days.length === 0) return false
+  return days.every(d =>
+    completions.some(c => c.program_day_id === d.id && c.occurrence_date === getCurrentWeekOccurrenceDate(d.day_of_week))
+  )
+}
+
 // Format a 24h "HH:MM" time string as "H:MM AM/PM"
 export function formatTimeLabel(t: string): string {
   if (!t) return ''

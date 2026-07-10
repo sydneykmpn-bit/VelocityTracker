@@ -109,8 +109,6 @@ function StudentPageInner() {
   const [programCompletions, setProgramCompletions] = useState<any[]>([])
   const [completingDayId, setCompletingDayId] = useState<string | null>(null)
   const [programError, setProgramError] = useState('')
-  const [programStatusFilter, setProgramStatusFilter] = useState<'pending' | 'completed'>('pending')
-  const [programStatusSavingId, setProgramStatusSavingId] = useState<string | null>(null)
   const [deletePRConfirmId, setDeletePRConfirmId] = useState<string | null>(null)
 
   const reloadPlans = async (uid: string) => {
@@ -236,7 +234,7 @@ function StudentPageInner() {
       title: day.title,
       type: deriveWorkoutType(day),
       notes: `Auto-logged from assigned program.`,
-      date: occurrenceDate,
+      date: getLocalDateString(),
     }).select().single()
     if (workoutErr || !newWorkout) {
       console.error('handleMarkDayDone: workout insert failed:', workoutErr)
@@ -299,87 +297,6 @@ function StudentPageInner() {
 
     setProgramCompletions(prev => prev.filter(c => c.id !== completion.id))
     setCompletingDayId(null)
-  }
-
-  const handleMarkProgramDone = async (program: any) => {
-    setProgramError('')
-    setProgramStatusSavingId(program.id)
-
-    // Auto-log a real workout for this program, same shape/pattern as handleMarkDayDone /
-    // handleQuickPlanAction elsewhere — pulls every exercise across all of this program's days.
-    const allExercises = (program.athlete_program_days ?? []).flatMap((d: any) => d.athlete_program_exercises ?? [])
-
-    const { data: newWorkout, error: workoutErr } = await supabase.from('workouts').insert({
-      user_id: userId,
-      title: program.coach?.name ? `${program.coach.name}'s Program` : 'My Program',
-      type: 'conditioning',
-      notes: 'Auto-logged from completed program.',
-      date: getLocalDateString(),
-    }).select().single()
-    if (workoutErr || !newWorkout) {
-      console.error('handleMarkProgramDone: workout insert failed:', workoutErr)
-      setProgramError(workoutErr?.message ?? 'Failed to log workout for this program.')
-      setProgramStatusSavingId(null)
-      return
-    }
-
-    if (allExercises.length > 0) {
-      const { error: exErr } = await supabase.from('exercises').insert(
-        allExercises.map((ex: any) => ({
-          workout_id: newWorkout.id,
-          name: ex.name, sets: ex.sets, reps: ex.reps, weight: ex.weight, notes: ex.notes,
-        }))
-      )
-      if (exErr) {
-        console.error('handleMarkProgramDone: exercises insert failed:', exErr)
-        await supabase.from('workouts').delete().eq('id', newWorkout.id)
-        setProgramError(exErr.message)
-        setProgramStatusSavingId(null)
-        return
-      }
-    }
-
-    const { data, error: err } = await supabase
-      .from('athlete_programs')
-      .update({ status: 'completed', completed_at: new Date().toISOString(), auto_logged_workout_id: newWorkout.id })
-      .eq('id', program.id)
-      .select()
-      .single()
-    setProgramStatusSavingId(null)
-    if (err || !data) {
-      console.error('handleMarkProgramDone failed:', err)
-      setProgramError(err?.message ?? 'Failed to mark this program as done.')
-      await supabase.from('exercises').delete().eq('workout_id', newWorkout.id)
-      await supabase.from('workouts').delete().eq('id', newWorkout.id)
-      return
-    }
-    setAssignedPrograms(prev => prev.map(p => p.id === program.id ? { ...p, ...data } : p))
-  }
-
-  const handleMarkProgramPending = async (program: any) => {
-    setProgramError('')
-    setProgramStatusSavingId(program.id)
-
-    if (program.auto_logged_workout_id) {
-      const { error: exErr } = await supabase.from('exercises').delete().eq('workout_id', program.auto_logged_workout_id)
-      if (exErr) { console.error('handleMarkProgramPending: exercises delete failed:', exErr); setProgramError(exErr.message); setProgramStatusSavingId(null); return }
-      const { error: woErr } = await supabase.from('workouts').delete().eq('id', program.auto_logged_workout_id)
-      if (woErr) { console.error('handleMarkProgramPending: workout delete failed:', woErr); setProgramError(woErr.message); setProgramStatusSavingId(null); return }
-    }
-
-    const { data, error: err } = await supabase
-      .from('athlete_programs')
-      .update({ status: 'pending', completed_at: null, auto_logged_workout_id: null })
-      .eq('id', program.id)
-      .select()
-      .single()
-    setProgramStatusSavingId(null)
-    if (err || !data) {
-      console.error('handleMarkProgramPending failed:', err)
-      setProgramError(err?.message ?? 'Failed to mark this program as pending.')
-      return
-    }
-    setAssignedPrograms(prev => prev.map(p => p.id === program.id ? { ...p, ...data } : p))
   }
 
   const handleDeletePR = async (prId: string) => {
@@ -479,7 +396,9 @@ function StudentPageInner() {
       ? String(a.scheduled_date).localeCompare(String(b.scheduled_date))
       : String(b.scheduled_date).localeCompare(String(a.scheduled_date))
   )
-  const planCompletionRate = assignedPlans.length > 0 ? Math.round((completedPlans.length / assignedPlans.length) * 100) : 0
+  const pendingProgramDays = assignedPrograms
+    .flatMap(p => p.athlete_program_days ?? [])
+    .filter(d => !isDayDoneThisWeek(d))
   const firstName = profile?.name?.split(' ')[0] ?? 'Athlete'
 
   if (loading) {
@@ -538,9 +457,8 @@ function StudentPageInner() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
           {[
-            { label: 'Pending Plans', value: pendingPlans.length, color: '#f59e0b' },
-            { label: 'Completed', value: completedPlans.length, color: '#4ade80' },
-            { label: 'Completion Rate', value: `${planCompletionRate}%`, color: 'var(--teal-secondary)' },
+            { label: 'Pending', value: pendingPlans.length + pendingProgramDays.length, color: '#f59e0b' },
+            { label: 'Completed', value: completedPlans.length + programCompletions.length, color: '#4ade80' },
           ].map(s => (
             <div key={s.label} style={{ ...cardStyle, padding: '1.1rem', textAlign: 'center' }}>
               <p style={{ fontFamily: 'var(--font-bebas)', fontSize: '2.25rem', color: s.color, lineHeight: 1 }}>{s.value}</p>
@@ -942,80 +860,39 @@ function StudentPageInner() {
           </div>
         )}
 
-        {activeTab === 'programs' && (() => {
-          const filteredPrograms = assignedPrograms.filter(p => (p.status ?? 'pending') === programStatusFilter)
-          return (
-            <div key="tab-programs">
-              {programError && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{programError}</div>}
+        {activeTab === 'programs' && (
+          <div key="tab-programs">
+            {programError && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{programError}</div>}
 
-              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-                {(['pending', 'completed'] as const).map(s => (
-                  <button
-                    key={s}
-                    onClick={() => setProgramStatusFilter(s)}
-                    style={{
-                      background: programStatusFilter === s ? 'rgba(8,119,160,0.15)' : 'none',
-                      border: `1px solid ${programStatusFilter === s ? 'var(--teal-primary)' : 'var(--border)'}`,
-                      borderRadius: '0.5rem', padding: '0.6rem 1rem', minHeight: '44px',
-                      color: programStatusFilter === s ? 'var(--teal-secondary)' : 'var(--text-secondary)',
-                      fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer',
-                    }}
-                  >
-                    {s === 'pending' ? 'Pending' : 'Done'} ({assignedPrograms.filter(p => (p.status ?? 'pending') === s).length})
-                  </button>
+            {assignedPrograms.length === 0 ? (
+              <div style={{ ...cardStyle, padding: '3rem', textAlign: 'center' }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No program assigned yet.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                {assignedPrograms.map(program => (
+                  <div key={program.id} style={{ ...cardStyle, padding: '1.25rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', flexWrap: 'wrap' }}>
+                      <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>
+                        {program.coach?.name ? `${program.coach.name}'s Program` : 'My Program'}
+                      </h2>
+                    </div>
+                    <div style={{ marginTop: '1rem' }}>
+                      <AthleteProgramTable
+                        days={program.athlete_program_days ?? []}
+                        showCompletion
+                        isDayDone={isDayDoneThisWeek}
+                        onMarkDone={handleMarkDayDone}
+                        onUndoDone={handleUndoDayDone}
+                        completingDayId={completingDayId}
+                      />
+                    </div>
+                  </div>
                 ))}
               </div>
-
-              {filteredPrograms.length === 0 ? (
-                <div style={{ ...cardStyle, padding: '3rem', textAlign: 'center' }}>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-                    {assignedPrograms.length === 0 ? 'No program assigned yet.' : (programStatusFilter === 'pending' ? 'No pending programs.' : 'No programs marked done yet.')}
-                  </p>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                  {filteredPrograms.map(program => {
-                    const isDone = program.status === 'completed'
-                    const savingStatus = programStatusSavingId === program.id
-                    return (
-                      <div key={program.id} style={{ ...cardStyle, padding: '1.25rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', flexWrap: 'wrap' }}>
-                          <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em' }}>
-                            {program.coach?.name ? `${program.coach.name}'s Program` : 'My Program'}
-                          </h2>
-                          <button
-                            onClick={() => isDone ? handleMarkProgramPending(program) : handleMarkProgramDone(program)}
-                            disabled={savingStatus}
-                            style={{
-                              display: 'inline-flex', alignItems: 'center', gap: '0.35rem', minHeight: '44px',
-                              background: isDone ? 'none' : 'var(--teal-primary)',
-                              border: isDone ? '1px solid var(--border)' : 'none',
-                              color: isDone ? 'var(--text-secondary)' : 'white',
-                              borderRadius: '0.5rem', padding: '0.5rem 0.875rem', fontSize: '0.8rem', fontWeight: 700,
-                              cursor: savingStatus ? 'default' : 'pointer', opacity: savingStatus ? 0.6 : 1,
-                            }}
-                          >
-                            {savingStatus ? 'Saving…' : (isDone ? <><Check size={14} /> Mark Pending</> : 'Mark Program Done')}
-                          </button>
-                        </div>
-                        <div style={{ marginTop: '1rem' }}>
-                          <AthleteProgramTable
-                            days={program.athlete_program_days ?? []}
-                            showCompletion
-                            isDayDone={isDayDoneThisWeek}
-                            onMarkDone={handleMarkDayDone}
-                            onUndoDone={handleUndoDayDone}
-                            completingDayId={completingDayId}
-                          />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )
-        })()}
+            )}
+          </div>
+        )}
 
       </main>
 
