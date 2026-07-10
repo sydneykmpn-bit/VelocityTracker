@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Trash2, Mars, Venus, Medal, Flame, BicepsFlexed, Hand, Trophy, Search, X, MessageCircle } from 'lucide-react'
 import { debounce, getLocalDateString, normalizeToKg, sortRecords, LOWER_IS_BETTER, convertWeightForDisplay } from '@/lib/utils'
+import { logAction } from '@/lib/auditLog'
+import ConfirmModal from '@/components/ConfirmModal'
 
 type LeaderTab = 'public' | 'mine'
 const UNITS = ['kg', 'lbs', 'reps', 'seconds', 'minutes', 'kmh', 'mph'] as const
@@ -104,7 +106,10 @@ export default function LeaderboardPage() {
   const router = useRouter()
   const supabase = createClient()
   const [userId, setUserId] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<string | null>(null)
   const [preferredWeightUnit, setPreferredWeightUnit] = useState<'kg' | 'lbs'>('kg')
+  const [adminDeleteTarget, setAdminDeleteTarget] = useState<any>(null)
+  const [adminDeleting, setAdminDeleting] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<LeaderTab>('public')
   const [publicRecords, setPublicRecords] = useState<any[]>([])
   const [myRecords, setMyRecords] = useState<any[]>([])
@@ -245,8 +250,9 @@ export default function LeaderboardPage() {
       if (!user) { router.push('/login'); return }
       setUserId(user.id)
 
-      const { data: profile } = await supabase.from('profiles').select('preferred_weight_unit').eq('id', user.id).single()
+      const { data: profile } = await supabase.from('profiles').select('preferred_weight_unit, role').eq('id', user.id).single()
       setPreferredWeightUnit((profile?.preferred_weight_unit as 'kg' | 'lbs') || 'kg')
+      setUserRole(profile?.role || null)
 
       const { error: archiveError } = await supabase.rpc('archive_old_leaderboard_records')
       if (archiveError) console.error('archive_old_leaderboard_records failed:', archiveError)
@@ -312,6 +318,39 @@ export default function LeaderboardPage() {
     setDeleting(null)
   }
 
+  // Admin/coach moderation removal from the public leaderboard — unlike handleDelete (a member
+  // removing their own PR), this is acting on someone else's record, so it's audit-logged.
+  const handleAdminDeletePR = async (record: any) => {
+    if (!userId) return
+    setAdminDeleting(record.id)
+    setError('')
+    const { data, error: err } = await supabase.from('personal_records').delete().eq('id', record.id).select('id')
+    if (err) {
+      setError(err.message)
+      setAdminDeleting(null)
+      setAdminDeleteTarget(null)
+      return
+    }
+    if (!data || data.length === 0) {
+      setError('Nothing was deleted — you may not have permission to remove another member’s PR (check the personal_records DELETE policy).')
+      setAdminDeleting(null)
+      setAdminDeleteTarget(null)
+      return
+    }
+    await logAction(supabase, {
+      category: 'other', action_type: 'delete_pr', target_type: 'personal_records', target_id: record.id,
+      details: {
+        target_name: record.profiles?.name,
+        exercise_name: record.exercise_name,
+        value: record.value,
+        unit: record.unit,
+      },
+    })
+    await loadData(userId)
+    setAdminDeleting(null)
+    setAdminDeleteTarget(null)
+  }
+
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--background)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -354,7 +393,7 @@ export default function LeaderboardPage() {
             {/* Info banner */}
             <div style={{ background: 'rgba(8,119,160,0.1)', border: '1px solid rgba(8,119,160,0.2)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--teal-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               {activeTab === 'public'
-                ? <><Trophy size={14} style={{ flexShrink: 0 }} /> Public leaderboard tracks 3 main lifts + sprint. Selecting an exercise auto-sets the unit.</>
+                ? <><Trophy size={14} style={{ flexShrink: 0 }} /> Public leaderboard tracks 3 main lifts + sprint</>
                 : <><BicepsFlexed size={14} style={{ flexShrink: 0 }} /> Personal PRs are visible only to you and can be any exercise.</>}
             </div>
 
@@ -529,6 +568,7 @@ export default function LeaderboardPage() {
             </div>
 
             {reactionError && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{reactionError}</div>}
+            {!showForm && error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{error}</div>}
 
             {/* Mobile card layout */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }} className="lb-mobile">
@@ -590,6 +630,19 @@ export default function LeaderboardPage() {
                         }}>
                           <MessageCircle size={13} /> {comments.length > 0 && comments.length}
                         </button>
+                        {(userRole === 'admin' || userRole === 'coach') && (
+                          <button
+                            onClick={() => setAdminDeleteTarget(r)}
+                            disabled={adminDeleting === r.id}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'var(--surface-raised)', border: '1px solid rgba(239,68,68,0.4)',
+                              borderRadius: '999px', padding: '0.3rem 0.625rem', fontSize: '0.75rem', cursor: adminDeleting === r.id ? 'not-allowed' : 'pointer',
+                              color: '#f87171', opacity: adminDeleting === r.id ? 0.5 : 1, minHeight: 0, marginLeft: 'auto',
+                            }}
+                          >
+                            <Trash2 size={13} /> Remove
+                          </button>
+                        )}
                       </div>
 
                       {/* Comment thread */}
@@ -667,6 +720,16 @@ export default function LeaderboardPage() {
           </div>
         )}
       </main>
+      {adminDeleteTarget && (
+        <ConfirmModal
+          title="Remove PR"
+          message={`Remove ${adminDeleteTarget.profiles?.name ?? 'this member'}'s ${adminDeleteTarget.exercise_name} PR from the leaderboard? This cannot be undone.`}
+          confirmLabel="Remove"
+          variant="destructive"
+          onConfirm={() => handleAdminDeletePR(adminDeleteTarget)}
+          onCancel={() => setAdminDeleteTarget(null)}
+        />
+      )}
     </div>
   )
 }

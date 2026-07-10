@@ -19,6 +19,13 @@ const TYPE_BADGE: Record<string, { bg: string; color: string; border: string }> 
   conditioning: { bg: 'rgba(34,197,94,0.15)', color: '#4ade80', border: 'rgba(34,197,94,0.25)' },
   both: { bg: 'rgba(168,85,247,0.15)', color: '#c084fc', border: 'rgba(168,85,247,0.25)' },
 }
+// Display-only relabeling — the underlying type value stays 'conditioning' (shared with
+// workouts/workout_plans/etc.), only the Templates page shows it as "Gym".
+const TYPE_LABELS: Record<string, string> = {
+  conditioning: 'Gym',
+  basketball: 'Basketball',
+  both: 'Both',
+}
 function typeIconFor(t: string) {
   if (t === 'conditioning') return Dumbbell
   if (t === 'basketball') return Volleyball
@@ -274,7 +281,7 @@ export default function TemplatesPage() {
                         background: createForm.type === t ? 'rgba(8,119,160,0.2)' : 'var(--surface-raised)',
                         border: `1px solid ${createForm.type === t ? 'var(--teal-primary)' : 'var(--border)'}`,
                         color: createForm.type === t ? 'var(--teal-secondary)' : 'var(--text-secondary)',
-                      }}><TypeIcon size={12} /> {t === 'both' ? 'Both' : t.charAt(0).toUpperCase() + t.slice(1)}</button>
+                      }}><TypeIcon size={12} /> {TYPE_LABELS[t] ?? t}</button>
                     )
                   })}
                 </div>
@@ -369,7 +376,7 @@ export default function TemplatesPage() {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
                           <h3 style={{ fontWeight: 700, fontSize: '0.95rem' }}>{t.title}</h3>
-                          <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', ...tb }}>{t.type}</span>
+                          <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '999px', textTransform: 'uppercase', ...tb }}>{TYPE_LABELS[t.type] ?? t.type}</span>
                           {t.is_default && <span style={{ fontSize: '0.6rem', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)', padding: '0.1rem 0.4rem', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}><Star size={10} />Default</span>}
                           {t.is_visible_to_members && !t.is_default && <span style={{ fontSize: '0.6rem', background: 'rgba(8,119,160,0.15)', color: '#34bac2', border: '1px solid rgba(8,119,160,0.3)', padding: '0.1rem 0.4rem', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}><Handshake size={10} />Shared</span>}
                         </div>

@@ -22,6 +22,7 @@ const TARGET_TYPE_LABELS: Record<string, string> = {
   bball_classes: 'Basketball Class',
   bball_class_signups: 'Basketball Signup',
   class_attendees: 'Class Attendee',
+  personal_records: 'Personal Record',
 }
 function targetTypeLabel(targetType?: string): string {
   if (!targetType) return ''
@@ -68,6 +69,8 @@ function formatActivityDetails(a: any): string {
       return `Removed ${name || 'attendee'} from ${d.class_title || 'class'}${d.date ? ` on ${formatDate(d.date)}` : ''}`
     case 'reject_signup':
       return `Rejected ${name || 'attendee'}'s request for ${d.class_title || 'class'}${d.date ? ` on ${formatDate(d.date)}` : ''}`
+    case 'delete_pr':
+      return `Removed ${name || 'a member'}'s ${d.exercise_name || 'PR'}${d.value != null ? ` (${d.value}${d.unit ? ` ${d.unit}` : ''})` : ''} from the leaderboard`
     default: {
       const entries = Object.entries(d).filter(([k]) => k !== 'target_name')
       return entries.length > 0 ? entries.map(([k, v]) => `${k}: ${v}`).join(', ') : ''
@@ -464,7 +467,7 @@ export default function AdminPage() {
   // Leaderboard (still used by Settings tab PR management)
   const [allPRs, setAllPRs] = useState<any[]>([])
 
-  const [classesThisMonthCount, setClassesThisMonthCount] = useState(0)
+  const [classesThisWeekCount, setClassesThisWeekCount] = useState(0)
   const [settings, setSettings] = useState({ require_approval: true, instagram_handle: '', public_pr_exercises: [] as string[] })
   const [settingsSaved, setSettingsSaved] = useState(false)
 
@@ -570,12 +573,17 @@ export default function AdminPage() {
         supabase.from('personal_records').select('*, profiles(name, gender)').order('value', { ascending: false }).then(({ data }) => setAllPRs(data ?? [])),
       ])
 
-      // Classes this month — count actual occurrences (not base rows) across both class
-      // systems, so a recurring class whose own row/date is outside this month but still
-      // recurs into it gets counted, and bball_classes occurrences are included too.
+      // Classes this week (Monday–Sunday, matching /classes' own week convention) — count actual
+      // occurrences (not base rows) across both class systems, so a recurring class whose own
+      // row/date is outside this week but still recurs into it gets counted, and bball_classes
+      // occurrences are included too.
       const now = new Date()
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
+      const mondayOffset = (now.getDay() + 6) % 7
+      const weekStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset)
+      const weekEndDate = new Date(weekStartDate)
+      weekEndDate.setDate(weekStartDate.getDate() + 6)
+      const startOfWeek = weekStartDate.toISOString().split('T')[0]
+      const endOfWeek = weekEndDate.toISOString().split('T')[0]
 
       const [{ data: bballClasses }, { data: bballExceptions }, { data: scheduledClasses }] = await Promise.all([
         supabase.from('bball_classes').select('*'),
@@ -587,16 +595,16 @@ export default function AdminPage() {
         (exceptionsByClass[exc.class_id] ??= []).push(exc.excluded_date)
       }
       const bballOccurrencesCount = (bballClasses || []).reduce((sum: number, c: any) =>
-        sum + bballOccurrencesInRange(c, startOfMonth, endOfMonth, exceptionsByClass[c.id]).length, 0)
+        sum + bballOccurrencesInRange(c, startOfWeek, endOfWeek, exceptionsByClass[c.id]).length, 0)
       const scheduledOccurrencesCount = (scheduledClasses || []).reduce((sum: number, c: any) => {
-        let count = c.scheduled_date >= startOfMonth && c.scheduled_date <= endOfMonth ? 1 : 0
+        let count = c.scheduled_date >= startOfWeek && c.scheduled_date <= endOfWeek ? 1 : 0
         if (c.is_recurring) {
-          count += generateRecurringDates(c.scheduled_date, endOfMonth, c.recurrence_rule, c.recurrence_days || [])
-            .filter((d: string) => d >= startOfMonth).length
+          count += generateRecurringDates(c.scheduled_date, endOfWeek, c.recurrence_rule, c.recurrence_days || [])
+            .filter((d: string) => d >= startOfWeek).length
         }
         return sum + count
       }, 0)
-      setClassesThisMonthCount(bballOccurrencesCount + scheduledOccurrencesCount)
+      setClassesThisWeekCount(bballOccurrencesCount + scheduledOccurrencesCount)
 
       // Settings
       const { data: appSettings } = await supabase.from('app_settings').select('*').eq('id', 'global').maybeSingle()
@@ -805,7 +813,7 @@ export default function AdminPage() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
           {[
-            { label: 'Classes This Month', value: classesThisMonthCount, color: 'var(--teal-secondary)', tab: 'groups' as AdminTab },
+            { label: 'Classes This Week', value: classesThisWeekCount, color: 'var(--teal-secondary)', tab: 'groups' as AdminTab },
             { label: 'Active Members', value: members.length, color: 'var(--teal-secondary)', tab: 'members' as AdminTab },
             { label: 'Coaches', value: coaches.length, color: '#60a5fa', tab: 'members' as AdminTab },
             { label: 'Groups', value: groups.length, color: '#c084fc', tab: 'groups' as AdminTab },

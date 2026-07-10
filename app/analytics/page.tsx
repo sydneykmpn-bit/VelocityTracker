@@ -80,10 +80,10 @@ export default function AnalyticsPage() {
   const [allPRs, setAllPRs] = useState<any[]>([])
   const [selectedExercise, setSelectedExercise] = useState('')
   const [editingPRId, setEditingPRId] = useState<string | null>(null)
-  const [editPRForm, setEditPRForm] = useState({ value: '', unit: 'kg', is_public: false })
+  const [editPRForm, setEditPRForm] = useState({ value: '', unit: 'kg' })
   const [prSaving, setPrSaving] = useState(false)
   const [prDeleting, setPrDeleting] = useState<string | null>(null)
-  const [prForm, setPrForm] = useState({ exercise: '', value: '', unit: 'kg', date: getLocalDateString(), is_public: false })
+  const [prForm, setPrForm] = useState({ exercise: '', value: '', unit: 'kg', date: getLocalDateString() })
   const [prFormSaving, setPrFormSaving] = useState(false)
   const [prFormError, setPrFormError] = useState('')
 
@@ -162,16 +162,18 @@ export default function AnalyticsPage() {
     setEditingPRId(r.id)
     if (r.unit === 'kg' || r.unit === 'lbs') {
       const converted = convertWeightForDisplay(r.value, r.unit, preferredWeightUnit)
-      setEditPRForm({ value: converted.value.toString(), unit: converted.unit, is_public: r.is_public ?? false })
+      setEditPRForm({ value: converted.value.toString(), unit: converted.unit })
     } else {
-      setEditPRForm({ value: r.value.toString(), unit: r.unit, is_public: r.is_public ?? false })
+      setEditPRForm({ value: r.value.toString(), unit: r.unit })
     }
   }
+  // Analytics never touches is_public — public PRs can only be submitted/managed from the
+  // Leaderboard page, so editing here leaves whatever visibility a record already has untouched.
   const saveEditPR = async (id: string) => {
     if (!editPRForm.value) return
     setPrSaving(true)
     await supabase.from('personal_records').update({
-      value: Number(editPRForm.value), unit: editPRForm.unit, is_public: editPRForm.is_public,
+      value: Number(editPRForm.value), unit: editPRForm.unit,
     }).eq('id', id)
     setEditingPRId(null)
     setPrSaving(false)
@@ -196,12 +198,12 @@ export default function AnalyticsPage() {
       unit: prForm.unit,
       date: prForm.date,
       recorded_at: new Date(prForm.date).toISOString(),
-      is_public: prForm.is_public,
+      is_public: false,
       month_year: getLocalDateString().slice(0, 7),
     })
     if (err) { setPrFormError(err.message); setPrFormSaving(false); return }
     setSelectedExercise(prForm.exercise.trim())
-    setPrForm({ exercise: '', value: '', unit: preferredWeightUnit, date: getLocalDateString(), is_public: false })
+    setPrForm({ exercise: '', value: '', unit: preferredWeightUnit, date: getLocalDateString() })
     setPrFormSaving(false)
     loadData()
   }
@@ -261,6 +263,9 @@ export default function AnalyticsPage() {
           <div key="tab-prtrends">
             <form onSubmit={handleAddPR} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.5rem' }}>
               <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.25rem', letterSpacing: '0.03em', marginBottom: '1rem' }}>LOG PR</h2>
+              <div style={{ background: 'rgba(8,119,160,0.1)', border: '1px solid rgba(8,119,160,0.2)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--teal-secondary)' }}>
+                PRs logged here are always private. To submit a PR to the public leaderboard, use the <Link href="/leaderboard" style={{ color: 'var(--teal-secondary)', textDecoration: 'underline' }}>Leaderboard</Link> page.
+              </div>
               {prFormError && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', color: '#f87171', fontSize: '0.875rem' }}>{prFormError}</div>}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.875rem' }}>
                 <div style={{ gridColumn: 'span 2' }}>
@@ -287,10 +292,6 @@ export default function AnalyticsPage() {
                 <div>
                   <label style={labelBase}>Date</label>
                   <input type="date" value={prForm.date} onChange={e => setPrForm({ ...prForm, date: e.target.value })} style={{ ...inputBase, width: '100%' }} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.625rem' }}>
-                  <Toggle on={prForm.is_public} onToggle={() => setPrForm({ ...prForm, is_public: !prForm.is_public })} />
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{prForm.is_public ? 'Public' : 'Private'}</span>
                 </div>
               </div>
               <button type="submit" disabled={prFormSaving} style={{
@@ -345,10 +346,6 @@ export default function AnalyticsPage() {
                               {UNITS.filter(u => u !== 'kg' && u !== 'lbs').map(u => <option key={u} value={u}>{u}</option>)}
                             </select>
                           )}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <Toggle on={editPRForm.is_public} onToggle={() => setEditPRForm({ ...editPRForm, is_public: !editPRForm.is_public })} />
-                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{editPRForm.is_public ? 'Public' : 'Private'}</span>
-                          </div>
                           <div style={{ display: 'flex', gap: '0.5rem', marginLeft: 'auto' }}>
                             <button onClick={() => saveEditPR(r.id)} disabled={prSaving} style={{ background: 'var(--teal-primary)', border: 'none', borderRadius: '0.375rem', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff', minHeight: 0 }}><Check size={14} /></button>
                             <button onClick={() => setEditingPRId(null)} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '0.375rem', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', minHeight: 0 }}><X size={14} /></button>
