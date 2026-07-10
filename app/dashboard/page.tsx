@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { WorkoutCardSkeleton, StatCardSkeleton, Skeleton } from '@/components/Skeleton'
 import ClassDetailModal from '@/components/ClassDetailModal'
-import { getLocalDateString, formatLocalDate, formatDuration, isProgramDoneThisWeek } from '@/lib/utils'
+import { getLocalDateString, formatLocalDate, formatDuration, isProgramDoneThisWeek, bballOccurrencesInRange, generateRecurringDates } from '@/lib/utils'
 import { TodayPlanCard, SkippedPlansSection, typeBadge } from '@/components/PlanCards'
 import { AlertTriangle, Users, Settings, ClipboardList, CheckCircle2, SkipForward, Clock, MapPin, Calendar, UserCheck } from 'lucide-react'
 
@@ -154,14 +154,34 @@ export default function DashboardPage() {
 
     // Admin-specific data
     if (prof?.role === 'admin') {
-      const [{ count: pending }, { count: activeMembers }, { count: classesToday }] = await Promise.all([
+      const [{ count: pending }, { count: activeMembers }, { data: bballClasses }, { data: bballExceptions }, { data: scheduledClasses }] = await Promise.all([
         supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('approved', false),
         supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('approved', true).eq('role', 'member'),
-        supabase.from('scheduled_classes').select('id', { count: 'exact', head: true }).eq('scheduled_date', today),
+        supabase.from('bball_classes').select('*'),
+        supabase.from('bball_class_exceptions').select('class_id, excluded_date'),
+        supabase.from('scheduled_classes').select('id, scheduled_date, is_recurring, recurrence_rule, recurrence_days'),
       ])
       setPendingApprovals(pending || 0)
       setActiveMembersCount(activeMembers || 0)
-      setClassesTodayCount(classesToday || 0)
+
+      // "Classes Today" must count actual occurrences (recurring bball_classes + scheduled_classes),
+      // not just rows whose own scheduled_date literally equals today — same fix as the Navbar/BottomNav
+      // badge and Admin Panel's "Classes This Month" stat.
+      const exceptionsByClass: Record<string, string[]> = {}
+      for (const exc of bballExceptions || []) {
+        (exceptionsByClass[exc.class_id] ??= []).push(exc.excluded_date)
+      }
+      const bballTodayCount = (bballClasses || []).filter((c: any) =>
+        bballOccurrencesInRange(c, today, today, exceptionsByClass[c.id]).length > 0
+      ).length
+      const scheduledTodayCount = (scheduledClasses || []).filter((c: any) => {
+        if (c.scheduled_date === today) return true
+        if (c.is_recurring) {
+          return generateRecurringDates(c.scheduled_date, today, c.recurrence_rule, c.recurrence_days || []).includes(today)
+        }
+        return false
+      }).length
+      setClassesTodayCount(bballTodayCount + scheduledTodayCount)
     }
   }
 
@@ -376,25 +396,21 @@ export default function DashboardPage() {
                 <div>
                   <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>
                     <span style={{ color: 'var(--teal-secondary)' }}>{athletesScheduledToday.count}</span>
-                    <span style={{ color: 'var(--text-secondary)' }}> / {athletesScheduledToday.total} athletes have a workout scheduled today</span>
+                    <span style={{ color: 'var(--text-secondary)' }}> athlete{athletesScheduledToday.count === 1 ? '' : 's'} {athletesScheduledToday.count === 1 ? 'has' : 'have'} a workout scheduled today</span>
                   </p>
-                  <Link href="/coach" style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)', textDecoration: 'none', display: 'inline', minHeight: 0 }}>
-                    View Coach Panel →
-                  </Link>
                 </div>
               </div>
             )}
             {athletesPendingPrograms > 0 && (
-              <Link href="/coach" style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.875rem', textDecoration: 'none', minHeight: 0 }}>
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
                 <ClipboardList size={24} style={{ color: 'var(--teal-secondary)' }} />
                 <div>
                   <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>
                     <span style={{ color: 'var(--teal-secondary)' }}>{athletesPendingPrograms}</span>
-                    <span style={{ color: 'var(--text-secondary)' }}> athlete{athletesPendingPrograms === 1 ? '' : 's'} have pending programs</span>
+                    <span style={{ color: 'var(--text-secondary)' }}> athletes have pending programs</span>
                   </p>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)' }}>View Coach Panel →</span>
                 </div>
-              </Link>
+              </div>
             )}
           </div>
         )}
