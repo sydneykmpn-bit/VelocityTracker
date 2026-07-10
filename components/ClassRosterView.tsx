@@ -8,6 +8,7 @@ import { ArrowLeft, Check, ChevronDown, ChevronUp, Search, Trash2, UserPlus, X }
 import { formatTimeLabel, PAYMENT_STATUS_LABELS } from '@/lib/utils'
 import { logAction } from '@/lib/auditLog'
 import ConfirmModal from '@/components/ConfirmModal'
+import MemberProfileModal from '@/components/MemberProfileModal'
 
 type SystemKey = 'bball' | 'scheduled'
 
@@ -80,6 +81,7 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
   const [addError, setAddError] = useState('')
   const [addLoading, setAddLoading] = useState(false)
   const [confirmAction, setConfirmAction] = useState<{ type: 'remove' | 'reject' | 'noshow' | 'approve'; row: any } | null>(null)
+  const [selectedMemberProfile, setSelectedMemberProfile] = useState<{ id: string; name: string } | null>(null)
 
   const loadRows = useCallback(async () => {
     const { data, error: err } = await supabase
@@ -262,7 +264,7 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
 
   const tabs: { key: Tab; label: string; count: number }[] = [
     { key: 'all', label: 'All', count: rows.length },
-    { key: 'pending', label: 'Pending', count: pendingCount },
+    { key: 'pending', label: 'Unpaid', count: pendingCount },
     { key: 'booked', label: 'Booked', count: bookedCount },
     { key: 'waitlist', label: 'Waitlist', count: waitlistCount },
     { key: 'no_show', label: 'No Show', count: noShowCount },
@@ -432,6 +434,8 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
             {visibleRows.map(row => {
               const expanded = expandedId === row.id
+              const isPaid = row.payment_status === 'paid_online' || row.payment_status === 'paid_cash'
+              const memberId = row[cfg.memberCol]
               return (
                 <div key={row.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', overflow: 'hidden' }}>
                   <div
@@ -439,7 +443,16 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.875rem 1rem', cursor: 'pointer' }}
                   >
                     <div style={{ minWidth: 0 }}>
-                      <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>{attendeeName(row)}</p>
+                      {memberId ? (
+                        <p
+                          onClick={e => { e.stopPropagation(); setSelectedMemberProfile({ id: memberId, name: attendeeName(row) }) }}
+                          style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--teal-secondary)', cursor: 'pointer', display: 'inline-block' }}
+                        >
+                          {attendeeName(row)}
+                        </p>
+                      ) : (
+                        <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>{attendeeName(row)}</p>
+                      )}
                       <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
                         {PAYMENT_STATUS_LABELS[row.payment_status] || 'Unpaid'}
                         {row.amount_paid != null ? ` · ₱${row.amount_paid}` : ''}
@@ -447,7 +460,19 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
                         {row.paid_on ? ` · Paid ${new Date(row.paid_on + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}
                       </p>
                     </div>
-                    {expanded ? <ChevronUp size={16} color="var(--text-secondary)" /> : <ChevronDown size={16} color="var(--text-secondary)" />}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexShrink: 0 }}>
+                      {cfg.bookedStatuses.includes(row.status) && (
+                        <span style={{
+                          fontSize: '0.65rem', fontWeight: 700, padding: '0.2rem 0.55rem', borderRadius: '999px',
+                          background: isPaid ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                          color: isPaid ? '#4ade80' : '#f87171',
+                          border: `1px solid ${isPaid ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                        }}>
+                          {isPaid ? 'Booked' : 'Unpaid'}
+                        </span>
+                      )}
+                      {expanded ? <ChevronUp size={16} color="var(--text-secondary)" /> : <ChevronDown size={16} color="var(--text-secondary)" />}
+                    </div>
                   </div>
                   {expanded && (
                     <div style={{ borderTop: '1px solid var(--border)', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -545,6 +570,13 @@ export default function ClassRosterView({ system }: { system: SystemKey }) {
           variant={confirmModalConfig.variant}
           onConfirm={() => { const run = confirmModalConfig.onConfirm; setConfirmAction(null); run() }}
           onCancel={() => setConfirmAction(null)}
+        />
+      )}
+      {selectedMemberProfile && (
+        <MemberProfileModal
+          memberId={selectedMemberProfile.id}
+          memberName={selectedMemberProfile.name}
+          onClose={() => setSelectedMemberProfile(null)}
         />
       )}
     </div>

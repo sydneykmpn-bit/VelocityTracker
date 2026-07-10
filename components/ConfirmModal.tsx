@@ -26,7 +26,7 @@ export default function ConfirmModal({
     >
       <div style={{ width: '100%', maxWidth: '400px', borderRadius: '1rem', background: 'var(--surface)', border: '1px solid var(--border)', padding: '1.5rem' }}>
         <h2 style={{ fontFamily: 'var(--font-bebas)', fontSize: '1.5rem', letterSpacing: '0.03em', marginBottom: '0.75rem' }}>{title}</h2>
-        <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '1.5rem' }}>{message}</p>
+        <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '1.5rem', whiteSpace: 'pre-wrap' }}>{message}</p>
         <div style={{ display: 'flex', flexDirection: secondaryLabel ? 'column' : 'row', gap: '0.5rem' }}>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button

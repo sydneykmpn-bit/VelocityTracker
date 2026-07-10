@@ -419,7 +419,15 @@ export default function ClassesPage() {
       {pendingJoinOcc && (
         <ConfirmModal
           title="Limited Slots"
-          message="Slots are limited. Joining doesn't guarantee a spot until approved by a coach or admin. Continue?"
+          message={`Slots are limited. To keep the class fair for everyone, we prioritize confirmed participants who are sure they can join.
+
+Submitting this form does not guarantee your slot yet. Your booking will still need to be approved by a coach or admin.
+
+Class rate:
+₱550 — advance online payment
+₱600 — walk-in / day rate
+
+Do you want to continue?`}
           confirmLabel="Join Anyway"
           onConfirm={() => { const occ = pendingJoinOcc; setPendingJoinOcc(null); doJoin(occ) }}
           onCancel={() => setPendingJoinOcc(null)}
