@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import { Trash2, Plus, Pencil, ChevronDown, ChevronUp, Check, X, Undo2 } from 'lucide-react'
 
 export const DAY_LABELS_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -43,9 +43,6 @@ const inputCell: React.CSSProperties = {
 const filterInput: React.CSSProperties = {
   background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.375rem',
   padding: '0.55rem 0.75rem', color: '#F2F2F2', fontSize: '0.85rem', outline: 'none', width: '100%',
-}
-const setLabel: React.CSSProperties = {
-  fontSize: '0.6rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.15rem',
 }
 
 function modeFor(dayId: string, idx: number, ex: AthleteProgramExercise, modeOverride: Record<string, ExerciseMode>): ExerciseMode {
@@ -178,113 +175,148 @@ function ExerciseTable({ exercises, editable, dayId, modeOverride, onToggleMode,
               </tr>
             ) : exercises.map(({ ex, idx }, i) => {
               const mode = modeFor(dayId, idx, ex, modeOverride)
-              const details = setDetailsFor(ex)
+              const rowBg = i % 2 === 0 ? 'var(--surface)' : '#161616'
+
+              const nameCell = (rowSpan: number) => (
+                <td style={{ ...cellStyle, minWidth: '160px' }} rowSpan={rowSpan}>
+                  {editable ? (
+                    <input type="text" value={ex.name} placeholder="Exercise name" autoComplete="off"
+                      onChange={e => onChange?.(idx, 'name', e.target.value)}
+                      onBlur={e => onCommit?.(idx, 'name', e.target.value)}
+                      style={inputCell} />
+                  ) : (ex.name || '—')}
+                </td>
+              )
+              const notesCell = (rowSpan: number) => (
+                <td style={{ ...cellStyle, minWidth: '160px' }} rowSpan={rowSpan}>
+                  {editable ? (
+                    <input type="text" value={ex.notes || ''}
+                      onChange={e => onChange?.(idx, 'notes', e.target.value)}
+                      onBlur={e => onCommit?.(idx, 'notes', e.target.value)}
+                      style={inputCell} placeholder="—" />
+                  ) : (ex.notes || '—')}
+                </td>
+              )
+              const toggleCell = (rowSpan: number) => (
+                <td style={{ ...cellStyle, textAlign: 'center' }} rowSpan={rowSpan}>
+                  <button type="button" onClick={() => onToggleMode?.(idx)} title={mode === 'detailed' ? 'Switch to Simple' : 'Switch to Detailed'} style={{
+                    background: mode === 'detailed' ? 'rgba(8,119,160,0.15)' : 'none',
+                    border: `1px solid ${mode === 'detailed' ? 'var(--teal-primary)' : 'var(--border)'}`,
+                    borderRadius: '999px', padding: '0.25rem 0.55rem',
+                    color: mode === 'detailed' ? 'var(--teal-secondary)' : 'var(--text-secondary)',
+                    fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer', minHeight: 0, whiteSpace: 'nowrap',
+                  }}>
+                    {mode === 'detailed' ? 'Detailed' : 'Simple'}
+                  </button>
+                </td>
+              )
+              const trashCell = (rowSpan: number) => (
+                <td style={{ ...cellStyle, textAlign: 'center' }} rowSpan={rowSpan}>
+                  <button type="button" onClick={() => onRemove?.(idx)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'inline-flex', minHeight: 0 }}>
+                    <Trash2 size={14} />
+                  </button>
+                </td>
+              )
+
+              if (mode !== 'detailed') {
+                return (
+                  <tr key={ex.id ?? idx} style={{ background: rowBg }}>
+                    {nameCell(1)}
+                    <td style={{ ...cellStyle, minWidth: '70px' }}>
+                      {editable ? (
+                        <input type="number" value={ex.sets ?? ''}
+                          onChange={e => onChange?.(idx, 'sets', e.target.value)}
+                          onBlur={e => onCommit?.(idx, 'sets', e.target.value)}
+                          style={inputCell} placeholder="—" min="0" step="1" />
+                      ) : (ex.sets ?? '—')}
+                    </td>
+                    <td style={{ ...cellStyle, minWidth: '70px' }}>
+                      {editable ? (
+                        <input type="number" value={ex.reps ?? ''}
+                          onChange={e => onChange?.(idx, 'reps', e.target.value)}
+                          onBlur={e => onCommit?.(idx, 'reps', e.target.value)}
+                          style={inputCell} placeholder="—" min="0" step="1" />
+                      ) : (ex.reps ?? '—')}
+                    </td>
+                    <td style={{ ...cellStyle, minWidth: '70px' }}>
+                      {editable ? (
+                        <input type="number" value={ex.weight ?? ''}
+                          onChange={e => onChange?.(idx, 'weight', e.target.value)}
+                          onBlur={e => onCommit?.(idx, 'weight', e.target.value)}
+                          style={inputCell} placeholder="—" min="0" step="0.1" />
+                      ) : (ex.weight ?? '—')}
+                    </td>
+                    {notesCell(1)}
+                    {editable && toggleCell(1)}
+                    {editable && trashCell(1)}
+                  </tr>
+                )
+              }
+
+              // Detailed mode: one sub-row per set, aligned directly under the Sets/Reps/Weight
+              // headers (Set label in the Sets column, its own inputs in Reps/Weight) instead of
+              // being bunched into a single merged cell. Name/Notes/mode-toggle/trash are
+              // exercise-level, not per-set, so they're rowSpan'd from the first sub-row only.
+              // Editable tables get one extra trailing sub-row for the "+ Add Set" control.
+              const setRows = setDetailsFor(ex)
+              const subRowCount = editable ? setRows.length + 1 : Math.max(setRows.length, 1)
+
               return (
-                <tr key={ex.id ?? idx} style={{ background: i % 2 === 0 ? 'var(--surface)' : '#161616' }}>
-                  <td style={{ ...cellStyle, minWidth: '160px' }}>
-                    {editable ? (
-                      <input type="text" value={ex.name} placeholder="Exercise name" autoComplete="off"
-                        onChange={e => onChange?.(idx, 'name', e.target.value)}
-                        onBlur={e => onCommit?.(idx, 'name', e.target.value)}
-                        style={inputCell} />
-                    ) : (ex.name || '—')}
-                  </td>
-
-                  {editable && mode === 'detailed' ? (
-                    <td style={{ ...cellStyle, minWidth: '260px' }} colSpan={3}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                        {details.length === 0 && (
-                          <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>No sets yet.</p>
-                        )}
-                        {details.map((s, si) => (
-                          <div key={si} style={{ display: 'flex', alignItems: 'flex-end', gap: '0.4rem' }}>
-                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', minWidth: '38px', flexShrink: 0, paddingBottom: '0.2rem' }}>Set {si + 1}</span>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                              <label style={setLabel}>Reps</label>
-                              <input type="number" value={s.reps ?? ''} placeholder="—" min="0" step="1"
-                                onChange={e => handleSetFieldChange(idx, ex, si, 'reps', e.target.value)}
-                                onBlur={() => handleSetFieldBlur(idx, ex)}
-                                style={{ ...inputCell, width: '56px', flex: 'none' }} />
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                              <label style={setLabel}>Weight (kg)</label>
-                              <input type="number" value={s.weight ?? ''} placeholder="—" min="0" step="0.1"
-                                onChange={e => handleSetFieldChange(idx, ex, si, 'weight', e.target.value)}
-                                onBlur={() => handleSetFieldBlur(idx, ex)}
-                                style={{ ...inputCell, width: '56px', flex: 'none' }} />
-                            </div>
-                            <button type="button" onClick={() => handleRemoveSetRow(idx, ex, si)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0, marginLeft: 'auto', paddingBottom: '0.35rem' }}>
-                              <X size={12} />
+                <Fragment key={ex.id ?? idx}>
+                  {Array.from({ length: subRowCount }).map((_, si) => {
+                    const isFirst = si === 0
+                    const isAddRow = editable && si === setRows.length
+                    const set = setRows[si]
+                    return (
+                      <tr key={si} style={{ background: rowBg }}>
+                        {isFirst && nameCell(subRowCount)}
+                        {isAddRow ? (
+                          <td style={cellStyle} colSpan={3}>
+                            <button type="button" onClick={() => handleAddSetRow(idx, ex)} style={{
+                              background: 'none', border: '1px dashed #1a2e34', borderRadius: '0.3rem', padding: '0.3rem 0.5rem',
+                              color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.7rem', display: 'flex',
+                              alignItems: 'center', gap: '0.25rem', justifyContent: 'center', minHeight: 0, width: '100%',
+                            }}>
+                              <Plus size={11} /> {setRows.length === 0 ? 'Add First Set' : 'Add Set'}
                             </button>
-                          </div>
-                        ))}
-                        <button type="button" onClick={() => handleAddSetRow(idx, ex)} style={{
-                          background: 'none', border: '1px dashed #1a2e34', borderRadius: '0.3rem', padding: '0.3rem 0.5rem',
-                          color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.7rem', display: 'flex',
-                          alignItems: 'center', gap: '0.25rem', justifyContent: 'center', minHeight: 0,
-                        }}>
-                          <Plus size={11} /> Add Set
-                        </button>
-                      </div>
-                    </td>
-                  ) : (
-                    <>
-                      <td style={{ ...cellStyle, minWidth: '70px' }}>
-                        {editable ? (
-                          <input type="number" value={ex.sets ?? ''}
-                            onChange={e => onChange?.(idx, 'sets', e.target.value)}
-                            onBlur={e => onCommit?.(idx, 'sets', e.target.value)}
-                            style={inputCell} placeholder="—" min="0" step="1" />
-                        ) : (ex.sets ?? '—')}
-                      </td>
-                      <td style={{ ...cellStyle, minWidth: '70px' }}>
-                        {editable ? (
-                          <input type="number" value={ex.reps ?? ''}
-                            onChange={e => onChange?.(idx, 'reps', e.target.value)}
-                            onBlur={e => onCommit?.(idx, 'reps', e.target.value)}
-                            style={inputCell} placeholder="—" min="0" step="1" />
-                        ) : (ex.reps ?? '—')}
-                      </td>
-                      <td style={{ ...cellStyle, minWidth: '70px' }}>
-                        {editable ? (
-                          <input type="number" value={ex.weight ?? ''}
-                            onChange={e => onChange?.(idx, 'weight', e.target.value)}
-                            onBlur={e => onCommit?.(idx, 'weight', e.target.value)}
-                            style={inputCell} placeholder="—" min="0" step="0.1" />
-                        ) : (ex.weight ?? '—')}
-                      </td>
-                    </>
-                  )}
-
-                  <td style={{ ...cellStyle, minWidth: '160px' }}>
-                    {editable ? (
-                      <input type="text" value={ex.notes || ''}
-                        onChange={e => onChange?.(idx, 'notes', e.target.value)}
-                        onBlur={e => onCommit?.(idx, 'notes', e.target.value)}
-                        style={inputCell} placeholder="—" />
-                    ) : (ex.notes || '—')}
-                  </td>
-                  {editable && (
-                    <td style={{ ...cellStyle, textAlign: 'center' }}>
-                      <button type="button" onClick={() => onToggleMode?.(idx)} title={mode === 'detailed' ? 'Switch to Simple' : 'Switch to Detailed'} style={{
-                        background: mode === 'detailed' ? 'rgba(8,119,160,0.15)' : 'none',
-                        border: `1px solid ${mode === 'detailed' ? 'var(--teal-primary)' : 'var(--border)'}`,
-                        borderRadius: '999px', padding: '0.25rem 0.55rem',
-                        color: mode === 'detailed' ? 'var(--teal-secondary)' : 'var(--text-secondary)',
-                        fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer', minHeight: 0, whiteSpace: 'nowrap',
-                      }}>
-                        {mode === 'detailed' ? 'Detailed' : 'Simple'}
-                      </button>
-                    </td>
-                  )}
-                  {editable && (
-                    <td style={{ ...cellStyle, textAlign: 'center' }}>
-                      <button type="button" onClick={() => onRemove?.(idx)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'inline-flex', minHeight: 0 }}>
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
-                  )}
-                </tr>
+                          </td>
+                        ) : (
+                          <>
+                            <td style={{ ...cellStyle, minWidth: '70px', whiteSpace: 'nowrap', color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                              Set {si + 1}
+                            </td>
+                            <td style={{ ...cellStyle, minWidth: '70px' }}>
+                              {editable ? (
+                                <input type="number" value={set?.reps ?? ''} placeholder="—" min="0" step="1"
+                                  onChange={e => handleSetFieldChange(idx, ex, si, 'reps', e.target.value)}
+                                  onBlur={() => handleSetFieldBlur(idx, ex)}
+                                  style={inputCell} />
+                              ) : (set?.reps ?? '—')}
+                            </td>
+                            <td style={{ ...cellStyle, minWidth: '90px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                {editable ? (
+                                  <input type="number" value={set?.weight ?? ''} placeholder="—" min="0" step="0.1"
+                                    onChange={e => handleSetFieldChange(idx, ex, si, 'weight', e.target.value)}
+                                    onBlur={() => handleSetFieldBlur(idx, ex)}
+                                    style={inputCell} />
+                                ) : (set?.weight ?? '—')}
+                                {editable && (
+                                  <button type="button" onClick={() => handleRemoveSetRow(idx, ex, si)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0, flexShrink: 0 }}>
+                                    <X size={12} />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </>
+                        )}
+                        {isFirst && notesCell(subRowCount)}
+                        {editable && isFirst && toggleCell(subRowCount)}
+                        {editable && isFirst && trashCell(subRowCount)}
+                      </tr>
+                    )
+                  })}
+                </Fragment>
               )
             })}
           </tbody>
@@ -473,7 +505,7 @@ export default function AthleteProgramTable({
       {editable && (
         <div style={{ marginTop: '0.875rem' }}>
           {!addDayOpen ? (
-            <button type="button" onClick={() => setAddDayOpen(true)} disabled={availableDaysToAdd.length === 0} style={{
+            <button type="button" onClick={() => { setNewDayOfWeek(availableDaysToAdd[0]?.value ?? null); setAddDayOpen(true) }} disabled={availableDaysToAdd.length === 0} style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', width: '100%',
               background: 'transparent', border: '1px dashed #1a2e34', borderRadius: '0.5rem', padding: '0.6rem',
               color: availableDaysToAdd.length === 0 ? 'var(--border)' : 'var(--text-secondary)',
@@ -483,10 +515,6 @@ export default function AthleteProgramTable({
             </button>
           ) : (
             <div style={{ background: 'var(--surface)', border: '1px solid var(--teal-primary)', borderRadius: '0.5rem', padding: '0.875rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-              <select value={newDayOfWeek ?? ''} onChange={e => setNewDayOfWeek(Number(e.target.value))} style={{ ...filterInput, width: 'auto', cursor: 'pointer' }}>
-                <option value="" disabled>Day…</option>
-                {availableDaysToAdd.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
-              </select>
               <select value={newDayTitle} onChange={e => setNewDayTitle(e.target.value)} style={{ ...filterInput, width: 'auto', cursor: 'pointer' }}>
                 {DAY_TITLE_PRESETS.map(p => <option key={p} value={p}>{p}</option>)}
                 <option value="Custom">Custom…</option>

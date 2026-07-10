@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { ChevronDown, ChevronUp, CheckCircle2, Check, Lock, Pencil, Trash2 } from 'lucide-react'
 import { getLocalDateString, normalizeToKg, getCurrentWeekOccurrenceDate } from '@/lib/utils'
@@ -72,12 +72,21 @@ function CompletedPlansCollapse({ plans, onUndo, undoingId }: { plans: any[]; on
 }
 
 export default function StudentPage() {
+  return (
+    <Suspense fallback={null}>
+      <StudentPageInner />
+    </Suspense>
+  )
+}
+
+function StudentPageInner() {
   const supabase = createClient()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [profile, setProfile] = useState<any>(null)
   const [assignedPlans, setAssignedPlans] = useState<any[]>([])
   const [coach, setCoach] = useState<any>(null)
-  const [activeTab, setActiveTab] = useState<Tab>('plans')
+  const [activeTab, setActiveTab] = useState<Tab>((searchParams.get('tab') as Tab) || 'programs')
   const [loading, setLoading] = useState(true)
   const [prs, setPRs] = useState<any[]>([])
   const [editingPRId, setEditingPRId] = useState<string | null>(null)
@@ -295,9 +304,44 @@ export default function StudentPage() {
   const handleMarkProgramDone = async (program: any) => {
     setProgramError('')
     setProgramStatusSavingId(program.id)
+
+    // Auto-log a real workout for this program, same shape/pattern as handleMarkDayDone /
+    // handleQuickPlanAction elsewhere — pulls every exercise across all of this program's days.
+    const allExercises = (program.athlete_program_days ?? []).flatMap((d: any) => d.athlete_program_exercises ?? [])
+
+    const { data: newWorkout, error: workoutErr } = await supabase.from('workouts').insert({
+      user_id: userId,
+      title: program.coach?.name ? `${program.coach.name}'s Program` : 'My Program',
+      type: 'conditioning',
+      notes: 'Auto-logged from completed program.',
+      date: getLocalDateString(),
+    }).select().single()
+    if (workoutErr || !newWorkout) {
+      console.error('handleMarkProgramDone: workout insert failed:', workoutErr)
+      setProgramError(workoutErr?.message ?? 'Failed to log workout for this program.')
+      setProgramStatusSavingId(null)
+      return
+    }
+
+    if (allExercises.length > 0) {
+      const { error: exErr } = await supabase.from('exercises').insert(
+        allExercises.map((ex: any) => ({
+          workout_id: newWorkout.id,
+          name: ex.name, sets: ex.sets, reps: ex.reps, weight: ex.weight, notes: ex.notes,
+        }))
+      )
+      if (exErr) {
+        console.error('handleMarkProgramDone: exercises insert failed:', exErr)
+        await supabase.from('workouts').delete().eq('id', newWorkout.id)
+        setProgramError(exErr.message)
+        setProgramStatusSavingId(null)
+        return
+      }
+    }
+
     const { data, error: err } = await supabase
       .from('athlete_programs')
-      .update({ status: 'completed', completed_at: new Date().toISOString() })
+      .update({ status: 'completed', completed_at: new Date().toISOString(), auto_logged_workout_id: newWorkout.id })
       .eq('id', program.id)
       .select()
       .single()
@@ -305,6 +349,8 @@ export default function StudentPage() {
     if (err || !data) {
       console.error('handleMarkProgramDone failed:', err)
       setProgramError(err?.message ?? 'Failed to mark this program as done.')
+      await supabase.from('exercises').delete().eq('workout_id', newWorkout.id)
+      await supabase.from('workouts').delete().eq('id', newWorkout.id)
       return
     }
     setAssignedPrograms(prev => prev.map(p => p.id === program.id ? { ...p, ...data } : p))
@@ -313,9 +359,17 @@ export default function StudentPage() {
   const handleMarkProgramPending = async (program: any) => {
     setProgramError('')
     setProgramStatusSavingId(program.id)
+
+    if (program.auto_logged_workout_id) {
+      const { error: exErr } = await supabase.from('exercises').delete().eq('workout_id', program.auto_logged_workout_id)
+      if (exErr) { console.error('handleMarkProgramPending: exercises delete failed:', exErr); setProgramError(exErr.message); setProgramStatusSavingId(null); return }
+      const { error: woErr } = await supabase.from('workouts').delete().eq('id', program.auto_logged_workout_id)
+      if (woErr) { console.error('handleMarkProgramPending: workout delete failed:', woErr); setProgramError(woErr.message); setProgramStatusSavingId(null); return }
+    }
+
     const { data, error: err } = await supabase
       .from('athlete_programs')
-      .update({ status: 'pending', completed_at: null })
+      .update({ status: 'pending', completed_at: null, auto_logged_workout_id: null })
       .eq('id', program.id)
       .select()
       .single()
@@ -441,10 +495,10 @@ export default function StudentPage() {
   }
 
   const tabs: { value: Tab; label: string }[] = [
+    { value: 'programs', label: 'Programs' },
     { value: 'plans', label: 'Assigned Plans' },
     { value: 'prs', label: 'My PRs' },
     { value: 'metrics', label: 'Body Metrics' },
-    { value: 'programs', label: 'Programs' },
   ]
 
   return (

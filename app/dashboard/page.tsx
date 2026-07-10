@@ -25,6 +25,7 @@ export default function DashboardPage() {
   const [athletesScheduledToday, setAthletesScheduledToday] = useState<{ count: number; total: number } | null>(null)
   const [upcomingCoachClasses, setUpcomingCoachClasses] = useState<any[]>([])
   const [pendingApprovals, setPendingApprovals] = useState(0)
+  const [hasPendingProgram, setHasPendingProgram] = useState(false)
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
   const [selectedClass, setSelectedClass] = useState<any>(null)
@@ -82,6 +83,16 @@ export default function DashboardPage() {
       .eq('member_id', uid).eq('visible_to_member', true)
       .order('created_at', { ascending: false }).limit(1).maybeSingle()
     setCoachNote(noteData)
+
+    // Pending (not-yet-done) assigned program, for the "You have programs for the week" banner
+    if (prof?.role === 'member') {
+      const { count: pendingProgramCount } = await supabase
+        .from('athlete_programs')
+        .select('id', { count: 'exact', head: true })
+        .eq('member_id', uid)
+        .eq('status', 'pending')
+      setHasPendingProgram((pendingProgramCount ?? 0) > 0)
+    }
 
     // Coach-specific data
     if (prof?.role === 'coach') {
@@ -348,6 +359,27 @@ export default function DashboardPage() {
               {new Date(coachNote.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
             </p>
           </div>
+        )}
+
+        {/* ── MEMBER: Pending program banner ── */}
+        {userRole === 'member' && hasPendingProgram && (
+          <Link href="/student?tab=programs" style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
+            background: 'rgba(8,119,160,0.12)', border: '1px solid rgba(8,119,160,0.4)',
+            borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1.5rem',
+            textDecoration: 'none', minHeight: 0,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <ClipboardList size={20} style={{ color: 'var(--teal-secondary)' }} />
+              <div>
+                <p style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--teal-secondary)' }}>
+                  You have programs for the week
+                </p>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Tap to view your assigned programs</p>
+              </div>
+            </div>
+            <span style={{ color: 'var(--teal-secondary)', fontSize: '1.25rem' }}>→</span>
+          </Link>
         )}
 
         {/* ── SKIPPED PLANS ── */}
