@@ -129,7 +129,7 @@ export default function WorkoutDetailPage() {
                   )}
                   {ex.sets && !ex.reps && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{ex.sets} sets</span>}
                   {!ex.sets && ex.reps && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{ex.reps} reps</span>}
-                  {ex.weight && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}><strong style={{ color: '#F2F2F2' }}>{ex.weight}</strong> kg</span>}
+                  {ex.weight && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}><strong style={{ color: '#F2F2F2' }}>{ex.weight}</strong> {(ex as any).weight_unit || 'kg'}</span>}
                   {ex.duration && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}><strong style={{ color: '#F2F2F2' }}>{ex.duration}</strong> min</span>}
                   {ex.distance && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}><strong style={{ color: '#F2F2F2' }}>{ex.distance}</strong> km</span>}
                   {(ex as any).speed && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}><strong style={{ color: '#F2F2F2' }}>{(ex as any).speed}</strong> km/h</span>}
@@ -141,7 +141,7 @@ export default function WorkoutDetailPage() {
                       .sort((a: any, b: any) => (a.set_number ?? 0) - (b.set_number ?? 0))
                       .map((sd: any) => (
                         <p key={sd.set_number} style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                          Set {sd.set_number}: {sd.reps ?? '—'} reps{sd.weight != null ? ` @ ${sd.weight}kg` : ''}
+                          Set {sd.set_number}: {sd.reps ?? '—'} reps{sd.weight != null ? ` @ ${sd.weight}${ex.weight_unit || 'kg'}` : ''}
                         </p>
                       ))}
                   </div>

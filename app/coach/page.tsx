@@ -118,7 +118,7 @@ function WorkoutHistoryCard({ workout, supabase }: { workout: any; supabase: any
               <p style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.25rem' }}>{ex.name}</p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', fontSize: '0.75rem' }}>
                 {ex.sets && ex.reps && <span><span style={{ color: 'var(--text-secondary)' }}>Sets×Reps </span><span style={{ fontWeight: 600 }}>{ex.sets}×{ex.reps}</span></span>}
-                {ex.weight && <span><span style={{ color: 'var(--text-secondary)' }}>Weight </span><span style={{ fontWeight: 600, color: 'var(--teal-secondary)' }}>{ex.weight}kg</span></span>}
+                {ex.weight && <span><span style={{ color: 'var(--text-secondary)' }}>Weight </span><span style={{ fontWeight: 600, color: 'var(--teal-secondary)' }}>{ex.weight}{ex.weight_unit || 'kg'}</span></span>}
                 {ex.duration && <span><span style={{ color: 'var(--text-secondary)' }}>Duration </span><span style={{ fontWeight: 600 }}>{ex.duration}min</span></span>}
                 {ex.distance && <span><span style={{ color: 'var(--text-secondary)' }}>Distance </span><span style={{ fontWeight: 600 }}>{ex.distance}km</span></span>}
               </div>
@@ -485,7 +485,7 @@ export default function CoachPage() {
 
     const { data: profilesData, error: profilesErr } = await supabase
       .from('profiles')
-      .select('id, name, email')
+      .select('id, name, email, preferred_weight_unit')
       .in('id', Array.from(memberIds))
     if (profilesErr) console.error('loadMyMembers: profiles query failed', profilesErr)
 
@@ -536,7 +536,7 @@ export default function CoachPage() {
   const loadAthletePrograms = async (coachId: string) => {
     const { data } = await supabase
       .from('athlete_programs')
-      .select('*, member:profiles!member_id(name), athlete_program_days(id, day_of_week, athlete_program_exercises(count))')
+      .select('*, member:profiles!member_id(name, preferred_weight_unit), athlete_program_days(id, day_of_week, athlete_program_exercises(count))')
       .eq('coach_id', coachId)
       .order('created_at', { ascending: false })
     setAthletePrograms(data ?? [])
@@ -559,7 +559,7 @@ export default function CoachPage() {
     const { data, error: err } = await supabase
       .from('athlete_programs')
       .insert({ coach_id: userId, member_id: memberId })
-      .select('*, member:profiles!member_id(name)')
+      .select('*, member:profiles!member_id(name, preferred_weight_unit)')
       .single()
     if (err || !data) { setError(err?.message ?? 'Failed to add athlete'); return }
     setAthletePrograms(prev => [{ ...data, athlete_program_days: [] }, ...prev])
@@ -610,9 +610,10 @@ export default function CoachPage() {
 
   const handleAddExerciseRow = async (dayId: string) => {
     setError('')
+    const athleteWeightUnit = selectedAthleteProgram?.member?.preferred_weight_unit || 'kg'
     const { data, error: err } = await supabase
       .from('athlete_program_exercises')
-      .insert({ program_day_id: dayId, name: '' })
+      .insert({ program_day_id: dayId, name: '', weight_unit: athleteWeightUnit })
       .select()
       .single()
     if (err || !data) { setError(err?.message ?? 'Failed to add exercise'); return }
@@ -1025,12 +1026,16 @@ export default function CoachPage() {
     if (planErr || !plan) { setError(planErr?.message ?? 'Failed to create plan'); setPlanSaving(false); return }
     const validExs = planExercises.filter(e => e.name.trim())
     if (validExs.length > 0) {
+      // Weights entered here are the coach's, on behalf of the athlete — stamp the athlete's own
+      // preferred_weight_unit, not the coach's, per the "who owns this data" convention.
+      const athleteWeightUnit = myMembers.find(m => m.id === assignForm.member_id)?.preferred_weight_unit || 'kg'
       await supabase.from('workout_plan_exercises').insert(
         validExs.map((ex, i) => ({
           plan_id: plan.id, name: ex.name.trim(),
           sets: ex.sets ? Number(ex.sets) : null,
           reps: ex.reps ? Number(ex.reps) : null,
           weight: ex.weight ? Number(ex.weight) : null,
+          weight_unit: athleteWeightUnit,
           duration: ex.duration ? Number(ex.duration) : null,
           distance: ex.distance ? Number(ex.distance) : null,
           notes: ex.notes || null, order_index: i,
@@ -1133,8 +1138,8 @@ export default function CoachPage() {
         planExercises.map((ex: any) => ({
           workout_id: newWorkout.id,
           name: ex.name, sets: ex.sets, reps: ex.reps,
-          weight: ex.weight, duration: ex.duration,
-          distance: ex.distance, notes: ex.notes,
+          weight: ex.weight, weight_unit: ex.weight_unit,
+          duration: ex.duration, distance: ex.distance, notes: ex.notes,
         }))
       )
 
@@ -1233,10 +1238,12 @@ export default function CoachPage() {
       scheduled_date: editPlanForm.scheduled_date,
     }).eq('id', editingPlan)
     await supabase.from('workout_plan_exercises').delete().eq('plan_id', editingPlan)
+    const athleteWeightUnit = myMembers.find(m => m.id === editPlanForm.member_id)?.preferred_weight_unit || 'kg'
     const toInsert = editPlanExercises.filter(e => e.name.trim()).map((ex, i) => ({
       plan_id: editingPlan,
       name: ex.name, sets: ex.sets ? Number(ex.sets) : null,
       reps: ex.reps ? Number(ex.reps) : null, weight: ex.weight ? Number(ex.weight) : null,
+      weight_unit: athleteWeightUnit,
       duration: ex.duration ? Number(ex.duration) : null, distance: ex.distance ? Number(ex.distance) : null,
       notes: ex.notes || null, order_index: i,
     }))
@@ -1947,7 +1954,7 @@ export default function CoachPage() {
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
                             {(['sets', 'reps', 'weight'] as const).map(f => (
                               <div key={f}>
-                                <label style={{ ...labelBase, marginBottom: '0.2rem' }}>{f === 'weight' ? 'Weight kg' : f.charAt(0).toUpperCase() + f.slice(1)}</label>
+                                <label style={{ ...labelBase, marginBottom: '0.2rem' }}>{f === 'weight' ? `Weight ${myMembers.find(m => m.id === assignForm.member_id)?.preferred_weight_unit || 'kg'}` : f.charAt(0).toUpperCase() + f.slice(1)}</label>
                                 <input type="number" value={ex[f]} onChange={e => updatePlanEx(idx, f, e.target.value)} style={{ ...inputBase, width: '100%' }} placeholder="—" min="0" step="0.5" />
                               </div>
                             ))}
@@ -2327,7 +2334,7 @@ export default function CoachPage() {
                                                 </div>
                                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.375rem' }}>
                                                   {(['sets', 'reps', 'weight'] as const).map(f => (
-                                                    <input key={f} type="number" value={ex[f]} onChange={e => updateEditPlanEx(idx, f, e.target.value)} style={{ ...inputBase, width: '100%' }} placeholder={f === 'weight' ? 'kg' : f === 'sets' ? 'Sets' : 'Reps'} min="0" />
+                                                    <input key={f} type="number" value={ex[f]} onChange={e => updateEditPlanEx(idx, f, e.target.value)} style={{ ...inputBase, width: '100%' }} placeholder={f === 'weight' ? (myMembers.find(m => m.id === editPlanForm.member_id)?.preferred_weight_unit || 'kg') : f === 'sets' ? 'Sets' : 'Reps'} min="0" />
                                                   ))}
                                                 </div>
                                               </div>
@@ -2508,7 +2515,7 @@ export default function CoachPage() {
                                             <p style={{ fontSize: '0.8rem', fontWeight: 600 }}>{ex.name}</p>
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.15rem', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
                                               {ex.sets != null && ex.reps != null && <span>{ex.sets}×{ex.reps} reps</span>}
-                                              {ex.weight != null && <span>{ex.weight}kg</span>}
+                                              {ex.weight != null && <span>{ex.weight}{ex.weight_unit || 'kg'}</span>}
                                               {ex.duration != null && <span>{ex.duration}min</span>}
                                               {ex.distance != null && <span>{ex.distance}km</span>}
                                             </div>

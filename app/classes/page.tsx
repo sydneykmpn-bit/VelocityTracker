@@ -165,6 +165,18 @@ export default function ClassesPage() {
     await refreshClasses()
   }
 
+  const handleDeleteSeries = async (cls: BballClassRow) => {
+    setError('')
+    if (!cls.series_id) { await handleDeleteClass(cls); return }
+    const { error: err } = await supabase.from('bball_classes').delete().eq('series_id', cls.series_id)
+    if (err) { setError(err.message); return }
+    await logAction(supabase, {
+      category: 'classes', action_type: 'delete_class', target_type: 'bball_classes', target_id: cls.id,
+      details: { target_name: cls.title, series: true },
+    })
+    await refreshClasses()
+  }
+
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--background)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -365,16 +377,28 @@ export default function ClassesPage() {
           onCancel={() => setPendingJoinOcc(null)}
         />
       )}
-      {deleteConfirmClass && (
-        <ConfirmModal
-          title="Delete Class"
-          message={`Delete "${deleteConfirmClass.title}"? This removes all signups for this class and cannot be undone.`}
-          confirmLabel="Delete"
-          variant="destructive"
-          onConfirm={() => { const cls = deleteConfirmClass; setDeleteConfirmClass(null); handleDeleteClass(cls) }}
-          onCancel={() => setDeleteConfirmClass(null)}
-        />
-      )}
+      {deleteConfirmClass && (() => {
+        const siblingCount = deleteConfirmClass.series_id
+          ? classes.filter(c => c.series_id === deleteConfirmClass.series_id).length
+          : 1
+        const hasSeries = siblingCount > 1
+        return (
+          <ConfirmModal
+            title="Delete Class"
+            message={
+              hasSeries
+                ? `"${deleteConfirmClass.title}" was created together with ${siblingCount - 1} other day${siblingCount - 1 === 1 ? '' : 's'} in the same series. Delete just this day, or the entire series? This removes all signups and cannot be undone.`
+                : `Delete "${deleteConfirmClass.title}"? This removes all signups for this class and cannot be undone.`
+            }
+            confirmLabel={hasSeries ? 'Delete This Day' : 'Delete'}
+            variant="destructive"
+            onConfirm={() => { const cls = deleteConfirmClass; setDeleteConfirmClass(null); handleDeleteClass(cls) }}
+            onCancel={() => setDeleteConfirmClass(null)}
+            secondaryLabel={hasSeries ? `Delete Entire Series (${siblingCount})` : undefined}
+            onSecondary={hasSeries ? () => { const cls = deleteConfirmClass; setDeleteConfirmClass(null); handleDeleteSeries(cls) } : undefined}
+          />
+        )
+      })()}
     </div>
   )
 }

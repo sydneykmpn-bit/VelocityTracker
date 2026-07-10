@@ -540,7 +540,7 @@ export default function ClassDetailModal({
                     <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>{ex.name}</p>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.2rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                       {ex.sets != null && ex.reps != null && <span>{ex.sets}×{ex.reps} reps</span>}
-                      {ex.weight != null && <span>{ex.weight}kg</span>}
+                      {ex.weight != null && <span>{ex.weight}{ex.weight_unit || 'kg'}</span>}
                       {ex.duration != null && <span>{ex.duration}min</span>}
                       {ex.distance != null && <span>{ex.distance}km</span>}
                       {ex.notes && <span style={{ fontStyle: 'italic' }}>{ex.notes}</span>}
@@ -646,8 +646,8 @@ export default function ClassDetailModal({
                           planExercises.map((ex: any) => ({
                             workout_id: newWorkout.id,
                             name: ex.name, sets: ex.sets, reps: ex.reps,
-                            weight: ex.weight, duration: ex.duration,
-                            distance: ex.distance, notes: ex.notes,
+                            weight: ex.weight, weight_unit: ex.weight_unit,
+                            duration: ex.duration, distance: ex.distance, notes: ex.notes,
                           }))
                         )
                         if (exError) {

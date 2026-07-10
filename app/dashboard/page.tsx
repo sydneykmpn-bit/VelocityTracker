@@ -23,6 +23,7 @@ export default function DashboardPage() {
   const [skippedPlans, setSkippedPlans] = useState<any[]>([])
   const [todayClasses, setTodayClasses] = useState<any[]>([])
   const [athletesScheduledToday, setAthletesScheduledToday] = useState<{ count: number; total: number } | null>(null)
+  const [athletesPendingPrograms, setAthletesPendingPrograms] = useState(0)
   const [upcomingCoachClasses, setUpcomingCoachClasses] = useState<any[]>([])
   const [pendingApprovals, setPendingApprovals] = useState(0)
   const [hasPendingProgram, setHasPendingProgram] = useState(false)
@@ -121,6 +122,28 @@ export default function DashboardPage() {
         }
       }
 
+      // Athletes with at least one pending (not-done) Program day this week — same
+      // isProgramDoneThisWeek check used by the Programs tab's Pending/Done split above.
+      const { data: coachPrograms } = await supabase
+        .from('athlete_programs')
+        .select('member_id, athlete_program_days(id, day_of_week)')
+        .eq('coach_id', uid)
+      const coachDayIds = (coachPrograms ?? []).flatMap((p: any) => (p.athlete_program_days ?? []).map((d: any) => d.id))
+      let coachCompletions: any[] = []
+      if (coachDayIds.length > 0) {
+        const { data: coachCompletionsData } = await supabase
+          .from('athlete_program_completions')
+          .select('program_day_id, occurrence_date')
+          .in('program_day_id', coachDayIds)
+        coachCompletions = coachCompletionsData ?? []
+      }
+      const pendingProgramMemberIds = new Set(
+        (coachPrograms ?? [])
+          .filter((p: any) => !isProgramDoneThisWeek(p.athlete_program_days ?? [], coachCompletions))
+          .map((p: any) => p.member_id)
+      )
+      setAthletesPendingPrograms(pendingProgramMemberIds.size)
+
       const { data: coachClasses } = await supabase
         .from('scheduled_classes').select('*, groups(name)').eq('coach_id', uid)
         .gte('scheduled_date', today).order('scheduled_date').order('start_time').limit(3)
@@ -200,8 +223,8 @@ export default function DashboardPage() {
         planExercises.map((ex: any) => ({
           workout_id: newWorkout.id,
           name: ex.name, sets: ex.sets, reps: ex.reps,
-          weight: ex.weight, duration: ex.duration,
-          distance: ex.distance, notes: ex.notes,
+          weight: ex.weight, weight_unit: ex.weight_unit,
+          duration: ex.duration, distance: ex.distance, notes: ex.notes,
         }))
       )
 
@@ -306,21 +329,35 @@ export default function DashboardPage() {
           </Link>
         )}
 
-        {/* ── COACH: Athletes scheduled today ── */}
-        {userRole === 'coach' && athletesScheduledToday && (
+        {/* ── COACH: Athletes scheduled today / pending programs ── */}
+        {userRole === 'coach' && (athletesScheduledToday || athletesPendingPrograms > 0) && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
-              <Users size={24} style={{ color: 'var(--teal-secondary)' }} />
-              <div>
-                <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>
-                  <span style={{ color: 'var(--teal-secondary)' }}>{athletesScheduledToday.count}</span>
-                  <span style={{ color: 'var(--text-secondary)' }}> / {athletesScheduledToday.total} athletes have a workout scheduled today</span>
-                </p>
-                <Link href="/coach" style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)', textDecoration: 'none', display: 'inline', minHeight: 0 }}>
-                  View Coach Panel →
-                </Link>
+            {athletesScheduledToday && (
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+                <Users size={24} style={{ color: 'var(--teal-secondary)' }} />
+                <div>
+                  <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>
+                    <span style={{ color: 'var(--teal-secondary)' }}>{athletesScheduledToday.count}</span>
+                    <span style={{ color: 'var(--text-secondary)' }}> / {athletesScheduledToday.total} athletes have a workout scheduled today</span>
+                  </p>
+                  <Link href="/coach" style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)', textDecoration: 'none', display: 'inline', minHeight: 0 }}>
+                    View Coach Panel →
+                  </Link>
+                </div>
               </div>
-            </div>
+            )}
+            {athletesPendingPrograms > 0 && (
+              <Link href="/coach" style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.875rem', textDecoration: 'none', minHeight: 0 }}>
+                <ClipboardList size={24} style={{ color: 'var(--teal-secondary)' }} />
+                <div>
+                  <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>
+                    <span style={{ color: 'var(--teal-secondary)' }}>{athletesPendingPrograms}</span>
+                    <span style={{ color: 'var(--text-secondary)' }}> athlete{athletesPendingPrograms === 1 ? '' : 's'} have pending programs</span>
+                  </p>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--teal-secondary)' }}>View Coach Panel →</span>
+                </div>
+              </Link>
+            )}
           </div>
         )}
 

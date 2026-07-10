@@ -19,6 +19,7 @@ export interface AthleteProgramExercise {
   sets?: string | number | null
   reps?: string | number | null
   weight?: string | number | null
+  weight_unit?: string | null
   notes?: string | number | null
   set_details?: AthleteProgramSetDetail[] | null
 }
@@ -239,13 +240,16 @@ function ExerciseTable({ exercises, editable, dayId, modeOverride, onToggleMode,
                           style={inputCell} placeholder="—" min="0" step="1" />
                       ) : (ex.reps ?? '—')}
                     </td>
-                    <td style={{ ...cellStyle, minWidth: '70px' }}>
+                    <td style={{ ...cellStyle, minWidth: '80px' }}>
                       {editable ? (
-                        <input type="number" value={ex.weight ?? ''}
-                          onChange={e => onChange?.(idx, 'weight', e.target.value)}
-                          onBlur={e => onCommit?.(idx, 'weight', e.target.value)}
-                          style={inputCell} placeholder="—" min="0" step="0.1" />
-                      ) : (ex.weight ?? '—')}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <input type="number" value={ex.weight ?? ''}
+                            onChange={e => onChange?.(idx, 'weight', e.target.value)}
+                            onBlur={e => onCommit?.(idx, 'weight', e.target.value)}
+                            style={inputCell} placeholder="—" min="0" step="0.1" />
+                          {ex.weight != null && ex.weight !== '' && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', flexShrink: 0 }}>{ex.weight_unit || 'kg'}</span>}
+                        </div>
+                      ) : (ex.weight != null && ex.weight !== '' ? `${ex.weight} ${ex.weight_unit || 'kg'}` : '—')}
                     </td>
                     {notesCell(1)}
                     {editable && toggleCell(1)}
@@ -294,14 +298,15 @@ function ExerciseTable({ exercises, editable, dayId, modeOverride, onToggleMode,
                                   style={inputCell} />
                               ) : (set?.reps ?? '—')}
                             </td>
-                            <td style={{ ...cellStyle, minWidth: '90px' }}>
+                            <td style={{ ...cellStyle, minWidth: '110px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                                 {editable ? (
                                   <input type="number" value={set?.weight ?? ''} placeholder="—" min="0" step="0.1"
                                     onChange={e => handleSetFieldChange(idx, ex, si, 'weight', e.target.value)}
                                     onBlur={() => handleSetFieldBlur(idx, ex)}
                                     style={inputCell} />
-                                ) : (set?.weight ?? '—')}
+                                ) : (set?.weight != null && set?.weight !== '' ? `${set.weight} ${ex.weight_unit || 'kg'}` : '—')}
+                                {editable && set?.weight != null && set?.weight !== '' && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', flexShrink: 0 }}>{ex.weight_unit || 'kg'}</span>}
                                 {editable && (
                                   <button type="button" onClick={() => handleRemoveSetRow(idx, ex, si)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0, flexShrink: 0 }}>
                                     <X size={12} />

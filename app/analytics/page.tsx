@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Trash2, Pencil, Check, X, Scale, Droplet } from 'lucide-react'
 import {
-  normalizeToKg, sortRecords, LOWER_IS_BETTER,
+  normalizeToKg, sortRecords, LOWER_IS_BETTER, convertWeightForDisplay,
 } from '@/lib/utils'
 
 type Tab = 'prtrends' | 'body'
@@ -73,6 +73,7 @@ export default function AnalyticsPage() {
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
+  const [preferredWeightUnit, setPreferredWeightUnit] = useState<'kg' | 'lbs'>('kg')
   const [activeTab, setActiveTab] = useState<Tab>('prtrends')
 
   // PR Trends
@@ -111,6 +112,8 @@ export default function AnalyticsPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
       setUserId(user.id)
+      const { data: profile } = await supabase.from('profiles').select('preferred_weight_unit').eq('id', user.id).single()
+      setPreferredWeightUnit((profile?.preferred_weight_unit as 'kg' | 'lbs') || 'kg')
       await loadAll(user.id)
       setLoading(false)
     }
@@ -152,7 +155,12 @@ export default function AnalyticsPage() {
 
   const startEditPR = (r: any) => {
     setEditingPRId(r.id)
-    setEditPRForm({ value: r.value.toString(), unit: r.unit, is_public: r.is_public ?? false })
+    if (r.unit === 'kg' || r.unit === 'lbs') {
+      const converted = convertWeightForDisplay(r.value, r.unit, preferredWeightUnit)
+      setEditPRForm({ value: converted.value.toString(), unit: converted.unit, is_public: r.is_public ?? false })
+    } else {
+      setEditPRForm({ value: r.value.toString(), unit: r.unit, is_public: r.is_public ?? false })
+    }
   }
   const saveEditPR = async (id: string) => {
     if (!editPRForm.value) return
@@ -260,9 +268,13 @@ export default function AnalyticsPage() {
                       {editingPRId === r.id ? (
                         <>
                           <input type="number" value={editPRForm.value} onChange={e => setEditPRForm({ ...editPRForm, value: e.target.value })} style={{ ...inputBase, width: '90px' }} step="0.01" />
-                          <select value={editPRForm.unit} onChange={e => setEditPRForm({ ...editPRForm, unit: e.target.value })} style={{ ...inputBase, width: '110px', cursor: 'pointer' }}>
-                            {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                          </select>
+                          {editPRForm.unit === 'kg' || editPRForm.unit === 'lbs' ? (
+                            <span style={{ ...inputBase, width: '110px', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center' }}>{editPRForm.unit}</span>
+                          ) : (
+                            <select value={editPRForm.unit} onChange={e => setEditPRForm({ ...editPRForm, unit: e.target.value })} style={{ ...inputBase, width: '110px', cursor: 'pointer' }}>
+                              {UNITS.filter(u => u !== 'kg' && u !== 'lbs').map(u => <option key={u} value={u}>{u}</option>)}
+                            </select>
+                          )}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <Toggle on={editPRForm.is_public} onToggle={() => setEditPRForm({ ...editPRForm, is_public: !editPRForm.is_public })} />
                             <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{editPRForm.is_public ? 'Public' : 'Private'}</span>

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { ChevronDown, ChevronUp, CheckCircle2, Check, Lock, Pencil, Trash2 } from 'lucide-react'
-import { getLocalDateString, normalizeToKg, getCurrentWeekOccurrenceDate } from '@/lib/utils'
+import { getLocalDateString, normalizeToKg, getCurrentWeekOccurrenceDate, convertWeightForDisplay } from '@/lib/utils'
 import { TodayPlanCard, SkippedPlansSection, typeBadge } from '@/components/PlanCards'
 import AthleteProgramTable, { AthleteProgramDay } from '@/components/AthleteProgramTable'
 import ConfirmModal from '@/components/ConfirmModal'
@@ -168,8 +168,8 @@ function StudentPageInner() {
           .map((ex: any) => ({
             workout_id: newWorkout.id,
             name: ex.name, sets: ex.sets, reps: ex.reps,
-            weight: ex.weight, duration: ex.duration,
-            distance: ex.distance, notes: ex.notes,
+            weight: ex.weight, weight_unit: ex.weight_unit,
+            duration: ex.duration, distance: ex.distance, notes: ex.notes,
           }))
       )
     }
@@ -248,7 +248,7 @@ function StudentPageInner() {
       const { error: exErr } = await supabase.from('exercises').insert(
         exercises.map(ex => ({
           workout_id: newWorkout.id,
-          name: ex.name, sets: ex.sets, reps: ex.reps, weight: ex.weight, notes: ex.notes,
+          name: ex.name, sets: ex.sets, reps: ex.reps, weight: ex.weight, weight_unit: ex.weight_unit, notes: ex.notes,
         }))
       )
       if (exErr) {
@@ -660,15 +660,19 @@ function StudentPageInner() {
                                 min="0"
                                 step="0.01"
                               />
-                              <select
-                                value={editPRUnit}
-                                onChange={e => setEditPRUnit(e.target.value)}
-                                style={{ background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.375rem', padding: '0.375rem 0.5rem', color: '#F2F2F2', fontSize: '0.875rem', outline: 'none', cursor: 'pointer' }}
-                              >
-                                {['kg', 'lbs', 'reps', 'seconds', 'minutes', 'km/h', 'mph'].map(u => (
-                                  <option key={u} value={u}>{u}</option>
-                                ))}
-                              </select>
+                              {editPRUnit === 'kg' || editPRUnit === 'lbs' ? (
+                                <span style={{ background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.375rem', padding: '0.375rem 0.5rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{editPRUnit}</span>
+                              ) : (
+                                <select
+                                  value={editPRUnit}
+                                  onChange={e => setEditPRUnit(e.target.value)}
+                                  style={{ background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.375rem', padding: '0.375rem 0.5rem', color: '#F2F2F2', fontSize: '0.875rem', outline: 'none', cursor: 'pointer' }}
+                                >
+                                  {['reps', 'seconds', 'minutes', 'km/h', 'mph'].map(u => (
+                                    <option key={u} value={u}>{u}</option>
+                                  ))}
+                                </select>
+                              )}
                               <button
                                 onClick={async () => {
                                   setPRLoading(true)
@@ -708,7 +712,18 @@ function StudentPageInner() {
                                 </p>
                                 {/* Edit button */}
                                 <button
-                                  onClick={() => { setEditingPRId(pr.id); setEditPRValue(String(pr.value)); setEditPRUnit(pr.unit) }}
+                                  onClick={() => {
+                                    setEditingPRId(pr.id)
+                                    if (pr.unit === 'kg' || pr.unit === 'lbs') {
+                                      const preferred = (profile?.preferred_weight_unit as 'kg' | 'lbs') || 'kg'
+                                      const converted = convertWeightForDisplay(pr.value, pr.unit, preferred)
+                                      setEditPRValue(String(converted.value))
+                                      setEditPRUnit(converted.unit)
+                                    } else {
+                                      setEditPRValue(String(pr.value))
+                                      setEditPRUnit(pr.unit)
+                                    }
+                                  }}
                                   style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.25rem 0.5rem', color: 'var(--text-secondary)', fontSize: '0.7rem', cursor: 'pointer', minHeight: 0 }}
                                   onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal-primary)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--teal-secondary)' }}
                                   onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)' }}

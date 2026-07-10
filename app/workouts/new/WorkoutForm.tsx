@@ -227,6 +227,7 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
   const [templateSaved, setTemplateSaved] = useState(false)
   const [currentUserId, setCurrentUserId] = useState('')
   const [userRole, setUserRole] = useState('')
+  const [preferredWeightUnit, setPreferredWeightUnit] = useState<'kg' | 'lbs'>('kg')
 
   const [advancedExercises, setAdvancedExercises] = useState<Record<number, boolean>>({})
   const [setRows, setSetRows] = useState<Record<number, SetRow[]>>({})
@@ -246,8 +247,9 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return
       setCurrentUserId(user.id)
-      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+      const { data: profile } = await supabase.from('profiles').select('role, preferred_weight_unit').eq('id', user.id).single()
       setUserRole(profile?.role || 'member')
+      setPreferredWeightUnit((profile?.preferred_weight_unit as 'kg' | 'lbs') || 'kg')
 
       const { data: shared } = await supabase
         .from('workout_templates')
@@ -447,6 +449,7 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
               sets: advanced ? advanced.sets : (ex.sets ? parseInt(ex.sets) : null),
               reps: advanced ? advanced.reps : (ex.reps ? parseInt(ex.reps) : null),
               weight: advanced ? advanced.weight : (ex.weight ? parseFloat(ex.weight) : null),
+              weight_unit: preferredWeightUnit,
               duration: ex.duration ? parseInt(ex.duration) : null,
               distance: ex.distance ? parseFloat(ex.distance) : null,
               ...(isRunningExercise(ex.name) && ex.speed ? { speed: parseFloat(ex.speed) } : {}),
@@ -957,7 +960,7 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
                           <div key={rowIdx} style={{ display: 'grid', gridTemplateColumns: '48px 1fr 1fr 28px', gap: '0.5rem', alignItems: 'center' }}>
                             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 700 }}>Set {rowIdx + 1}</span>
                             <input type="number" value={row.reps} onChange={(e) => updateSetRow(idx, rowIdx, 'reps', e.target.value)} style={inputBase} placeholder="Reps" min="0" />
-                            <input type="number" value={row.weight} onChange={(e) => updateSetRow(idx, rowIdx, 'weight', e.target.value)} style={inputBase} placeholder="Weight (kg)" step="0.5" min="0" />
+                            <input type="number" value={row.weight} onChange={(e) => updateSetRow(idx, rowIdx, 'weight', e.target.value)} style={inputBase} placeholder={`Weight (${preferredWeightUnit})`} step="0.5" min="0" />
                             {(setRows[idx] || []).length > 1 && (
                               <button type="button" onClick={() => removeSetRow(idx, rowIdx)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', justifyContent: 'center' }}>
                                 <X size={14} />
@@ -980,7 +983,7 @@ export default function WorkoutForm({ defaultType, templateId }: { defaultType?:
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
                         {(['sets', 'reps', 'weight'] as const).map((f) => (
                           <div key={f}>
-                            <label style={{ ...labelBase, whiteSpace: 'nowrap' }}>{f === 'weight' ? 'Weight (kg)' : f.charAt(0).toUpperCase() + f.slice(1)}</label>
+                            <label style={{ ...labelBase, whiteSpace: 'nowrap' }}>{f === 'weight' ? `Weight (${preferredWeightUnit})` : f.charAt(0).toUpperCase() + f.slice(1)}</label>
                             <input type="number" value={ex[f]} onChange={(e) => update(idx, f, e.target.value)} style={inputBase} placeholder={f === 'weight' ? '50' : f === 'sets' ? '3' : '10'} step={f === 'weight' ? '0.5' : '1'} min="0" />
                           </div>
                         ))}

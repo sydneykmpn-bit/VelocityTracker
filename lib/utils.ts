@@ -72,6 +72,16 @@ export function normalizeToKg(value: number, unit: string): number {
   return value
 }
 
+// Convert a stored weight value+unit to a viewer's preferred kg/lbs for display. Non-weight units
+// (reps, seconds, etc.) pass through unchanged. Shared by any screen that shows another person's
+// (or its own historical) weight entries in the viewer's preferred_weight_unit.
+export function convertWeightForDisplay(value: number, storedUnit: string, preferredUnit: 'kg' | 'lbs'): { value: number; unit: string } {
+  if (storedUnit !== 'kg' && storedUnit !== 'lbs') return { value, unit: storedUnit }
+  if (storedUnit === preferredUnit) return { value, unit: storedUnit }
+  const converted = storedUnit === 'kg' ? value * 2.20462 : value / 2.20462
+  return { value: Math.round(converted * 10) / 10, unit: preferredUnit }
+}
+
 export function sortRecords(records: any[]): any[] {
   return [...records].sort((a, b) => {
     const aIsLower = LOWER_IS_BETTER.includes(a.exercise_name)
@@ -157,6 +167,7 @@ export interface BballClassRow {
   is_recurring: boolean
   specific_date: string | null
   recurrence_end_date: string | null
+  series_id?: string | null
 }
 
 // Occurrence date strings (YYYY-MM-DD) for a bball_classes row within [rangeStart, rangeEnd] inclusive.
