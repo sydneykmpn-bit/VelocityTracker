@@ -4,9 +4,13 @@ import { useState } from 'react'
 import { Trash2, Plus, Pencil, ChevronDown, ChevronUp, Check, X, Undo2 } from 'lucide-react'
 
 export const EXERCISE_TYPE_OPTIONS = ['Conditioning', 'Strength', 'Basketball', 'Cardio', 'Mobility']
-export const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 export const DAY_LABELS_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 export const DAY_TITLE_PRESETS = ['Upper', 'Legs', 'Shoulders', 'Sprint/Power']
+
+export interface AthleteProgramSetDetail {
+  reps: number | string | null
+  weight: number | string | null
+}
 
 export interface AthleteProgramExercise {
   id?: string
@@ -17,6 +21,7 @@ export interface AthleteProgramExercise {
   reps?: string | number | null
   weight?: string | number | null
   notes?: string | number | null
+  set_details?: AthleteProgramSetDetail[] | null
 }
 
 export interface AthleteProgramDay {
@@ -25,6 +30,8 @@ export interface AthleteProgramDay {
   title: string
   athlete_program_exercises?: AthleteProgramExercise[]
 }
+
+type ExerciseMode = 'simple' | 'detailed'
 
 const cellStyle: React.CSSProperties = {
   padding: '0.5rem 0.625rem', border: '1px solid var(--border)',
@@ -37,6 +44,27 @@ const inputCell: React.CSSProperties = {
 const filterInput: React.CSSProperties = {
   background: '#0d1a1e', border: '1px solid #1a2e34', borderRadius: '0.375rem',
   padding: '0.55rem 0.75rem', color: '#F2F2F2', fontSize: '0.85rem', outline: 'none', width: '100%',
+}
+
+function modeFor(dayId: string, idx: number, ex: AthleteProgramExercise, modeOverride: Record<string, ExerciseMode>): ExerciseMode {
+  const override = modeOverride[`${dayId}:${idx}`]
+  if (override) return override
+  return Array.isArray(ex.set_details) && ex.set_details.length > 0 ? 'detailed' : 'simple'
+}
+
+// Mirrors the "max-weight set" summary convention already used for the workouts/exercises table's
+// set_details (Advanced Mode) — sets/reps/weight always stay populated as a computed summary so
+// existing read-only views and PR/analytics-style consumers keep working unchanged.
+function computeSummary(details: AthleteProgramSetDetail[]): { sets: number; reps: number | null; weight: number | null } {
+  const sets = details.length
+  if (sets === 0) return { sets: 0, reps: null, weight: null }
+  let top = details[0]
+  for (const d of details) {
+    if ((Number(d.weight) || 0) > (Number(top.weight) || 0)) top = d
+  }
+  const reps = top.reps === '' || top.reps === null || top.reps === undefined ? null : Number(top.reps)
+  const weight = top.weight === '' || top.weight === null || top.weight === undefined ? null : Number(top.weight)
+  return { sets, reps, weight }
 }
 
 function DayTitlePicker({ initial, onSave, onCancel }: { initial: string; onSave: (title: string) => void; onCancel: () => void }) {
@@ -69,15 +97,56 @@ function DayTitlePicker({ initial, onSave, onCancel }: { initial: string; onSave
 interface ExerciseTableProps {
   exercises: { ex: AthleteProgramExercise; idx: number }[]
   editable: boolean
+  dayId: string
+  modeOverride: Record<string, ExerciseMode>
+  onToggleMode?: (idx: number) => void
   onChange?: (idx: number, field: keyof AthleteProgramExercise, value: string) => void
   onCommit?: (idx: number, field: keyof AthleteProgramExercise, value: string) => void
   onRemove?: (idx: number) => void
   onAdd?: () => void
 }
 
-function ExerciseTable({ exercises, editable, onChange, onCommit, onRemove, onAdd }: ExerciseTableProps) {
-  const numericCols = (['sets', 'reps', 'weight'] as const)
-  const colCount = editable ? 6 : 5
+function ExerciseTable({ exercises, editable, dayId, modeOverride, onToggleMode, onChange, onCommit, onRemove, onAdd }: ExerciseTableProps) {
+  const colCount = 5 + (editable ? 2 : 0)
+
+  const setDetailsFor = (ex: AthleteProgramExercise): AthleteProgramSetDetail[] => Array.isArray(ex.set_details) ? ex.set_details : []
+
+  const applyLocal = (idx: number, details: AthleteProgramSetDetail[]) => {
+    onChange?.(idx, 'set_details', JSON.stringify(details))
+  }
+
+  const commitDetailsAndSummary = (idx: number, details: AthleteProgramSetDetail[]) => {
+    const json = JSON.stringify(details)
+    onCommit?.(idx, 'set_details', json)
+    const { sets, reps, weight } = computeSummary(details)
+    const setsStr = String(sets)
+    const repsStr = reps === null ? '' : String(reps)
+    const weightStr = weight === null ? '' : String(weight)
+    onChange?.(idx, 'sets', setsStr)
+    onCommit?.(idx, 'sets', setsStr)
+    onChange?.(idx, 'reps', repsStr)
+    onCommit?.(idx, 'reps', repsStr)
+    onChange?.(idx, 'weight', weightStr)
+    onCommit?.(idx, 'weight', weightStr)
+  }
+
+  const handleSetFieldChange = (idx: number, ex: AthleteProgramExercise, si: number, field: 'reps' | 'weight', value: string) => {
+    const details = setDetailsFor(ex).map((d, i) => i === si ? { ...d, [field]: value } : d)
+    applyLocal(idx, details)
+  }
+  const handleSetFieldBlur = (idx: number, ex: AthleteProgramExercise) => {
+    commitDetailsAndSummary(idx, setDetailsFor(ex))
+  }
+  const handleAddSetRow = (idx: number, ex: AthleteProgramExercise) => {
+    const details = [...setDetailsFor(ex), { reps: '', weight: '' }]
+    applyLocal(idx, details)
+    commitDetailsAndSummary(idx, details)
+  }
+  const handleRemoveSetRow = (idx: number, ex: AthleteProgramExercise, si: number) => {
+    const details = setDetailsFor(ex).filter((_, i) => i !== si)
+    applyLocal(idx, details)
+    commitDetailsAndSummary(idx, details)
+  }
 
   return (
     <div>
@@ -85,7 +154,7 @@ function ExerciseTable({ exercises, editable, onChange, onCommit, onRemove, onAd
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
           <thead>
             <tr style={{ background: 'var(--surface)' }}>
-              {['Name', 'Type', 'Sets', 'Reps', 'Weight', 'Notes'].map(h => (
+              {['Name', 'Sets', 'Reps', 'Weight', 'Notes'].map(h => (
                 <th key={h} style={{
                   fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em',
                   textAlign: 'left', padding: '0.6rem 0.625rem', color: 'var(--teal-secondary)',
@@ -94,6 +163,7 @@ function ExerciseTable({ exercises, editable, onChange, onCommit, onRemove, onAd
                   {h}
                 </th>
               ))}
+              {editable && <th style={{ border: '1px solid var(--border)', background: 'var(--surface)', padding: '0.6rem 0.625rem' }} />}
               {editable && <th style={{ border: '1px solid var(--border)', background: 'var(--surface)', padding: '0.6rem 0.625rem' }} />}
             </tr>
           </thead>
@@ -104,57 +174,113 @@ function ExerciseTable({ exercises, editable, onChange, onCommit, onRemove, onAd
                   No exercises match.
                 </td>
               </tr>
-            ) : exercises.map(({ ex, idx }, i) => (
-              <tr key={ex.id ?? idx} style={{ background: i % 2 === 0 ? 'var(--surface)' : '#161616' }}>
-                <td style={{ ...cellStyle, minWidth: '160px' }}>
-                  {editable ? (
-                    <input type="text" value={ex.name} placeholder="Exercise name" autoComplete="off"
-                      onChange={e => onChange?.(idx, 'name', e.target.value)}
-                      onBlur={e => onCommit?.(idx, 'name', e.target.value)}
-                      style={inputCell} />
-                  ) : (ex.name || '—')}
-                </td>
-                <td style={{ ...cellStyle, minWidth: '130px' }}>
-                  {editable ? (
-                    <select
-                      value={ex.exercise_type || ''}
-                      onChange={e => { onChange?.(idx, 'exercise_type', e.target.value); onCommit?.(idx, 'exercise_type', e.target.value) }}
-                      style={{ ...inputCell, cursor: 'pointer' }}
-                    >
-                      <option value="">—</option>
-                      {EXERCISE_TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  ) : (ex.exercise_type || '—')}
-                </td>
-                {numericCols.map(f => (
-                  <td key={f} style={{ ...cellStyle, minWidth: '70px' }}>
+            ) : exercises.map(({ ex, idx }, i) => {
+              const mode = modeFor(dayId, idx, ex, modeOverride)
+              const details = setDetailsFor(ex)
+              return (
+                <tr key={ex.id ?? idx} style={{ background: i % 2 === 0 ? 'var(--surface)' : '#161616' }}>
+                  <td style={{ ...cellStyle, minWidth: '160px' }}>
                     {editable ? (
-                      <input
-                        type="number" value={ex[f] ?? ''}
-                        onChange={e => onChange?.(idx, f, e.target.value)}
-                        onBlur={e => onCommit?.(idx, f, e.target.value)}
-                        style={inputCell} placeholder="—" min="0" step={f === 'weight' ? '0.1' : '1'}
-                      />
-                    ) : (ex[f] ?? '—')}
+                      <input type="text" value={ex.name} placeholder="Exercise name" autoComplete="off"
+                        onChange={e => onChange?.(idx, 'name', e.target.value)}
+                        onBlur={e => onCommit?.(idx, 'name', e.target.value)}
+                        style={inputCell} />
+                    ) : (ex.name || '—')}
                   </td>
-                ))}
-                <td style={{ ...cellStyle, minWidth: '160px' }}>
-                  {editable ? (
-                    <input type="text" value={ex.notes || ''}
-                      onChange={e => onChange?.(idx, 'notes', e.target.value)}
-                      onBlur={e => onCommit?.(idx, 'notes', e.target.value)}
-                      style={inputCell} placeholder="—" />
-                  ) : (ex.notes || '—')}
-                </td>
-                {editable && (
-                  <td style={{ ...cellStyle, textAlign: 'center' }}>
-                    <button type="button" onClick={() => onRemove?.(idx)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'inline-flex', minHeight: 0 }}>
-                      <Trash2 size={14} />
-                    </button>
+
+                  {editable && mode === 'detailed' ? (
+                    <td style={{ ...cellStyle, minWidth: '230px' }} colSpan={3}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                        {details.length === 0 && (
+                          <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>No sets yet.</p>
+                        )}
+                        {details.map((s, si) => (
+                          <div key={si} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', minWidth: '38px', flexShrink: 0 }}>Set {si + 1}</span>
+                            <input type="number" value={s.reps ?? ''} placeholder="Reps" min="0" step="1"
+                              onChange={e => handleSetFieldChange(idx, ex, si, 'reps', e.target.value)}
+                              onBlur={() => handleSetFieldBlur(idx, ex)}
+                              style={{ ...inputCell, width: '52px', flex: 'none' }} />
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', flexShrink: 0 }}>reps @</span>
+                            <input type="number" value={s.weight ?? ''} placeholder="kg" min="0" step="0.1"
+                              onChange={e => handleSetFieldChange(idx, ex, si, 'weight', e.target.value)}
+                              onBlur={() => handleSetFieldBlur(idx, ex)}
+                              style={{ ...inputCell, width: '52px', flex: 'none' }} />
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', flexShrink: 0 }}>kg</span>
+                            <button type="button" onClick={() => handleRemoveSetRow(idx, ex, si)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', minHeight: 0, marginLeft: 'auto' }}>
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ))}
+                        <button type="button" onClick={() => handleAddSetRow(idx, ex)} style={{
+                          background: 'none', border: '1px dashed #1a2e34', borderRadius: '0.3rem', padding: '0.3rem 0.5rem',
+                          color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.7rem', display: 'flex',
+                          alignItems: 'center', gap: '0.25rem', justifyContent: 'center', minHeight: 0,
+                        }}>
+                          <Plus size={11} /> Add Set
+                        </button>
+                      </div>
+                    </td>
+                  ) : (
+                    <>
+                      <td style={{ ...cellStyle, minWidth: '70px' }}>
+                        {editable ? (
+                          <input type="number" value={ex.sets ?? ''}
+                            onChange={e => onChange?.(idx, 'sets', e.target.value)}
+                            onBlur={e => onCommit?.(idx, 'sets', e.target.value)}
+                            style={inputCell} placeholder="—" min="0" step="1" />
+                        ) : (ex.sets ?? '—')}
+                      </td>
+                      <td style={{ ...cellStyle, minWidth: '70px' }}>
+                        {editable ? (
+                          <input type="number" value={ex.reps ?? ''}
+                            onChange={e => onChange?.(idx, 'reps', e.target.value)}
+                            onBlur={e => onCommit?.(idx, 'reps', e.target.value)}
+                            style={inputCell} placeholder="—" min="0" step="1" />
+                        ) : (ex.reps ?? '—')}
+                      </td>
+                      <td style={{ ...cellStyle, minWidth: '70px' }}>
+                        {editable ? (
+                          <input type="number" value={ex.weight ?? ''}
+                            onChange={e => onChange?.(idx, 'weight', e.target.value)}
+                            onBlur={e => onCommit?.(idx, 'weight', e.target.value)}
+                            style={inputCell} placeholder="—" min="0" step="0.1" />
+                        ) : (ex.weight ?? '—')}
+                      </td>
+                    </>
+                  )}
+
+                  <td style={{ ...cellStyle, minWidth: '160px' }}>
+                    {editable ? (
+                      <input type="text" value={ex.notes || ''}
+                        onChange={e => onChange?.(idx, 'notes', e.target.value)}
+                        onBlur={e => onCommit?.(idx, 'notes', e.target.value)}
+                        style={inputCell} placeholder="—" />
+                    ) : (ex.notes || '—')}
                   </td>
-                )}
-              </tr>
-            ))}
+                  {editable && (
+                    <td style={{ ...cellStyle, textAlign: 'center' }}>
+                      <button type="button" onClick={() => onToggleMode?.(idx)} title={mode === 'detailed' ? 'Switch to Simple' : 'Switch to Detailed'} style={{
+                        background: mode === 'detailed' ? 'rgba(8,119,160,0.15)' : 'none',
+                        border: `1px solid ${mode === 'detailed' ? 'var(--teal-primary)' : 'var(--border)'}`,
+                        borderRadius: '999px', padding: '0.25rem 0.55rem',
+                        color: mode === 'detailed' ? 'var(--teal-secondary)' : 'var(--text-secondary)',
+                        fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer', minHeight: 0, whiteSpace: 'nowrap',
+                      }}>
+                        {mode === 'detailed' ? 'Detailed' : 'Simple'}
+                      </button>
+                    </td>
+                  )}
+                  {editable && (
+                    <td style={{ ...cellStyle, textAlign: 'center' }}>
+                      <button type="button" onClick={() => onRemove?.(idx)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'inline-flex', minHeight: 0 }}>
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -204,6 +330,7 @@ export default function AthleteProgramTable({
   const [newDayOfWeek, setNewDayOfWeek] = useState<number | null>(null)
   const [newDayTitle, setNewDayTitle] = useState(DAY_TITLE_PRESETS[0])
   const [newDayTitleCustom, setNewDayTitleCustom] = useState('')
+  const [modeOverride, setModeOverride] = useState<Record<string, ExerciseMode>>({})
 
   const toggleExpanded = (id: string) => {
     setExpanded(prev => {
@@ -211,6 +338,27 @@ export default function AthleteProgramTable({
       if (next.has(id)) next.delete(id); else next.add(id)
       return next
     })
+  }
+
+  const toggleExerciseMode = (day: AthleteProgramDay, idx: number) => {
+    const ex = (day.athlete_program_exercises ?? [])[idx]
+    if (!ex) return
+    const key = `${day.id}:${idx}`
+    const current = modeFor(day.id, idx, ex, modeOverride)
+    const next: ExerciseMode = current === 'detailed' ? 'simple' : 'detailed'
+    setModeOverride(prev => ({ ...prev, [key]: next }))
+
+    if (next === 'detailed' && (!Array.isArray(ex.set_details) || ex.set_details.length === 0)) {
+      // Seed set rows so "number of set rows = sets value" holds the moment Detailed mode is entered.
+      const n = Math.max(1, Number(ex.sets) || 1)
+      const seeded: AthleteProgramSetDetail[] = Array.from({ length: n }, () => ({ reps: ex.reps ?? '', weight: ex.weight ?? '' }))
+      const json = JSON.stringify(seeded)
+      onChangeExercise?.(day.id, idx, 'set_details', json)
+      onCommitExercise?.(day.id, idx, 'set_details', json)
+    } else if (next === 'simple') {
+      onChangeExercise?.(day.id, idx, 'set_details', '')
+      onCommitExercise?.(day.id, idx, 'set_details', '')
+    }
   }
 
   const filtersActive = search.trim() !== '' || typeFilter !== ''
@@ -282,7 +430,7 @@ export default function AthleteProgramTable({
                     />
                   ) : (
                     <p style={{ fontWeight: 700, fontSize: '0.9rem' }}>
-                      {DAY_LABELS_FULL[day.day_of_week]} — {day.title}
+                      {day.title}
                     </p>
                   )}
                   {editable && !isEditingTitle && (
@@ -320,6 +468,9 @@ export default function AthleteProgramTable({
                   <ExerciseTable
                     exercises={filtered}
                     editable={editable}
+                    dayId={day.id}
+                    modeOverride={modeOverride}
+                    onToggleMode={editable ? idx => toggleExerciseMode(day, idx) : undefined}
                     onChange={editable ? (idx, field, val) => onChangeExercise?.(day.id, idx, field, val) : undefined}
                     onCommit={editable ? (idx, field, val) => onCommitExercise?.(day.id, idx, field, val) : undefined}
                     onRemove={editable ? idx => onRemoveExercise?.(day.id, idx) : undefined}

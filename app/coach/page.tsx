@@ -347,7 +347,7 @@ export default function CoachPage() {
   const supabase = createClient()
   const [userId, setUserId] = useState<string | null>(null)
   const [gender, setGender] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<Tab>('members')
+  const [activeTab, setActiveTab] = useState<Tab>('programs')
   const [loading, setLoading] = useState(true)
 
   const noteTextRef = useRef<HTMLTextAreaElement | null>(null)
@@ -639,7 +639,11 @@ export default function CoachPage() {
     setProgramDays(prev => prev.map(d => {
       if (d.id !== dayId) return d
       const exs = [...(d.athlete_program_exercises ?? [])]
-      exs[idx] = { ...exs[idx], [field]: value }
+      // set_details is carried as a JSON string across the generic onChange/onCommit(idx, field,
+      // value: string) callback shape shared with every other field — parse it back into an array
+      // here so local state matches the array shape the table component and Supabase both expect.
+      const parsed = field === 'set_details' ? (value ? JSON.parse(value) : null) : value
+      exs[idx] = { ...exs[idx], [field]: parsed }
       return { ...d, athlete_program_exercises: exs }
     }))
   }
@@ -649,9 +653,9 @@ export default function CoachPage() {
     const row = day?.athlete_program_exercises?.[idx]
     if (!row?.id) return
     const numericFields = new Set(['sets', 'reps', 'weight'])
-    const payload: any = {
-      [field]: numericFields.has(field as string) ? (value === '' ? null : Number(value)) : (value || null),
-    }
+    const payload: any = field === 'set_details'
+      ? { set_details: value ? JSON.parse(value) : null }
+      : { [field]: numericFields.has(field as string) ? (value === '' ? null : Number(value)) : (value || null) }
     const { error: err } = await supabase.from('athlete_program_exercises').update(payload).eq('id', row.id)
     if (err) setError(err.message)
   }
@@ -1297,11 +1301,11 @@ export default function CoachPage() {
   const recentNotes = notes.slice(0, 3)
 
   const tabs: { value: Tab; label: string }[] = [
+    { value: 'programs', label: 'Programs' },
     { value: 'members', label: 'My Athletes' },
     { value: 'groups', label: 'Groups' },
     { value: 'assign', label: 'Assign Plan' },
     { value: 'assigned', label: 'Assigned Plans' },
-    { value: 'programs', label: 'Programs' },
     { value: 'calendar', label: 'Workout Calendar' },
     { value: 'notes', label: 'Notes' },
   ]
